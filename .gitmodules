@@ -1,0 +1,4 @@
+[submodule "libfixmath"]
+	path = libfixmath
+	url = git@github.com:PetteriAimonen/libfixmath.git
+	branch = master

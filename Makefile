@@ -14,6 +14,7 @@ SRC_DIR = src
 SYSTEM_DIR = system
 INCLUDE_DIR = include
 LD_DIR = ldscripts
+SUBMODULES_DIR = libfixmath/libfixmath
 
 #order important
 LDSCRIPT = STM32G030C6Tx_FLASH.ld
