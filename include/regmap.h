@@ -2,6 +2,7 @@
 
 #include <stdint.h>
 #include "rtc.h"
+#include "adc.h"
 
 struct __attribute__((packed)) regmap {
     struct {
@@ -21,21 +22,12 @@ struct __attribute__((packed)) regmap {
 
     uint8_t res[5];             // 0B - 0F
 
-    struct {
-        uint16_t v_in;          // 10h V_IN
-        uint16_t v_bat;         // 12h V_BAT
-        uint16_t v_3v3;         // 14h V_3.3
-        uint16_t v_5v0;         // 16h V_5.0
-        uint16_t v_a1;          // 18h V_A1
-        uint16_t v_a2;          // 1Ah V_A2
-        uint16_t v_a3;          // 1Ch V_A3
-        uint16_t v_a4;          // 1Eh V_A4
-        uint16_t temp;          // 20h Temp
-    } adc;
+    uint16_t adc_channels[ADC_CHANNEL_COUNT];      // 10h - 20h
 };
 
 void regmap_set_rtc_time(const struct rtc_time * tm);
 void regmap_set_rtc_alarm(const struct rtc_alarm * alarm);
+void regmap_set_adc_ch(enum adc_channel ch, uint16_t val);
 
 
 void regmap_make_snapshot(void);

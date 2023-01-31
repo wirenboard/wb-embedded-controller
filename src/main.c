@@ -6,6 +6,7 @@
 #include "rtc.h"
 #include "regmap.h"
 #include "system_led.h"
+#include "adc.h"
 
 
 void SystemInit(void)
@@ -25,6 +26,7 @@ int main(void)
     RCC->IOPENR |= RCC_IOPENR_GPIOAEN;
     RCC->IOPENR |= RCC_IOPENR_GPIOBEN;
 
+    adc_init();
     i2c_slave_init();
     rtc_init();
 
@@ -39,6 +41,11 @@ int main(void)
             struct rtc_time rtc;
             rtc_get_datetime(&rtc);
             regmap_set_rtc_time(&rtc);
+        }
+
+        for (enum adc_channel ch = 0; ch < ADC_CHANNEL_COUNT; ch++) {
+            // TODO Calc real value
+            regmap_set_adc_ch(ch, fix16_to_int(adc_get_channel_raw_value(ch)));
         }
 
         if (regmap_is_write_completed()) {
