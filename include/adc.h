@@ -12,5 +12,5 @@ enum adc_channel {
 };
 
 void adc_init(void);
-void adc_set_lowpass_rc(uint8_t channel, uint16_t rc_ms);
-fix16_t adc_get_channel_raw_value(uint8_t channel);
+void adc_set_lowpass_rc(enum adc_channel channel, uint16_t rc_ms);
+fix16_t adc_get_channel_raw_value(enum adc_channel channel);

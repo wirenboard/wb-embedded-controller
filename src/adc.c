@@ -3,6 +3,12 @@
 #include "gpio.h"
 #include "config.h"
 
+#define ADC_CAL_VREF_MV                 3000
+// TS ADC raw data acquired at a temperature of 30 °C (± 5 °C), VDDA = VREF+ = 3.0 V (± 10 mV)
+#define ADC_CAL_TS                      (*((uint16_t*)0x1FFF75A8))
+// Raw data acquired at a temperature of 30 °C (± 5 °C), VDDA = VREF+ = 3.0 V (± 10 mV)
+#define ADC_CAL_VREFINT                 (*((uint16_t*)0x1FFF75AA))
+
 #define ADC_POLL_PERIOD_US              5000
 #define ADC_NO_GPIO_PIN                 0
 
@@ -45,6 +51,8 @@ void adc_init(void)
     // init DMA
     RCC->AHBENR |= RCC_AHBENR_DMA1EN;
 
+    DMAMUX1_Channel0->CCR = 5;                                  // ADC source
+
     DMA1_Channel1->CCR |= DMA_CCR_PL;                           // very high priority
     DMA1_Channel1->CCR |= DMA_CCR_MSIZE_0 | DMA_CCR_PSIZE_0;    // 16 bit -> 16 bit
     DMA1_Channel1->CCR |= DMA_CCR_MINC;                         // memory increment
@@ -65,18 +73,14 @@ void adc_init(void)
     // Init ADC
     RCC->APBENR2 |= RCC_APBENR2_ADCEN;
 
-    ADC1->CR |= ADC_CR_ADCAL;
-    while (ADC1->CR & ADC_CR_ADCAL);
+    //ADC1->CR |= ADC_CR_ADCAL;
+    //while (ADC1->CR & ADC_CR_ADCAL);
 
-    ADC->CCR |= ADC_CCR_VREFEN;
+    ADC->CCR |= ADC_CCR_VREFEN | ADC_CCR_TSEN;
 
     ADC1->CFGR1 |= ADC_CFGR1_DMACFG | ADC_CFGR1_DMAEN;          // DMA enable, DMA circular mode
 
     ADC1->SMPR |= ADC_SMPR_SMP1;                                // 160.5 ADC clock cycles
-
-    // ADC1->CHSELR |= ADC_CHSELR_CHSEL0 | ADC_CHSELR_CHSEL1 | ADC_CHSELR_CHSEL2 | ADC_CHSELR_CHSEL3 | ADC_CHSELR_CHSEL4 |
-    //                 ADC_CHSELR_CHSEL6 | ADC_CHSELR_CHSEL7 | ADC_CHSELR_CHSEL8 | ADC_CHSELR_CHSEL9;
-
     ADC1->CFGR1 |= ADC_CFGR1_EXTEN_0 | ADC_CFGR1_EXTSEL_0 | ADC_CFGR1_EXTSEL_1;      // TIM3_TRGO
     ADC1->CR |= ADC_CR_ADEN;
 
@@ -111,7 +115,7 @@ void adc_init(void)
     ADC1->CR |= ADC_CR_ADSTART;
 }
 
-void adc_set_lowpass_rc(uint8_t channel, uint16_t rc_ms)
+void adc_set_lowpass_rc(enum adc_channel channel, uint16_t rc_ms)
 {
     adc_lowpass_factors[channel] = fix16_div(
         fix16_one,
@@ -125,7 +129,7 @@ void adc_set_lowpass_rc(uint8_t channel, uint16_t rc_ms)
     );
 }
 
-fix16_t adc_get_channel_raw_value(uint8_t channel)
+fix16_t adc_get_channel_raw_value(enum adc_channel channel)
 {
     return adc_lowpass_values[ADC_CHANNEL_INDEX(channel)];
 }

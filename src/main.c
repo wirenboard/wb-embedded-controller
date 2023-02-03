@@ -25,7 +25,11 @@ int main(void)
 {
     RCC->IOPENR |= RCC_IOPENR_GPIOAEN;
     RCC->IOPENR |= RCC_IOPENR_GPIOBEN;
+    RCC->IOPENR |= RCC_IOPENR_GPIOCEN;
 
+    GPIO_SET_INPUT(PWR_KEY_PORT, PWR_KEY_PIN);
+    GPIO_SET_PULLUP(PWR_KEY_PORT, PWR_KEY_PIN);
+        
     adc_init();
     i2c_slave_init();
     rtc_init();
@@ -57,6 +61,12 @@ int main(void)
                 regmap_set_rtc_time(&rtc);
             }
             i2c_slave_set_busy(0);
+        }
+        
+        if (GPIO_TEST(PWR_KEY_PORT, PWR_KEY_PIN)) {
+            regmap_set_iqr(0x00);
+        } else {
+            regmap_set_iqr(0x01);
         }
     }
 }

@@ -51,8 +51,13 @@ void regmap_set_rtc_alarm(const struct rtc_alarm * alarm)
 void regmap_set_adc_ch(enum adc_channel ch, uint16_t val)
 {
     if (ch < ADC_CHANNEL_COUNT) {
-        regmap.regs.adc_channels[ch] = val;
+        // regmap.regs.adc_channels[ch] = val;
     }
+}
+
+void regmap_set_iqr(uint8_t val)
+{
+    regmap.regs.irq.pwr_rise = val;
 }
 
 void regmap_make_snapshot(void)
