@@ -5,6 +5,9 @@
 #define CALIB_TIM               TIM17
 #define CALIB_TIM_CLOCK_EN()    do { RCC->APBENR2 |= RCC_APBENR2_TIM17EN; } while (0)
 
+uint32_t array[500];
+uint16_t counter = 0;
+
 enum meas_status {
     MEAS_STOPPED,
     MEAS_IN_PROGRESS,
@@ -208,15 +211,32 @@ void rtc_set_alarm(const struct rtc_alarm * alarm)
 
 void rtc_start_calibration(void)
 {
+    counter = 0;
+    
     reset_meas_context(&ref_meas_ctx);
     reset_meas_context(&rtc_meas_ctx);
+    
+    RCC->APBENR2 |= RCC_APBENR2_TIM14EN;
+    
+    TIM14->CNT = 0;
+    TIM14->PSC = 0;
+    TIM14->ARR = 0xFFFF;
+    TIM14->TISEL = 0b0001;      // RTC CLK
+    TIM14->CCMR1 = TIM_CCMR1_CC1S_0 * 0b01;
+    TIM14->CCER |= TIM_CCER_CC1E;
+    TIM14->DIER |= TIM_DIER_UIE | TIM_DIER_CC1IE;
+    TIM14->SR = 0;
+    NVIC_EnableIRQ(TIM14_IRQn);
+    NVIC_SetPriority(TIM14_IRQn, 0);
+    
+    TIM14->CR1 |= TIM_CR1_CEN;
+    
+    
+    return;
 
     // Init PB9 GPIO
     GPIO_SET_INPUT(GPIOB, 9);
     GPIO_SET_AF(GPIOB, 9, 2);
-
-    CALIB_TIM_CLOCK_EN();
-
 
     // Init CALIB_TIB
     CALIB_TIM->CNT = 0;
@@ -228,12 +248,15 @@ void rtc_start_calibration(void)
     TIM16->SR = 0;
     NVIC_EnableIRQ(TIM17_IRQn);
     NVIC_SetPriority(TIM17_IRQn, 0);
-
+    
+    CALIB_TIM->CR1 |= TIM_CR1_CEN;
+    
+    
     // Init TIM16 to capture wakeup events
     RCC->APBENR2 |= RCC_APBENR2_TIM16EN;
 
     TIM16->CNT = 0;
-    TIM16->PSC = 8 - 1;
+    TIM16->PSC = 0;
     TIM16->ARR = 0xFFFF;
     TIM16->TISEL = 0b0011;      // RTC wakeup
     TIM16->CCMR1 = TIM_CCMR1_CC1S_0 * 0b01;
@@ -258,7 +281,6 @@ void rtc_start_calibration(void)
 
     RTC->SCR = RTC_SCR_CWUTF;
 
-    CALIB_TIM->CR1 |= TIM_CR1_CEN;
     TIM16->CR1 |= TIM_CR1_CEN;
 }
 
@@ -279,7 +301,6 @@ void TIM17_IRQHandler(void)
             ref_meas_ctx.pulse_captured = 1;
             ref_meas_ctx.uif_cnt = 0;
             ref_meas_ctx.start_crr = ccr;
-            rtc_meas_ctx.status = MEAS_FINISHED;
         } else {
             ref_meas_ctx.period = (65536 * ref_meas_ctx.uif_cnt + ccr) - ref_meas_ctx.start_crr;
             ref_meas_ctx.status = MEAS_FINISHED;
@@ -315,11 +336,61 @@ void TIM16_IRQHandler(void)
             rtc_meas_ctx.start_crr = ccr;
         } else {
             rtc_meas_ctx.period = (65536 * rtc_meas_ctx.uif_cnt + ccr) - rtc_meas_ctx.start_crr;
-            rtc_meas_ctx.status = MEAS_FINISHED;
+            
+            if (counter < 500) {
+                array[counter] = rtc_meas_ctx.period;
+                rtc_meas_ctx.start_crr = ccr;
+                rtc_meas_ctx.uif_cnt = 0;
+                counter++;
+            } else {
+                rtc_meas_ctx.status = MEAS_FINISHED;
+                //
+                RCC->APBRSTR2 |= RCC_APBRSTR2_TIM16RST;
+                RCC->APBRSTR2 &= ~RCC_APBRSTR2_TIM16RST;
+                RCC->APBENR2 &= ~RCC_APBENR2_TIM16EN;
+            }
+        }
+    }
+}
+
+void TIM14_IRQHandler(void)
+{
+    if (TIM14->SR & TIM_SR_UIF) {
+        TIM14->SR = ~TIM_SR_UIF;
+
+        //rtc_meas_ctx.uif_cnt++;
+        rtc_meas_ctx.pulse_captured = 0;
+
+        // Check max events (no signal)
+    }
+
+    if (TIM14->SR & TIM_SR_CC1IF) {
+        TIM14->SR = ~TIM_SR_CC1IF;
+        // Reference pulse detected, skip first
+        uint16_t ccr = TIM14->CCR1;
+        
+
+        if (!rtc_meas_ctx.pulse_captured) {
+            rtc_meas_ctx.pulse_captured = 1;
+            rtc_meas_ctx.uif_cnt = 0;
+            rtc_meas_ctx.start_crr = ccr;
+        } else {
+            rtc_meas_ctx.period = ccr - rtc_meas_ctx.start_crr;
+            rtc_meas_ctx.start_crr = ccr;
+            
+            if (counter < 500) {
+                array[counter] = rtc_meas_ctx.period;
+                counter++;
+            } else {
+                RCC->APBRSTR2 |= RCC_APBRSTR2_TIM14RST;
+                RCC->APBRSTR2 &= ~RCC_APBRSTR2_TIM14RST;
+                RCC->APBENR2 &= ~RCC_APBENR2_TIM14EN;
+            }
+            //rtc_meas_ctx.status = MEAS_FINISHED;
             //
-            RCC->APBRSTR2 |= RCC_APBRSTR2_TIM16RST;
-            RCC->APBRSTR2 &= ~RCC_APBRSTR2_TIM16RST;
-            RCC->APBENR2 &= ~RCC_APBENR2_TIM16EN;
+            //RCC->APBRSTR2 |= RCC_APBRSTR2_TIM14RST;
+            //RCC->APBRSTR2 &= ~RCC_APBRSTR2_TIM14RST;
+            //RCC->APBENR2 &= ~RCC_APBENR2_TIM14EN;
         }
     }
 }
