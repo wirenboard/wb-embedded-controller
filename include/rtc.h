@@ -2,6 +2,9 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+#define BCD_TO_BIN(x)           (((x) & 0x0f) + ((x) >> 4) * 10)
+#define BIN_TO_BCD(x)           ((((x) / 10) << 4) + (x) % 10)
+
 struct rtc_time {
     uint8_t seconds;
     uint8_t minutes;
