@@ -56,7 +56,7 @@ for t, n, rw in zip(types, names, rws):
                 if bit_cnt == 0:
                     c_regmap += "#define WBEC_REG_{}_{}\t{}\n".format(n, regaddr, regaddr).expandtabs(60)
 
-                c_regmap += "   #define WBEC_REG_{}_{}_{}_MSK\tGENMASK({}, {})\n".format(n, regaddr, v_name, bit_cnt + bits, bits).expandtabs(60)
+                c_regmap += "   #define WBEC_REG_{}_{}_{}_MSK\tGENMASK({}, {})\n".format(n, regaddr, v_name, bit_cnt + bits - 1, bit_cnt).expandtabs(60)
 
                 bit_cnt += bits
             else:
