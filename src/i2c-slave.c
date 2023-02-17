@@ -106,9 +106,9 @@ void I2C1_IRQHandler(void)
         case OP_SLAVE_RECEIVE:
             ret = regmap_set_snapshot_reg(i2c_slave_ctx.index, rd);
             if (ret < 0) {
-                I2C_SLAVE_BUS->CR2 &= ~I2C_CR2_NACK;
-            } else {
                 I2C_SLAVE_BUS->CR2 |= I2C_CR2_NACK;
+            } else {
+                I2C_SLAVE_BUS->CR2 &= ~I2C_CR2_NACK;
                 if (ret) {
                     i2c_slave_ctx.reg_changed_during_write = 1;
                 }
