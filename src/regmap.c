@@ -1,12 +1,28 @@
 #include "regmap.h"
 #include <string.h>
 #include <stddef.h>
-#include "i2c-slave.h"
 
-#define member_size(type, member) sizeof(((type *)0)->member)
+#define REGMAP_MEMBER(type, name, rw)                   type name;
+#define REGMAP_REGION_SIZE(type, name, rw)              (sizeof(type)),
+#define REGMAP_REGION_START_OFFSET(type, name, rw)      (offsetof(struct regmap, name)),
+#define REGMAP_REGION_END_OFFSET(type, name, rw)        (offsetof(struct regmap, name) + sizeof(type) - 1),
+#define REGMAP_REGION_RW(type, name, rw)                rw,
 
-#define REG_RTC_FIRST       (offsetof(struct regmap, rtc))
-#define REG_RTC_LAST        (offsetof(struct regmap, rtc) + member_size(struct regmap, rtc) - 1)
+struct regmap {
+    REGMAP(REGMAP_MEMBER)
+};
+
+static const struct regions_info {
+    size_t size[REGMAP_REGION_COUNT];
+    uint8_t start_offset[REGMAP_REGION_COUNT];
+    uint8_t end_offset[REGMAP_REGION_COUNT];
+    bool rw[REGMAP_REGION_COUNT];
+} regions_info = {
+    .size = { REGMAP(REGMAP_REGION_SIZE) },
+    .start_offset = { REGMAP(REGMAP_REGION_START_OFFSET) },
+    .end_offset = { REGMAP(REGMAP_REGION_END_OFFSET) },
+    .rw = { REGMAP(REGMAP_REGION_RW) },
+};
 
 union regmap_union {
     struct regmap regs;
@@ -16,48 +32,53 @@ union regmap_union {
 union regmap_union regmap;
 union regmap_union regmap_snapshot;
 
-union {
-    struct {
-        bool rtc : 1;
-    } flags;
-    uint32_t all_flags;
-} is_changed_flags;
+static bool region_is_changed[REGMAP_REGION_COUNT];
 
 bool is_write_completed = 0;
 
-void regmap_set_rtc_time(const struct rtc_time * tm)
+static inline size_t region_size(enum regmap_region r)
 {
-    regmap.regs.rtc.seconds = tm->seconds;
-    regmap.regs.rtc.minutes = tm->minutes;
-    regmap.regs.rtc.hours = tm->hours;
-    regmap.regs.rtc.weekdays = tm->weekdays;
-    regmap.regs.rtc.days = tm->days;
-    regmap.regs.rtc.months = tm->months;
-    regmap.regs.rtc.years = tm->years;
+    return regions_info.size[r];
 }
 
-void regmap_set_rtc_alarm(const struct rtc_alarm * alarm)
+static inline size_t region_first_reg(enum regmap_region r)
 {
-    regmap.regs.rtc.alarm_seconds = alarm->seconds;
-    regmap.regs.rtc.alarm_minutes = alarm->minutes;
-    regmap.regs.rtc.alarm_hours = alarm->hours;
-    regmap.regs.rtc.alarm_days = alarm->days;
+    return regions_info.start_offset[r];
+}
 
-    if (alarm->enabled) {
-        regmap.regs.rtc.alarm_seconds |= 0x80;
+static inline size_t region_last_reg(enum regmap_region r)
+{
+    return regions_info.end_offset[r];
+}
+
+static inline enum regmap_region get_region_by_addr(uint8_t addr)
+{
+    enum regmap_region r = 0;
+
+    while (addr > region_last_reg(r)) {
+        r++;
     }
+
+    return r;
 }
 
-void regmap_set_adc_ch(enum adc_channel ch, uint16_t val)
+static int is_region_rw(enum regmap_region r)
 {
-    if (ch < ADC_CHANNEL_COUNT) {
-        // regmap.regs.adc_channels[ch] = val;
+    return regions_info.end_offset[r];
+}
+
+bool regmap_set_region_data(enum regmap_region r, const void * data, size_t size)
+{
+    if (r >= REGMAP_REGION_COUNT) {
+        return 0;
     }
-}
+    if (size != region_size(r)) {
+        return 0;
+    }
 
-void regmap_set_iqr(uint8_t val)
-{
-    regmap.regs.irq.pwr_rise = val;
+    uint8_t offset = region_first_reg(r);
+    memcpy(&regmap.data[offset], data, size);
+    return 1;
 }
 
 void regmap_make_snapshot(void)
@@ -74,58 +95,54 @@ uint8_t regmap_get_snapshot_reg(uint8_t addr)
     return regmap_snapshot.data[addr];
 }
 
-bool regmap_set_snapshot_reg(uint8_t addr, uint8_t value)
+int regmap_set_snapshot_reg(uint8_t addr, uint8_t value)
 {
     if (addr > regmap_get_max_reg()) {
-        return 0;
+        return -100;//EFAULT;
+    }
+
+    enum regmap_region r = get_region_by_addr(addr);
+
+    if (!is_region_rw(r)) {
+        return -10;//EROFS;
     }
 
     if (regmap_snapshot.data[addr] != value) {
         regmap_snapshot.data[addr] = value;
 
-        i2c_slave_set_busy(1);
-
-        if ((addr >= REG_RTC_FIRST) && (addr <= REG_RTC_LAST)) {
-            is_changed_flags.flags.rtc = 1;
-        }
+        region_is_changed[r] = 1;
+        return 1;
     }
 
-    return 1;
+    return 0;
 }
 
-bool regmap_is_busy(void)
+bool regmap_is_snapshot_region_changed(enum regmap_region r)
 {
-    return (is_changed_flags.all_flags != 0);
-}
+    if (r >= REGMAP_REGION_COUNT) {
+        return 0;
+    }
 
-bool regmap_is_write_completed(void)
-{
-    bool ret = is_write_completed;
-    is_write_completed = 0;
+    bool ret = region_is_changed[r];
+    region_is_changed[r] = 0;
     return ret;
 }
 
-void regmap_set_write_completed(void)
+void regmap_get_snapshop_region_data(enum regmap_region r, void * data, size_t size)
 {
-    is_write_completed = 1;
+    if (r >= REGMAP_REGION_COUNT) {
+        return;
+    }
+
+    if (size != region_size(r)) {
+        return;
+    }
+
+    uint8_t offset = region_first_reg(r);
+    memcpy(data, &regmap.data[offset], size);
 }
 
-bool regmap_is_rtc_changed(void)
+uint8_t regmap_get_max_reg(void)
 {
-    bool ret = is_changed_flags.flags.rtc;
-    is_changed_flags.flags.rtc = 0;
-
-    return ret;
-}
-
-
-void regmap_get_snapshop_rtc_time(struct rtc_time * tm)
-{
-    tm->seconds = regmap_snapshot.regs.rtc.seconds;
-    tm->minutes = regmap_snapshot.regs.rtc.minutes;
-    tm->hours = regmap_snapshot.regs.rtc.hours;
-    tm->weekdays = regmap_snapshot.regs.rtc.weekdays;
-    tm->days = regmap_snapshot.regs.rtc.days;
-    tm->months = regmap_snapshot.regs.rtc.months;
-    tm->years = regmap_snapshot.regs.rtc.years;
+    return sizeof(struct regmap) - 1;
 }
