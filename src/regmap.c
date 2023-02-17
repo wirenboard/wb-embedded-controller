@@ -139,7 +139,7 @@ void regmap_get_snapshop_region_data(enum regmap_region r, void * data, size_t s
     }
 
     uint8_t offset = region_first_reg(r);
-    memcpy(data, &regmap.data[offset], size);
+    memcpy(data, &regmap_snapshot.data[offset], size);
 }
 
 uint8_t regmap_get_max_reg(void)
