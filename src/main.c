@@ -67,7 +67,7 @@ int main(void)
             regmap_time.days = BCD_TO_BIN(rtc_time.days);
             regmap_time.months = BCD_TO_BIN(rtc_time.months);
             regmap_time.years = BCD_TO_BIN(rtc_time.years);
-            regmap_time.weekdays = BCD_TO_BIN(rtc_time.weekdays);
+            regmap_time.weekdays = rtc_time.weekdays;
 
             regmap_alarm.en = rtc_alarm.enabled;
             regmap_alarm.seconds = BCD_TO_BIN(rtc_alarm.seconds);
@@ -92,7 +92,7 @@ int main(void)
                 rtc_time.days = BIN_TO_BCD(regmap_time.days);
                 rtc_time.months = BIN_TO_BCD(regmap_time.months);
                 rtc_time.years = BIN_TO_BCD(regmap_time.years);
-                rtc_time.weekdays = BIN_TO_BCD(regmap_time.weekdays);
+                rtc_time.weekdays = regmap_time.weekdays;
 
                 rtc_set_datetime(&rtc_time);
             }
