@@ -1,9 +1,19 @@
 #pragma once
+#include <stdint.h>
 
 #define F_CPU       16000000
 
 #define PWR_KEY_PORT        GPIOA
 #define PWR_KEY_PIN         0
+
+
+#define WBEC_ID             0xD2
+
+#ifndef MODBUS_DEVICE_FW_VERSION_NUMBERS
+#define MODBUS_DEVICE_FW_VERSION_NUMBERS 1,0,0,0
+#endif
+
+static const uint8_t fw_ver[] = { MODBUS_DEVICE_FW_VERSION_NUMBERS };
 
 
 // TODO Replace with 2500
