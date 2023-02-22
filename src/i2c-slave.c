@@ -127,10 +127,8 @@ void I2C1_IRQHandler(void)
     }
 
     if (I2C_SLAVE_BUS->ISR & I2C_ISR_TXIS) {
-        uint8_t byte = 0xFF;
-        if (i2c_slave_ctx.index < regmap_get_max_reg()) {
-            byte = regmap_get_snapshot_reg(i2c_slave_ctx.index);
-        }
+        uint8_t byte;
+        byte = regmap_get_snapshot_reg(i2c_slave_ctx.index);
         i2c_slave_ctx.index++;
         if (i2c_slave_ctx.index > regmap_get_max_reg()) {
             i2c_slave_ctx.index = 0;
