@@ -24,12 +24,15 @@ static const struct regions_info {
     .rw = { REGMAP(REGMAP_REGION_RW) },
 };
 
+// TODO Get rid of union
 union regmap_union {
     struct regmap regs;
     uint8_t data[sizeof(struct regmap)];
 };
 
-union regmap_union regmap;
+union regmap_union regmap = {
+    .data = {}
+};
 union regmap_union regmap_snapshot;
 
 static bool region_is_changed[REGMAP_REGION_COUNT];

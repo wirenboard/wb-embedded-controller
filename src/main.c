@@ -23,12 +23,19 @@ static void delay(uint32_t ticks)
 
 int main(void)
 {
+    struct regmap_irq irq_flags = {};
+    bool pwrkey_pressed = false;
+
     RCC->IOPENR |= RCC_IOPENR_GPIOAEN;
     RCC->IOPENR |= RCC_IOPENR_GPIOBEN;
     RCC->IOPENR |= RCC_IOPENR_GPIOCEN;
 
     GPIO_SET_INPUT(PWR_KEY_PORT, PWR_KEY_PIN);
     GPIO_SET_PULLUP(PWR_KEY_PORT, PWR_KEY_PIN);
+
+    GPIO_RESET(INT_PORT, INT_PIN);
+    GPIO_SET_OD(INT_PORT, INT_PIN);
+    GPIO_SET_OUTPUT(INT_PORT, INT_PIN);
 
     adc_init();
     i2c_slave_init();
@@ -49,9 +56,9 @@ int main(void)
 
     while (1) {
         system_led_on();
-        delay(3000);
+        delay(300);
         system_led_off();
-        delay(3000);
+        delay(300);
 
         if (rtc_get_ready_read()) {
             struct rtc_time rtc_time;
@@ -70,6 +77,7 @@ int main(void)
             regmap_time.weekdays = rtc_time.weekdays;
 
             regmap_alarm.en = rtc_alarm.enabled;
+            regmap_alarm.flag = rtc_alarm.flag;
             regmap_alarm.seconds = BCD_TO_BIN(rtc_alarm.seconds);
             regmap_alarm.minutes = BCD_TO_BIN(rtc_alarm.minutes);
             regmap_alarm.hours = BCD_TO_BIN(rtc_alarm.hours);
@@ -77,6 +85,27 @@ int main(void)
 
             regmap_set_region_data(REGMAP_REGION_RTC_TIME, &regmap_time, sizeof(regmap_time));
             regmap_set_region_data(REGMAP_REGION_RTC_ALARM, &regmap_alarm, sizeof(regmap_alarm));
+
+            if (!irq_flags.rtc_alarm && regmap_alarm.flag) {
+                irq_flags.rtc_alarm = 1;
+                regmap_set_region_data(REGMAP_REGION_IRQ_FLAGS, &irq_flags, sizeof(irq_flags));
+                regmap_set_region_data(REGMAP_REGION_IRQ_MSK, &irq_flags, sizeof(irq_flags));
+            }
+        }
+        
+        // Set PWR KEY flag
+        if (!pwrkey_pressed && !GPIO_TEST(PWR_KEY_PORT, PWR_KEY_PIN)) {
+            
+        }
+
+        // Update IRQ flags
+        if (!pwrkey_pressed && !GPIO_TEST(PWR_KEY_PORT, PWR_KEY_PIN)) {
+            pwrkey_pressed = 1;
+            irq_flags.pwroff_req = 1;
+            regmap_set_region_data(REGMAP_REGION_IRQ_FLAGS, &irq_flags, sizeof(irq_flags));
+            regmap_set_region_data(REGMAP_REGION_IRQ_MSK, &irq_flags, sizeof(irq_flags));
+        } else if (pwrkey_pressed && GPIO_TEST(PWR_KEY_PORT, PWR_KEY_PIN)) {
+            pwrkey_pressed = 0;
         }
 
         if (i2c_slave_is_busy()) {
@@ -103,6 +132,7 @@ int main(void)
                 regmap_get_snapshop_region_data(REGMAP_REGION_RTC_ALARM, &regmap_alarm, sizeof(regmap_alarm));
 
                 rtc_alarm.enabled = regmap_alarm.en;
+                rtc_alarm.flag = regmap_alarm.flag;
                 rtc_alarm.seconds = BIN_TO_BCD(regmap_alarm.seconds);
                 rtc_alarm.minutes = BIN_TO_BCD(regmap_alarm.minutes);
                 rtc_alarm.hours = BIN_TO_BCD(regmap_alarm.hours);
@@ -113,6 +143,17 @@ int main(void)
             if (regmap_is_snapshot_region_changed(REGMAP_REGION_RTC_CFG)) {
 
             }
+            if (regmap_is_snapshot_region_changed(REGMAP_REGION_IRQ_FLAGS)) {
+                struct regmap_irq msk;
+                regmap_get_snapshop_region_data(REGMAP_REGION_IRQ_FLAGS, &msk, sizeof(msk));
+                if (!msk.pwroff_req && irq_flags.pwroff_req) {
+                    irq_flags.pwroff_req = 0;
+                }
+                if (irq_flags.rtc_alarm) {
+                    irq_flags.rtc_alarm = 0;
+                    rtc_clear_alarm_flag();
+                }
+            }
 
             i2c_slave_set_free();
         }
@@ -120,6 +161,13 @@ int main(void)
         for (enum adc_channel ch = 0; ch < ADC_CHANNEL_COUNT; ch++) {
             // TODO Calc real value
             // regmap_set_adc_ch(ch, fix16_to_int(adc_get_channel_raw_value(ch)));
+        }
+
+        // Set INT pin
+        if (irq_flags.pwroff_req || irq_flags.rtc_alarm) {
+            GPIO_SET(INT_PORT, INT_PIN);
+        } else {
+            GPIO_RESET(INT_PORT, INT_PIN);
         }
     }
 }

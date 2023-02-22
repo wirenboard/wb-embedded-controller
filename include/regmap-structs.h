@@ -14,6 +14,8 @@
     m(struct regmap_gpio,           GPIO,           1) \
     m(struct regmap_watchdog,       WDT,            1) \
     m(struct regmap_power_control,  POWER_CTRL,     1) \
+    m(struct regmap_irq,            IRQ_FLAGS,      1) \
+    m(struct regmap_irq,            IRQ_MSK,        1) \
 
 __REGMAP_STRUCT regmap_info {
     uint8_t wbec_id;
@@ -35,15 +37,17 @@ __REGMAP_STRUCT regmap_rtc_time {
 };
 
 __REGMAP_STRUCT regmap_rtc_alarm {
-    uint8_t seconds:7;
-    bool en:1;
+    uint8_t seconds;
     uint8_t minutes;
     uint8_t hours;
     uint8_t days;
+    bool en:1;
+    bool flag:1;
 };
 
 __REGMAP_STRUCT regmap_rtc_cfg {
     uint8_t offset;
+    uint8_t res;
 };
 
 __REGMAP_STRUCT regmap_adc_data {
@@ -88,5 +92,10 @@ __REGMAP_STRUCT regmap_watchdog {
 __REGMAP_STRUCT regmap_power_control {
     bool off:1;
     bool pwrkey_pressed:1;
+};
+
+__REGMAP_STRUCT regmap_irq {
+    bool rtc_alarm:1;
+    bool pwroff_req:1;
 };
 

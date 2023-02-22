@@ -6,6 +6,9 @@
 #define PWR_KEY_PORT        GPIOA
 #define PWR_KEY_PIN         0
 
+#define INT_PORT            GPIOB
+#define INT_PIN             9
+
 
 #define WBEC_ID             0xD2
 
