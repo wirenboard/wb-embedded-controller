@@ -229,42 +229,26 @@ void rtc_start_calibration(void)
     reset_meas_context(&ref_meas_ctx);
     reset_meas_context(&rtc_meas_ctx);
     
-    RCC->APBENR2 |= RCC_APBENR2_TIM14EN;
+    CALIB_TIM_CLOCK_EN();
     
-    TIM14->CNT = 0;
-    TIM14->PSC = 0;
-    TIM14->ARR = 0xFFFF;
-    TIM14->TISEL = 0b0001;      // RTC CLK
-    TIM14->CCMR1 = TIM_CCMR1_CC1S_0 * 0b01;
-    TIM14->CCER |= TIM_CCER_CC1E;
-    TIM14->DIER |= TIM_DIER_UIE | TIM_DIER_CC1IE;
-    TIM14->SR = 0;
-    NVIC_EnableIRQ(TIM14_IRQn);
-    NVIC_SetPriority(TIM14_IRQn, 0);
-    
-    TIM14->CR1 |= TIM_CR1_CEN;
-    
-    
-    return;
-
     // Init PB9 GPIO
     GPIO_SET_INPUT(GPIOB, 9);
     GPIO_SET_AF(GPIOB, 9, 2);
 
     // Init CALIB_TIB
     CALIB_TIM->CNT = 0;
-    CALIB_TIM->PSC = 8 - 1;
+    CALIB_TIM->PSC = 0;
     CALIB_TIM->ARR = 0xFFFF;
     CALIB_TIM->CCMR1 |= TIM_CCMR1_CC1S_0 * 0b01;
     CALIB_TIM->CCER |= TIM_CCER_CC1E;
     CALIB_TIM->DIER |= TIM_DIER_UIE | TIM_CCER_CC1E;
-    TIM16->SR = 0;
+    CALIB_TIM->SR = 0;
     NVIC_EnableIRQ(TIM17_IRQn);
     NVIC_SetPriority(TIM17_IRQn, 0);
     
     CALIB_TIM->CR1 |= TIM_CR1_CEN;
     
-    
+    return;
     // Init TIM16 to capture wakeup events
     RCC->APBENR2 |= RCC_APBENR2_TIM16EN;
 
@@ -316,11 +300,19 @@ void TIM17_IRQHandler(void)
             ref_meas_ctx.start_crr = ccr;
         } else {
             ref_meas_ctx.period = (65536 * ref_meas_ctx.uif_cnt + ccr) - ref_meas_ctx.start_crr;
-            ref_meas_ctx.status = MEAS_FINISHED;
             //
-            RCC->APBRSTR2 |= RCC_APBRSTR2_TIM17RST;
-            RCC->APBRSTR2 &= ~RCC_APBRSTR2_TIM17RST;
-            RCC->APBENR2 &= ~RCC_APBENR2_TIM17EN;
+            if (counter < 500) {
+                array[counter] = ref_meas_ctx.period;
+                ref_meas_ctx.start_crr = ccr;
+                ref_meas_ctx.uif_cnt = 0;
+                counter++;
+            } else {
+                ref_meas_ctx.status = MEAS_FINISHED;
+                //
+                RCC->APBRSTR2 |= RCC_APBRSTR2_TIM17RST;
+                RCC->APBRSTR2 &= ~RCC_APBRSTR2_TIM17RST;
+                RCC->APBENR2 &= ~RCC_APBENR2_TIM17EN;
+            }
         }
     }
 }
