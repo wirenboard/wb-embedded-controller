@@ -157,11 +157,6 @@ void rtc_get_datetime(struct rtc_time * tm)
     tm->days = (dr & (RTC_DR_DU_Msk | RTC_DR_DT_Msk)) >> RTC_DR_DU_Pos;
     tm->months = (dr & (RTC_DR_MU_Msk | RTC_DR_MT_Msk)) >> RTC_DR_MU_Pos;
     tm->years = (dr & (RTC_DR_YU_Msk | RTC_DR_YT_Msk)) >> RTC_DR_YU_Pos;
-
-
-    if (RTC->SR & RTC_SR_ALRAF) {
-        RTC->SCR = RTC_SCR_CALRAF;
-    }
 }
 
 void rtc_set_datetime(const struct rtc_time * tm)
@@ -182,11 +177,12 @@ void rtc_get_alarm(struct rtc_alarm * alarm)
     alarm->hours = (al & (RTC_ALRMAR_HU_Msk | RTC_ALRMAR_HT_Msk)) >> RTC_ALRMAR_HU_Pos;
     alarm->days = (al & (RTC_ALRMAR_DU_Msk | RTC_ALRMAR_DT_Msk)) >> RTC_ALRMAR_DU_Pos;
 
-    alarm->enabled =
-        ((al & RTC_ALRMAR_MSK1) == 0) ||
-        ((al & RTC_ALRMAR_MSK2) == 0) ||
-        ((al & RTC_ALRMAR_MSK3) == 0) ||
-        ((al & RTC_ALRMAR_MSK4) == 0);
+    alarm->enabled = RTC->CR & RTC_CR_ALRAIE;
+    alarm->flag = RTC->SR & RTC_SR_ALRAF;
+    
+    //if (RTC->SR & RTC_SR_ALRAF) {
+    //    RTC->SCR = RTC_SCR_CALRAF;
+    //}
 }
 
 
@@ -199,6 +195,10 @@ void rtc_set_alarm(const struct rtc_alarm * alarm)
 
     start_init_disable_wpr();
 
+    RTC->CR &= ~(RTC_CR_ALRAIE | RTC_CR_ALRAE);
+
+    while ((RTC->ICSR & RTC_ICSR_ALRAWF) == 0) {}
+
     RTC->ALRMAR =
         ((uint32_t)alarm->seconds << RTC_ALRMAR_SU_Pos) |
         ((uint32_t)alarm->minutes << RTC_ALRMAR_MNU_Pos) |
@@ -206,7 +206,20 @@ void rtc_set_alarm(const struct rtc_alarm * alarm)
         ((uint32_t)alarm->days << RTC_ALRMAR_DU_Pos) |
         en;
 
+    if (alarm->enabled) {
+        RTC->CR |= RTC_CR_ALRAIE | RTC_CR_ALRAE;
+    }
+
     end_init_enable_wpr();
+
+    if (!alarm->flag) {
+        RTC->SCR = RTC_SCR_CALRAF;
+    }
+}
+
+void rtc_clear_alarm_flag(void)
+{
+    RTC->SCR = RTC_SCR_CALRAF;
 }
 
 void rtc_start_calibration(void)
