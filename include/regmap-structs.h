@@ -6,19 +6,19 @@
 #define __REGMAP_STRUCT         struct __attribute__((packed))
 
 #define REGMAP(m) \
-    /* Type                         Name            RW */ \
-    m(struct regmap_info,           INFO,           0   ) \
-    m(struct regmap_rtc_time,       RTC_TIME,       1   ) \
-    m(struct regmap_rtc_alarm,      RTC_ALARM,      1   ) \
-    m(struct regmap_rtc_cfg,        RTC_CFG,        1   ) \
-    m(struct regmap_adc_data,       ADC_DATA,       0   ) \
-    m(struct regmap_adc_cfg,        ADC_CFG,        1   ) \
-    m(struct regmap_gpio,           GPIO,           1   ) \
-    m(struct regmap_watchdog,       WDT,            1   ) \
-    m(struct regmap_power_control,  POWER_CTRL,     1   ) \
-    m(irq_flags_t,                  IRQ_FLAGS,      0   ) \
-    m(irq_flags_t,                  IRQ_MSK,        1   ) \
-    m(irq_flags_t,                  IRQ_CLEAR,      1   ) \
+    /* Type                         Name            Addr    RW  */ \
+    m(struct regmap_info,           INFO,           0x00,   0    ) \
+    m(struct regmap_rtc_time,       RTC_TIME,       0x10,   1    ) \
+    m(struct regmap_rtc_alarm,      RTC_ALARM,      0x20,   1    ) \
+    m(struct regmap_rtc_cfg,        RTC_CFG,        0x30,   1    ) \
+    m(struct regmap_adc_data,       ADC_DATA,       0x40,   0    ) \
+    m(struct regmap_adc_cfg,        ADC_CFG,        0x50,   1    ) \
+    m(struct regmap_gpio,           GPIO,           0x60,   1    ) \
+    m(struct regmap_watchdog,       WDT,            0x70,   1    ) \
+    m(struct regmap_power_control,  POWER_CTRL,     0x80,   1    ) \
+    m(irq_flags_t,                  IRQ_FLAGS,      0x10,   0    ) \
+    m(irq_flags_t,                  IRQ_MSK,        0x12,   1    ) \
+    m(irq_flags_t,                  IRQ_CLEAR,      0x14,   1    ) \
 
 __REGMAP_STRUCT regmap_info {
     uint8_t wbec_id;

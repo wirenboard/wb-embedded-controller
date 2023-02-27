@@ -7,7 +7,7 @@
 #include "adc.h"
 #include <errno.h>
 
-#define __REGMAP_REGION_NAME(type, name, rw)                REGMAP_REGION_##name,
+#define __REGMAP_REGION_NAME(type, name, addr, rw)              REGMAP_REGION_##name,
 
 enum regmap_region {
     REGMAP(__REGMAP_REGION_NAME)
