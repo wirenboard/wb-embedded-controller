@@ -11,10 +11,7 @@
 
 void SystemInit(void)
 {
-    RCC->CR |= RCC_CR_HSEON;
-    while ((RCC->CR & RCC_CR_HSERDY) == 0) {}
-   
-    RCC->CFGR |= RCC_CFGR_SW_0 * 0b001; // HSE
+
 }
 
 static void delay(uint32_t ticks)
@@ -23,8 +20,6 @@ static void delay(uint32_t ticks)
         __NOP();
     }
 }
-
-bool start = 0;
 
 int main(void)
 {
@@ -173,11 +168,6 @@ int main(void)
             GPIO_SET(INT_PORT, INT_PIN);
         } else {
             GPIO_RESET(INT_PORT, INT_PIN);
-        }
-        
-        if (start) {
-            start = 0;
-            rtc_start_calibration();
         }
     }
 }

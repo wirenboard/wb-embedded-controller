@@ -31,5 +31,4 @@ void rtc_get_datetime(struct rtc_time * tm);
 void rtc_set_datetime(const struct rtc_time * tm);
 void rtc_get_alarm(struct rtc_alarm * alarm);
 void rtc_set_alarm(const struct rtc_alarm * alarm);
-void rtc_start_calibration(void);
 void rtc_clear_alarm_flag(void);
