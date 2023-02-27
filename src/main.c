@@ -7,6 +7,7 @@
 #include "regmap.h"
 #include "system_led.h"
 #include "adc.h"
+#include "irq.h"
 
 
 void SystemInit(void)
@@ -23,7 +24,6 @@ static void delay(uint32_t ticks)
 
 int main(void)
 {
-    struct regmap_irq irq_flags = {};
     bool pwrkey_pressed = false;
 
     RCC->IOPENR |= RCC_IOPENR_GPIOAEN;
@@ -86,24 +86,25 @@ int main(void)
             regmap_set_region_data(REGMAP_REGION_RTC_TIME, &regmap_time, sizeof(regmap_time));
             regmap_set_region_data(REGMAP_REGION_RTC_ALARM, &regmap_alarm, sizeof(regmap_alarm));
 
-            if (!irq_flags.rtc_alarm && regmap_alarm.flag) {
-                irq_flags.rtc_alarm = 1;
-                regmap_set_region_data(REGMAP_REGION_IRQ_FLAGS, &irq_flags, sizeof(irq_flags));
-                regmap_set_region_data(REGMAP_REGION_IRQ_MSK, &irq_flags, sizeof(irq_flags));
+            if (regmap_alarm.flag) {
+                irq_set_flag(IRQ_ALARM);
+                rtc_clear_alarm_flag();
             }
         }
-        
+
+        // IRQ to regmap
+        irq_flags_t irq_flags = irq_get_flags();
+        regmap_set_region_data(REGMAP_REGION_IRQ_FLAGS, &irq_flags, sizeof(irq_flags));
+
         // Set PWR KEY flag
         if (!pwrkey_pressed && !GPIO_TEST(PWR_KEY_PORT, PWR_KEY_PIN)) {
-            
+
         }
 
         // Update IRQ flags
         if (!pwrkey_pressed && !GPIO_TEST(PWR_KEY_PORT, PWR_KEY_PIN)) {
             pwrkey_pressed = 1;
-            irq_flags.pwroff_req = 1;
-            regmap_set_region_data(REGMAP_REGION_IRQ_FLAGS, &irq_flags, sizeof(irq_flags));
-            regmap_set_region_data(REGMAP_REGION_IRQ_MSK, &irq_flags, sizeof(irq_flags));
+            irq_set_flag(IRQ_PWR_OFF_REQ);
         } else if (pwrkey_pressed && GPIO_TEST(PWR_KEY_PORT, PWR_KEY_PIN)) {
             pwrkey_pressed = 0;
         }
@@ -143,16 +144,16 @@ int main(void)
             if (regmap_is_snapshot_region_changed(REGMAP_REGION_RTC_CFG)) {
 
             }
-            if (regmap_is_snapshot_region_changed(REGMAP_REGION_IRQ_FLAGS)) {
-                struct regmap_irq msk;
-                regmap_get_snapshop_region_data(REGMAP_REGION_IRQ_FLAGS, &msk, sizeof(msk));
-                if (!msk.pwroff_req && irq_flags.pwroff_req) {
-                    irq_flags.pwroff_req = 0;
-                }
-                if (irq_flags.rtc_alarm) {
-                    irq_flags.rtc_alarm = 0;
-                    rtc_clear_alarm_flag();
-                }
+            if (regmap_is_snapshot_region_changed(REGMAP_REGION_IRQ_MSK)) {
+                irq_flags_t msk;
+                regmap_get_snapshop_region_data(REGMAP_REGION_IRQ_MSK, &msk, sizeof(msk));
+                irq_set_mask(msk);
+            }
+
+            if (regmap_is_snapshot_region_changed(REGMAP_REGION_IRQ_CLEAR)) {
+                irq_flags_t clear;
+                regmap_get_snapshop_region_data(REGMAP_REGION_IRQ_CLEAR, &clear, sizeof(clear));
+                irq_clear_flags(clear);
             }
 
             i2c_slave_set_free();
@@ -164,7 +165,7 @@ int main(void)
         }
 
         // Set INT pin
-        if (irq_flags.pwroff_req || irq_flags.rtc_alarm) {
+        if (irq_is_masked_irq()) {
             GPIO_SET(INT_PORT, INT_PIN);
         } else {
             GPIO_RESET(INT_PORT, INT_PIN);

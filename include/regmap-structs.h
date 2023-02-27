@@ -1,21 +1,24 @@
 #pragma once
 #include <stdint.h>
 #include <stdbool.h>
+#include "irq.h"
 
 #define __REGMAP_STRUCT         struct __attribute__((packed))
 
 #define REGMAP(m) \
-    m(struct regmap_info,           INFO,           0) \
-    m(struct regmap_rtc_time,       RTC_TIME,       1) \
-    m(struct regmap_rtc_alarm,      RTC_ALARM,      1) \
-    m(struct regmap_rtc_cfg,        RTC_CFG,        1) \
-    m(struct regmap_adc_data,       ADC_DATA,       0) \
-    m(struct regmap_adc_cfg,        ADC_CFG,        1) \
-    m(struct regmap_gpio,           GPIO,           1) \
-    m(struct regmap_watchdog,       WDT,            1) \
-    m(struct regmap_power_control,  POWER_CTRL,     1) \
-    m(struct regmap_irq,            IRQ_FLAGS,      1) \
-    m(struct regmap_irq,            IRQ_MSK,        1) \
+    /* Type                         Name            RW */ \
+    m(struct regmap_info,           INFO,           0   ) \
+    m(struct regmap_rtc_time,       RTC_TIME,       1   ) \
+    m(struct regmap_rtc_alarm,      RTC_ALARM,      1   ) \
+    m(struct regmap_rtc_cfg,        RTC_CFG,        1   ) \
+    m(struct regmap_adc_data,       ADC_DATA,       0   ) \
+    m(struct regmap_adc_cfg,        ADC_CFG,        1   ) \
+    m(struct regmap_gpio,           GPIO,           1   ) \
+    m(struct regmap_watchdog,       WDT,            1   ) \
+    m(struct regmap_power_control,  POWER_CTRL,     1   ) \
+    m(irq_flags_t,                  IRQ_FLAGS,      0   ) \
+    m(irq_flags_t,                  IRQ_MSK,        1   ) \
+    m(irq_flags_t,                  IRQ_CLEAR,      1   ) \
 
 __REGMAP_STRUCT regmap_info {
     uint8_t wbec_id;
@@ -93,9 +96,3 @@ __REGMAP_STRUCT regmap_power_control {
     bool off:1;
     bool pwrkey_pressed:1;
 };
-
-__REGMAP_STRUCT regmap_irq {
-    bool rtc_alarm:1;
-    bool pwroff_req:1;
-};
-
