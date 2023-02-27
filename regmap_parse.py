@@ -12,12 +12,14 @@ regions = []
 types = []
 names = []
 rws = []
+base = []
 type_desc = []
 
-for r in re.finditer(r"m\((.*),\s*(\S*),\s*(\S*)\)", regmap_file):
+for r in re.finditer(r"m\((.*),\s*(\S*),\s*(\S*),\s*(\S*)\s*\)", regmap_file):
     types.append(r.group(1))
     names.append(r.group(2))
-    rws.append(r.group(3))
+    base.append(int(r.group(3), 16))
+    rws.append(r.group(4))
 
 regaddr = 0
 markdown = ""
@@ -26,13 +28,13 @@ markdown += "| ^^ | ^^ | ^^ | ^^ | bit 7 | bit 6 | bit 5 | bit 4 | bit 3 | bit 2
 
 c_regmap = ""
 
-for t, n, rw in zip(types, names, rws):
+for t, n, rw, b in zip(types, names, rws, base):
     print("Region {} (rw:{})".format(n, rw))
     rw_str = "RO"
     if rw:
         rw_str = "RW"
     c_regmap += "\n"
-    c_regmap += "/* Region {}: {} */\n".format(n, rw_str)
+    c_regmap += "/* Region {}: base: 0x{:02x}, {} */\n".format(n, b, rw_str)
 
     s = str(t)
     desc = []
