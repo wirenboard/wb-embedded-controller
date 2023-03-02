@@ -20,15 +20,9 @@ enum i2c_operation {
 static struct i2c_slave_ctx {
     enum i2c_operation op;
     uint8_t index;
-    bool reg_changed_during_write;
 } i2c_slave_ctx;
 
 void I2C1_IRQHandler(void);
-
-static inline void i2c_slave_set_busy(void)
-{
-    I2C_SLAVE_BUS->OAR1 &= ~I2C_OAR1_OA1EN;
-}
 
 void i2c_slave_init(void)
 {
@@ -51,14 +45,14 @@ void i2c_slave_init(void)
     NVIC_EnableIRQ(I2C1_IRQn);
 }
 
+void i2c_slave_set_busy(void)
+{
+    I2C_SLAVE_BUS->OAR1 &= ~I2C_OAR1_OA1EN;
+}
+
 void i2c_slave_set_free(void)
 {
     I2C_SLAVE_BUS->OAR1 |= I2C_OAR1_OA1EN;
-}
-
-bool i2c_slave_is_busy(void)
-{
-    return !(I2C_SLAVE_BUS->OAR1 & I2C_OAR1_OA1EN);
 }
 
 void I2C1_IRQHandler(void)
@@ -92,31 +86,20 @@ void I2C1_IRQHandler(void)
 
         switch (i2c_slave_ctx.op) {
         case OP_SET_REG_ADDR:
-            if (rd > regmap_get_max_reg()) {
-                I2C_SLAVE_BUS->CR2 |= I2C_CR2_NACK;
-            } else {
-                I2C_SLAVE_BUS->CR2 &= ~I2C_CR2_NACK;
-                regmap_make_snapshot();
-                i2c_slave_ctx.index = rd;
-                i2c_slave_ctx.op = OP_SLAVE_RECEIVE;
-                i2c_slave_ctx.reg_changed_during_write = 0;
-            }
+            I2C_SLAVE_BUS->CR2 &= ~I2C_CR2_NACK;
+            regmap_make_snapshot();
+            i2c_slave_ctx.index = rd;
+            i2c_slave_ctx.op = OP_SLAVE_RECEIVE;
             break;
 
         case OP_SLAVE_RECEIVE:
-            ret = regmap_set_snapshot_reg(i2c_slave_ctx.index, rd);
+            ret = regmap_snapshot_set_reg(i2c_slave_ctx.index, rd);
             if (ret < 0) {
                 I2C_SLAVE_BUS->CR2 |= I2C_CR2_NACK;
             } else {
                 I2C_SLAVE_BUS->CR2 &= ~I2C_CR2_NACK;
-                if (ret) {
-                    i2c_slave_ctx.reg_changed_during_write = 1;
-                }
             }
             i2c_slave_ctx.index++;
-            if (i2c_slave_ctx.index == regmap_get_max_reg()) {
-                i2c_slave_ctx.index = 0;
-            }
             break;
 
         default:
@@ -130,9 +113,6 @@ void I2C1_IRQHandler(void)
         uint8_t byte;
         byte = regmap_get_snapshot_reg(i2c_slave_ctx.index);
         i2c_slave_ctx.index++;
-        if (i2c_slave_ctx.index > regmap_get_max_reg()) {
-            i2c_slave_ctx.index = 0;
-        }
         I2C_SLAVE_BUS->TXDR = byte;
     }
 
@@ -141,17 +121,12 @@ void I2C1_IRQHandler(void)
         // Decrement index
         // TODO Find better solution
         i2c_slave_ctx.index--;
-        if (i2c_slave_ctx.index > regmap_get_max_reg()) {
-            i2c_slave_ctx.index = regmap_get_max_reg();
-        }
 
         I2C_SLAVE_BUS->ICR = I2C_ICR_NACKCF;
     }
 
     if (I2C_SLAVE_BUS->ISR & I2C_ISR_STOPF) {
-        if ((i2c_slave_ctx.op == OP_SLAVE_RECEIVE) && i2c_slave_ctx.reg_changed_during_write) {
-            i2c_slave_set_busy();
-        }
+        regmap_snapshot_set_write_complited();
         I2C_SLAVE_BUS->ICR = I2C_ICR_STOPCF;
     }
 }

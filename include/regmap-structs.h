@@ -1,98 +1,149 @@
 #pragma once
 #include <stdint.h>
 #include <stdbool.h>
-#include "irq.h"
 
-#define __REGMAP_STRUCT         struct __attribute__((packed))
+enum regmap_rw {
+    REGMAP_RO,
+    REGMAP_RW
+};
 
 #define REGMAP(m) \
-    /* Type                         Name            Addr    RW  */ \
-    m(struct regmap_info,           INFO,           0x00,   0    ) \
-    m(struct regmap_rtc_time,       RTC_TIME,       0x10,   1    ) \
-    m(struct regmap_rtc_alarm,      RTC_ALARM,      0x20,   1    ) \
-    m(struct regmap_rtc_cfg,        RTC_CFG,        0x30,   1    ) \
-    m(struct regmap_adc_data,       ADC_DATA,       0x40,   0    ) \
-    m(struct regmap_adc_cfg,        ADC_CFG,        0x50,   1    ) \
-    m(struct regmap_gpio,           GPIO,           0x60,   1    ) \
-    m(struct regmap_watchdog,       WDT,            0x70,   1    ) \
-    m(struct regmap_power_control,  POWER_CTRL,     0x80,   1    ) \
-    m(irq_flags_t,                  IRQ_FLAGS,      0x10,   0    ) \
-    m(irq_flags_t,                  IRQ_MSK,        0x12,   1    ) \
-    m(irq_flags_t,                  IRQ_CLEAR,      0x14,   1    ) \
+    /* INFO: id and fw version */ \
+    m( \
+        INFO,       /* Region name */ \
+        0x00,       /* Region base address */ \
+        REGMAP_RO,  /* RO/RW */ \
+        /* Region data */ \
+        uint8_t wbec_id; \
+        uint8_t board_rev; \
+        uint8_t fw_ver_major; \
+        uint8_t fw_ver_minor; \
+        uint8_t fw_ver_patch; \
+        int8_t fw_ver_suffix; \
+    ) \
+    /* RTC Time */ \
+    m( \
+        RTC_TIME,   /* Region name */ \
+        0x10,       /* Region base address */ \
+        REGMAP_RW,  /* RO/RW */ \
+        /* Region data */ \
+        uint8_t seconds; \
+        uint8_t minutes; \
+        uint8_t hours; \
+        uint8_t days; \
+        uint8_t weekdays; \
+        uint8_t months; \
+        uint8_t years; \
+    ) \
+    /* RTC Alarm */ \
+    m( \
+        RTC_ALARM,  /* Region name */ \
+        0x20,       /* Region base address */ \
+        REGMAP_RW,  /* RO/RW */ \
+        /* Region data */ \
+        uint8_t seconds; \
+        uint8_t minutes; \
+        uint8_t hours; \
+        uint8_t days; \
+        bool en:1; \
+    ) \
+    /* RTC Config */ \
+    m( \
+        RTC_CFG,    /* Region name */ \
+        0x30,       /* Region base address */ \
+        REGMAP_RW,  /* RO/RW */ \
+        /* Region data */ \
+        uint8_t offset; \
+    ) \
+    /* ADC Data: voltages, temperature */ \
+    m( \
+        ADC_DATA,   /* Region name */ \
+        0x40,       /* Region base address */ \
+        REGMAP_RW,  /* RO/RW */ \
+        /* Region data */ \
+        uint16_t v_in; \
+        uint16_t v_bat; \
+        uint16_t v_3_3; \
+        uint16_t v_5_0; \
+        uint16_t v_a1; \
+        uint16_t v_a2; \
+        uint16_t v_a3; \
+        uint16_t v_a4; \
+        uint16_t temp; \
+        uint16_t v_usb_debug_console; \
+        uint16_t v_usb_debug_network; \
+    ) \
+    /* ADC Config: UVP / OVP */ \
+    m( \
+        ADC_CFG,   /* Region name */ \
+        0x60,       /* Region base address */ \
+        REGMAP_RW,  /* RO/RW */ \
+        /* Region data */ \
+        uint8_t lowpass_rc_a1; \
+        uint8_t lowpass_rc_a2; \
+        uint8_t lowpass_rc_a3; \
+        uint8_t lowpass_rc_a4; \
+        uint8_t v_in_uvp; \
+        uint8_t v_in_ovp; \
+        uint8_t v_out_uvp; \
+        uint8_t v_out_ovp; \
+    ) \
+    /* GPIO */ \
+    m( \
+        GPIO,       /* Region name */ \
+        0x80,       /* Region base address */ \
+        REGMAP_RW,  /* RO/RW */ \
+        /* Region data */ \
+        bool a1:1; \
+        bool a2:1; \
+        bool a3:1; \
+        bool a4:1; \
+        bool v_out:1; \
+    ) \
+    /* Watchdog */ \
+    m( \
+        WDT,        /* Region name */ \
+        0x90,       /* Region base address */ \
+        REGMAP_RW,  /* RO/RW */ \
+        /* Region data */ \
+        uint8_t timeout:4; \
+        bool reset:1; \
+        bool run:1; \
+    ) \
+    /* Power control */ \
+    m( \
+        POWER_CTRL, /* Region name */ \
+        0xA0,       /* Region base address */ \
+        REGMAP_RW,  /* RO/RW */ \
+        /* Region data */ \
+        bool off:1; \
+    ) \
+    /* IRQ Flags */ \
+    m( \
+        IRQ_FLAGS,        /* Region name */ \
+        0xB0,       /* Region base address */ \
+        REGMAP_RO,  /* RO/RW */ \
+        /* Region data */ \
+        uint8_t irqs; \
+    ) \
+    /* IRQ Mask */ \
+    m( \
+        IRQ_MSK,    /* Region name */ \
+        0xB2,       /* Region base address */ \
+        REGMAP_RW,  /* RO/RW */ \
+        /* Region data */ \
+        uint8_t irqs; \
+    ) \
+    /* IRQ Clear */ \
+    m( \
+        IRQ_CLEAR,        /* Region name */ \
+        0xB4,       /* Region base address */ \
+        REGMAP_RW,  /* RO/RW */ \
+        /* Region data */ \
+        uint8_t irqs; \
+    ) \
 
-__REGMAP_STRUCT regmap_info {
-    uint8_t wbec_id;
-    uint8_t board_rev;
-    uint8_t fw_ver_major;
-    uint8_t fw_ver_minor;
-    uint8_t fw_ver_patch;
-    int8_t fw_ver_suffix;
-};
 
-__REGMAP_STRUCT regmap_rtc_time {
-    uint8_t seconds;
-    uint8_t minutes;
-    uint8_t hours;
-    uint8_t days;
-    uint8_t weekdays;
-    uint8_t months;
-    uint8_t years;
-};
+#define __REGMAP_STRUCTS(name, addr, rw, members)       struct __attribute__((packed)) REGMAP_##name { members };
 
-__REGMAP_STRUCT regmap_rtc_alarm {
-    uint8_t seconds;
-    uint8_t minutes;
-    uint8_t hours;
-    uint8_t days;
-    bool en:1;
-    bool flag:1;
-};
-
-__REGMAP_STRUCT regmap_rtc_cfg {
-    uint8_t offset;
-    uint8_t res;
-};
-
-__REGMAP_STRUCT regmap_adc_data {
-    uint16_t v_in;
-    uint16_t v_bat;
-    uint16_t v_3_3;
-    uint16_t v_5_0;
-    uint16_t v_a1;
-    uint16_t v_a2;
-    uint16_t v_a3;
-    uint16_t v_a4;
-    uint16_t temp;
-    uint16_t v_usb_debug_console;
-    uint16_t v_usb_debug_network;
-};
-
-__REGMAP_STRUCT regmap_adc_cfg {
-    uint8_t lowpass_rc_a1;
-    uint8_t lowpass_rc_a2;
-    uint8_t lowpass_rc_a3;
-    uint8_t lowpass_rc_a4;
-    uint8_t v_in_uvp;
-    uint8_t v_in_ovp;
-    uint8_t v_out_uvp;
-    uint8_t v_out_ovp;
-};
-
-__REGMAP_STRUCT regmap_gpio {
-    bool a1:1;
-    bool a2:1;
-    bool a3:1;
-    bool a4:1;
-    bool v_out:1;
-};
-
-__REGMAP_STRUCT regmap_watchdog {
-    uint8_t timeout:4;
-    bool reset:1;
-    bool run:1;
-};
-
-__REGMAP_STRUCT regmap_power_control {
-    bool off:1;
-    bool pwrkey_pressed:1;
-};
+REGMAP(__REGMAP_STRUCTS)

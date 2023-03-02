@@ -2,13 +2,13 @@
 #include <stdio.h>
 #include <errno.h>
 
-#define REGMAP_SIZE                                         sizeof(struct regmap)
+#define REGMAP_SIZE                                             sizeof(struct regmap)
 
-#define REGMAP_MEMBER(type, name, addr, rw)                 type name;
-#define REGMAP_REGION_SIZE(type, name, addr, rw)            (sizeof(type)),
-#define REGMAP_REGION_STRUCT_OFFSET(type, name, addr, rw)   (offsetof(struct regmap, name)),
-#define REGMAP_REGION_RW(type, name, addr, rw)              rw,
-#define REGMAP_REGION_ADDR(type, name, addr, rw)            addr,
+#define REGMAP_MEMBER(name, addr, rw, members)                  struct REGMAP_##name name;
+#define REGMAP_REGION_SIZE(name, addr, rw, members)             (sizeof(struct REGMAP_##name)),
+#define REGMAP_REGION_STRUCT_OFFSET(name, addr, rw, members)    (offsetof(struct regmap, name)),
+#define REGMAP_REGION_RW(name, addr, rw, members)               rw,
+#define REGMAP_REGION_ADDR(name, addr, rw, members)             addr,
 
 struct regmap {
     REGMAP(REGMAP_MEMBER)
@@ -26,6 +26,17 @@ static const struct regions_info {
     .struct_offset = { REGMAP(REGMAP_REGION_STRUCT_OFFSET) },
     .rw = { REGMAP(REGMAP_REGION_RW) },
 };
+
+
+void i2c_slave_set_busy(void)
+{
+
+}
+
+void i2c_slave_set_free(void)
+{
+
+}
 
 
 int main(void)
