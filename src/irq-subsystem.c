@@ -1,4 +1,4 @@
-#include "irq.h"
+#include "irq-subsystem.h"
 #include <assert.h>
 
 static_assert((sizeof(irq_flags_t) * 8) >= IRQ_COUNT, "IRQ flags not fitted to `irq_flags` type");
