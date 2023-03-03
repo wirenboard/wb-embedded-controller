@@ -12,6 +12,7 @@
 #include "wbec.h"
 #include "pwrkey.h"
 #include "systick.h"
+#include "wdt.h"
 
 
 void SystemInit(void)
@@ -45,6 +46,7 @@ int main(void)
         // Drivers
         system_led_do_periodic_work();
         pwrkey_do_periodic_work();
+        wdt_do_periodic_work();
 
         // Sybsystems
         rtc_alarm_do_periodic_work();

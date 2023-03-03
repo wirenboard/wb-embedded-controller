@@ -2,6 +2,7 @@
 #include "regmap.h"
 #include "pwrkey.h"
 #include "irq-subsystem.h"
+#include "wdt.h"
 
 static const uint8_t fw_ver[] = { MODBUS_DEVICE_FW_VERSION_NUMBERS };
 
@@ -17,6 +18,8 @@ void wbec_init(void)
     };
 
     regmap_set_region_data(REGMAP_REGION_INFO, &wbec_info, sizeof(wbec_info));
+
+    wdt_set_timeout(WDEC_WATCHDOG_INITIAL_TIMEOUT_S);
 }
 
 void wbec_do_periodic_work(void)
