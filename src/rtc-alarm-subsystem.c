@@ -6,12 +6,8 @@ void rtc_alarm_do_periodic_work(void)
 {
     if (rtc_get_ready_read()) {
         struct rtc_time rtc_time;
-        struct rtc_alarm rtc_alarm;
         struct REGMAP_RTC_TIME regmap_time;
-        struct REGMAP_RTC_ALARM regmap_alarm;
         rtc_get_datetime(&rtc_time);
-        rtc_get_alarm(&rtc_alarm);
-
         regmap_time.seconds = BCD_TO_BIN(rtc_time.seconds);
         regmap_time.minutes = BCD_TO_BIN(rtc_time.minutes);
         regmap_time.hours = BCD_TO_BIN(rtc_time.hours);
@@ -19,14 +15,16 @@ void rtc_alarm_do_periodic_work(void)
         regmap_time.months = BCD_TO_BIN(rtc_time.months);
         regmap_time.years = BCD_TO_BIN(rtc_time.years);
         regmap_time.weekdays = rtc_time.weekdays;
+        regmap_set_region_data(REGMAP_REGION_RTC_TIME, &regmap_time, sizeof(regmap_time));
 
+        struct rtc_alarm rtc_alarm;
+        struct REGMAP_RTC_ALARM regmap_alarm;
+        rtc_get_alarm(&rtc_alarm);
         regmap_alarm.en = rtc_alarm.enabled;
         regmap_alarm.seconds = BCD_TO_BIN(rtc_alarm.seconds);
         regmap_alarm.minutes = BCD_TO_BIN(rtc_alarm.minutes);
         regmap_alarm.hours = BCD_TO_BIN(rtc_alarm.hours);
         regmap_alarm.days = BCD_TO_BIN(rtc_alarm.days);
-
-        regmap_set_region_data(REGMAP_REGION_RTC_TIME, &regmap_time, sizeof(regmap_time));
         regmap_set_region_data(REGMAP_REGION_RTC_ALARM, &regmap_alarm, sizeof(regmap_alarm));
 
         if (rtc_alarm.flag) {
