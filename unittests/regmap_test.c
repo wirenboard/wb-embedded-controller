@@ -7,8 +7,13 @@
 #define REGMAP_MEMBER(name, addr, rw, members)                  struct REGMAP_##name name;
 #define REGMAP_REGION_SIZE(name, addr, rw, members)             (sizeof(struct REGMAP_##name)),
 #define REGMAP_REGION_STRUCT_OFFSET(name, addr, rw, members)    (offsetof(struct regmap, name)),
-#define REGMAP_REGION_RW(name, addr, rw, members)               rw,
+#define REGMAP_REGION_RW(name, addr, rw, members)               REGMAP_##rw,
 #define REGMAP_REGION_ADDR(name, addr, rw, members)             addr,
+
+enum regmap_rw {
+    REGMAP_RO,
+    REGMAP_RW
+};
 
 struct regmap {
     REGMAP(REGMAP_MEMBER)
