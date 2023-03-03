@@ -5,24 +5,18 @@
 #include "i2c-slave.h"
 #include "rtc.h"
 #include "regmap.h"
-#include "system_led.h"
+#include "system-led.h"
 #include "adc.h"
 #include "irq-subsystem.h"
 #include "rtc-alarm-subsystem.h"
 #include "wbec.h"
 #include "pwrkey.h"
+#include "systick.h"
 
 
 void SystemInit(void)
 {
 
-}
-
-static void delay(uint32_t ticks)
-{
-    while(ticks--) {
-        __NOP();
-    }
 }
 
 int main(void)
@@ -32,11 +26,12 @@ int main(void)
     RCC->IOPENR |= RCC_IOPENR_GPIOCEN;
 
     // Init drivers
+    systick_init();
+    system_led_init();
     pwrkey_init();
     adc_init();
     i2c_slave_init();
     rtc_init();
-    system_led_init();
 
     // Init subsystems
     irq_init();
@@ -44,16 +39,18 @@ int main(void)
     // Init WBEC
     wbec_init();
 
-    while (1) {
-        system_led_on();
-        delay(300);
-        system_led_off();
-        delay(300);
+    system_led_blink(500, 1000);
 
+    while (1) {
+        // Drivers
+        system_led_do_periodic_work();
         pwrkey_do_periodic_work();
+
+        // Sybsystems
         rtc_alarm_do_periodic_work();
         irq_do_periodic_work();
 
+        // Main algorithm
         wbec_do_periodic_work();
 
         for (enum adc_channel ch = 0; ch < ADC_CHANNEL_COUNT; ch++) {

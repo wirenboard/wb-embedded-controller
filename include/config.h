@@ -12,6 +12,9 @@
 #define INT_PORT            GPIOB
 #define INT_PIN             9
 
+#define SYSTEM_LED_PORT     GPIOB
+#define SYSTEM_LED_PIN      1
+
 
 #define WBEC_ID             0xD2
 
