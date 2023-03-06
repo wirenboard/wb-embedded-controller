@@ -15,12 +15,19 @@
 #define SYSTEM_LED_PORT     GPIOB
 #define SYSTEM_LED_PIN      1
 
+#define A40_POWER_OFF_PORT  GPIOD
+#define A40_POWER_OFF_PIN   2
 
 #define WBEC_ID             0xD2
 
 #ifndef MODBUS_DEVICE_FW_VERSION_NUMBERS
 #define MODBUS_DEVICE_FW_VERSION_NUMBERS 1,0,0,0
 #endif
+
+#define WDEC_WATCHDOG_INITIAL_TIMEOUT_S         60
+
+#define WBEC_POWER_RESET_TIME_MS                500
+#define WBEC_LINUX_POWER_OFF_DELAY_MS           20000
 
 
 // TODO Replace with 2500
