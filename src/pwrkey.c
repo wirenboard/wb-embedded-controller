@@ -12,8 +12,9 @@ struct pwrkey_gpio_ctx {
 struct pwrkey_logic_ctx {
     systime_t timestamp;
     bool prev_logic_state;
-    bool short_pressed;
-    bool long_pressed;
+    bool short_pressed_flag;
+    bool long_pressed_flag;
+    bool long_pressed_detected;
 };
 
 static struct pwrkey_gpio_ctx gpio_ctx;
@@ -54,10 +55,11 @@ void pwrkey_do_periodic_work(void)
         if (gpio_ctx.logic_state) {
             // If button pressed - save timestamp
             logic_ctx.timestamp = systick_get_system_time();
+            logic_ctx.long_pressed_detected = 0;
         } else {
             // If button released - check that it is not long press
-            if (!logic_ctx.long_pressed) {
-                logic_ctx.short_pressed = 1;
+            if (!logic_ctx.long_pressed_detected) {
+                logic_ctx.short_pressed_flag = 1;
             }
         }
     }
@@ -65,25 +67,26 @@ void pwrkey_do_periodic_work(void)
     if (gpio_ctx.logic_state) {
         systime_t held_time = systick_get_time_since_timestamp(logic_ctx.timestamp);
         if (held_time > PWRKEY_LONG_PRESS_TIME_MS) {
-            logic_ctx.long_pressed = 1;
+            logic_ctx.long_pressed_flag = 1;
+            logic_ctx.long_pressed_detected = 1;
         }
     }
 }
 
 bool pwrkey_handle_short_press(void)
 {
-    bool ret = logic_ctx.short_pressed;
+    bool ret = logic_ctx.short_pressed_flag;
     if (ret) {
-        logic_ctx.short_pressed = 0;
+        logic_ctx.short_pressed_flag = 0;
     }
     return ret;
 }
 
 bool pwrkey_handle_long_press(void)
 {
-    bool ret = logic_ctx.long_pressed;
+    bool ret = logic_ctx.long_pressed_flag;
     if (ret) {
-        logic_ctx.long_pressed = 0;
+        logic_ctx.long_pressed_flag = 0;
     }
     return ret;
 }
