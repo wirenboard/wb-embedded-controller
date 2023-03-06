@@ -25,6 +25,7 @@ int main(void)
     RCC->IOPENR |= RCC_IOPENR_GPIOAEN;
     RCC->IOPENR |= RCC_IOPENR_GPIOBEN;
     RCC->IOPENR |= RCC_IOPENR_GPIOCEN;
+    RCC->IOPENR |= RCC_IOPENR_GPIODEN;
 
     // Init drivers
     systick_init();
