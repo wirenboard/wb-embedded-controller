@@ -13,6 +13,7 @@
 #include "pwrkey.h"
 #include "systick.h"
 #include "wdt.h"
+#include "wb-power.h"
 
 
 void SystemInit(void)
@@ -29,6 +30,7 @@ int main(void)
 
     // Init drivers
     systick_init();
+    wb_power_init();
     system_led_init();
     pwrkey_init();
     adc_init();
@@ -45,6 +47,7 @@ int main(void)
 
     while (1) {
         // Drivers
+        wb_power_do_periodic_work();
         system_led_do_periodic_work();
         pwrkey_do_periodic_work();
         wdt_do_periodic_work();
