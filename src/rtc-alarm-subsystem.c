@@ -71,6 +71,7 @@ void rtc_alarm_do_periodic_work(void)
 
     if (regmap_snapshot_is_region_changed(REGMAP_REGION_RTC_CFG)) {
 
+        regmap_snapshot_clear_changed(REGMAP_REGION_RTC_CFG);
     }
 }
 
