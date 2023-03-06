@@ -59,12 +59,14 @@ void rtc_alarm_do_periodic_work(void)
         regmap_get_snapshop_region_data(REGMAP_REGION_RTC_ALARM, &regmap_alarm, sizeof(regmap_alarm));
 
         rtc_alarm.enabled = regmap_alarm.en;
+        rtc_alarm.flag = 0;
         rtc_alarm.seconds = BIN_TO_BCD(regmap_alarm.seconds);
         rtc_alarm.minutes = BIN_TO_BCD(regmap_alarm.minutes);
         rtc_alarm.hours = BIN_TO_BCD(regmap_alarm.hours);
         rtc_alarm.days = BIN_TO_BCD(regmap_alarm.days);
 
         rtc_set_alarm(&rtc_alarm);
+        regmap_snapshot_clear_changed(REGMAP_REGION_RTC_ALARM);
     }
 
     if (regmap_snapshot_is_region_changed(REGMAP_REGION_RTC_CFG)) {

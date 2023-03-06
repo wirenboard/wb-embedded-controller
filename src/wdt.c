@@ -60,5 +60,7 @@ void wdt_do_periodic_work(void)
         if (w.run && w.reset) {
             wdt_start_reset();
         }
+
+        regmap_snapshot_clear_changed(REGMAP_REGION_WDT);
     }
 }
