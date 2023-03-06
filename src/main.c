@@ -28,6 +28,8 @@ int main(void)
     RCC->IOPENR |= RCC_IOPENR_GPIOCEN;
     RCC->IOPENR |= RCC_IOPENR_GPIODEN;
 
+    RCC->APBENR1 |= RCC_APBENR1_PWREN;
+
     // Init drivers
     systick_init();
     wb_power_init();
