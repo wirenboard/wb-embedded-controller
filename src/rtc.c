@@ -142,10 +142,10 @@ void rtc_get_alarm(struct rtc_alarm * alarm)
 
     alarm->enabled = RTC->CR & RTC_CR_ALRAIE;
     alarm->flag = RTC->SR & RTC_SR_ALRAF;
-    
-    //if (RTC->SR & RTC_SR_ALRAF) {
-    //    RTC->SCR = RTC_SCR_CALRAF;
-    //}
+
+    if (RTC->SR & RTC_SR_ALRAF) {
+       RTC->SCR = RTC_SCR_CALRAF;
+    }
 }
 
 
