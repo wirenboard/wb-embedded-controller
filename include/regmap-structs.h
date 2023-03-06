@@ -77,7 +77,7 @@
     /*  Name        Addr    RO/RW */ \
     m(  WDT,        0x90,   RW, \
         /* Region data */ \
-        uint8_t timeout:4; \
+        uint8_t timeout; \
         bool reset:1; \
         bool run:1; \
     ) \
