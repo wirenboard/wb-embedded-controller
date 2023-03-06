@@ -3,6 +3,8 @@
 #include "pwrkey.h"
 #include "irq-subsystem.h"
 #include "wdt.h"
+#include "wb-power.h"
+#include "system-led.h"
 
 static const uint8_t fw_ver[] = { MODBUS_DEVICE_FW_VERSION_NUMBERS };
 
@@ -24,8 +26,27 @@ void wbec_init(void)
 
 void wbec_do_periodic_work(void)
 {
+    // Power off request from button
     if (pwrkey_handle_short_press()) {
         irq_set_flag(IRQ_PWR_OFF_REQ);
+        wb_power_off_and_sleep(WBEC_LINUX_POWER_OFF_DELAY_MS);
+        system_led_blink(250, 250);
+    }
+
+    // Immediately power off from button
+    if (pwrkey_handle_long_press()) {
+        wb_power_off_and_sleep(0);
+    }
+
+    // Linux is ready to power off
+    if (regmap_snapshot_is_region_changed(REGMAP_REGION_POWER_CTRL)) {
+        struct REGMAP_POWER_CTRL p;
+        regmap_get_snapshop_region_data(REGMAP_REGION_POWER_CTRL, &p, sizeof(p));
+        if (p.off) {
+            wb_power_off_and_sleep(0);
+        }
+
+        regmap_snapshot_clear_changed(REGMAP_REGION_POWER_CTRL);
     }
 }
 
