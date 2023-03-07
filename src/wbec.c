@@ -28,6 +28,7 @@ void wbec_do_periodic_work(void)
 {
     // Power off request from button
     if (pwrkey_handle_short_press()) {
+        wdt_stop();
         irq_set_flag(IRQ_PWR_OFF_REQ);
         wb_power_off_and_sleep(WBEC_LINUX_POWER_OFF_DELAY_MS);
         system_led_blink(250, 250);
@@ -45,8 +46,19 @@ void wbec_do_periodic_work(void)
         if (p.off) {
             wb_power_off_and_sleep(0);
         }
+        if (p.reboot) {
+            wdt_stop();
+            system_led_blink(50, 50);
+            wb_power_reset();
+        }
 
         regmap_snapshot_clear_changed(REGMAP_REGION_POWER_CTRL);
+    }
+
+    // Check watchdog timed out
+    if (wdt_handle_timed_out()) {
+        system_led_blink(50, 50);
+        wb_power_reset();
     }
 }
 
