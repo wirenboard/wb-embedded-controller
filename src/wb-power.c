@@ -99,8 +99,7 @@ void wb_power_do_periodic_work(void)
     switch (wb_power_ctx.state) {
     case WB_OFF_WAIT_RESET:
         if (systick_get_time_since_timestamp(wb_power_ctx.timestamp) > WBEC_POWER_RESET_TIME_MS) {
-            a40_5v_on();
-            wb_power_ctx.state = WB_ON;
+            NVIC_SystemReset();
         }
         break;
 
