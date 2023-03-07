@@ -85,6 +85,7 @@
     m(  POWER_CTRL, 0xA0,   RW, \
         /* Region data */ \
         bool off:1; \
+        bool reboot:1; \
     ) \
     /*  Name        Addr    RO/RW */ \
     m(  IRQ_FLAGS,  0xB0,   RO, \
