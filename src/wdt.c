@@ -13,6 +13,9 @@ static struct wdt_ctx wdt_ctx = {};
 
 void wdt_set_timeout(uint8_t secs)
 {
+    if (secs == 0) {
+        secs = 1;
+    }
     wdt_ctx.timeout_s = secs;
 }
 
@@ -63,4 +66,10 @@ void wdt_do_periodic_work(void)
 
         regmap_snapshot_clear_changed(REGMAP_REGION_WDT);
     }
+
+    struct REGMAP_WDT w;
+    w.reset = 0;
+    w.run = wdt_ctx.run;
+    w.timeout = wdt_ctx.timeout_s;
+    regmap_set_region_data(REGMAP_REGION_WDT, &w, sizeof(w));
 }
