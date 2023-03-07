@@ -7,6 +7,7 @@ struct pwrkey_gpio_ctx {
     systime_t timestamp;
     bool prev_gpio_state;
     bool logic_state;
+    bool initializated;
 };
 
 struct pwrkey_logic_ctx {
@@ -34,6 +35,18 @@ void pwrkey_init(void)
 void pwrkey_do_periodic_work(void)
 {
     bool current_state = get_pwrkey_state();
+
+    // Wait for button released after startup
+    if (!gpio_ctx.initializated) {
+        if (current_state) {
+            gpio_ctx.timestamp = systick_get_system_time();
+        } else {
+            if (systick_get_time_since_timestamp(gpio_ctx.timestamp) > PWRKEY_DEBOUNCE_MS) {
+                gpio_ctx.initializated = 1;
+            }
+        }
+        return;
+    }
 
     // If GPIO state changed - save timestamp
     if (gpio_ctx.prev_gpio_state != current_state) {
