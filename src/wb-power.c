@@ -44,8 +44,7 @@ static inline void wbec_goto_standby(void)
     // 011: Standby mode
     PWR->CR1 |= PWR_CR1_LPMS_0 | PWR_CR1_LPMS_1;
 
-    __WFE();
-    
+    __WFI();
     while (1) {};
 }
 
@@ -58,6 +57,8 @@ void wb_power_init(void)
     // Set GPIO pull up in standby mode
     // So in standby linux is off
     PWR->PUCRD |= (1 << A40_POWER_OFF_PIN);
+    // Pull up for PWR BUTTON
+    PWR->PUCRA |= (1 << PWR_KEY_PIN);
 
     // Enable internal wakeup line (for RTC)
     PWR->CR3 |= PWR_CR3_EIWUL;
