@@ -18,6 +18,9 @@
 #define A40_POWER_OFF_PORT  GPIOD
 #define A40_POWER_OFF_PIN   2
 
+#define GPIO_VREF_EN_PORT   GPIOD
+#define GPIO_VREF_EN_PIN    1
+
 #define WBEC_ID             0xD2
 
 #ifndef MODBUS_DEVICE_FW_VERSION_NUMBERS
@@ -30,9 +33,22 @@
 #define WBEC_LINUX_POWER_OFF_DELAY_MS           60000
 
 
-// TODO Replace with 2500
-#define ADC_VREF_EXT_MV                 3300
+#define ADC_VREF_EXT_MV                 2500
+#define NTC_RES_KOHM                    10
+#define NTC_PULLUP_RES_KOHM             33
 
 // TODO Add other channels
-#define ADC_CHANNELS_DESC(macro)        macro(MCU_TEMP, 12, ADC_NO_GPIO_PIN, ADC_NO_GPIO_PIN, 32), \
-                                        macro(MCU_VDDA, 13, ADC_NO_GPIO_PIN, ADC_NO_GPIO_PIN, 50)
+#define ADC_CHANNELS_DESC(macro) \
+        /*    Channel name          ADC CH  PORT    PIN     RC      K          */ \
+        macro(ADC_IN1,              1,      GPIOA,  1,      50,     55.0 / 2.7  ) \
+        macro(ADC_IN2,              2,      GPIOA,  2,      50,     55.0 / 2.7  ) \
+        macro(ADC_IN3,              3,      GPIOA,  3,      50,     55.0 / 2.7  ) \
+        macro(ADC_IN4,              4,      GPIOA,  4,      50,     55.0 / 2.7  ) \
+        macro(ADC_V_IN,             5,      GPIOA,  5,      50,     55.0 / 2.7  ) \
+        macro(ADC_5V,               6,      GPIOA,  6,      50,     22.0 / 10.0 ) \
+        macro(ADC_3V3,              7,      GPIOA,  7,      50,     32.0 / 22.0 ) \
+        macro(ADC_NTC,              8,      GPIOB,  0,      50,     1.0         ) \
+        macro(ADC_VBUS_DEBUG,       9,      GPIOB,  1,      50,     22.0 / 10.0 ) \
+        macro(ADC_VBUS_NETWORK,     10,     GPIOB,  2,      50,     22.0 / 10.0 ) \
+        macro(ADC_HW_VER,           15,     GPIOB,  11,     50,     1.0         ) \
+
