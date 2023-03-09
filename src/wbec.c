@@ -80,12 +80,9 @@ void wbec_do_periodic_work(void)
     adc.temp = fix16_to_int(
         fix16_mul(
             ntc_get_temp(ntc_raw),
-            F16(10)
+            F16(100)
         )
     );
-
-    // TODO VBAT?
-    adc.v_bat = 0;
 
     regmap_set_region_data(REGMAP_REGION_ADC_DATA, &adc, sizeof(adc));
 }

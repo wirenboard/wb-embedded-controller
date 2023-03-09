@@ -42,7 +42,6 @@
     m(  ADC_DATA,   0x40,   RW, \
         /* Region data */ \
         uint16_t v_in; \
-        uint16_t v_bat; \
         uint16_t v_3_3; \
         uint16_t v_5_0; \
         uint16_t v_a1; \
