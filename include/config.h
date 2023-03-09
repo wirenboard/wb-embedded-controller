@@ -21,6 +21,9 @@
 #define GPIO_VREF_EN_PORT   GPIOD
 #define GPIO_VREF_EN_PIN    1
 
+#define GPIO_VOUT_EN_PORT   GPIOA
+#define GPIO_VOUT_EN_PIN    15
+
 #define WBEC_ID             0xD2
 
 #ifndef MODBUS_DEVICE_FW_VERSION_NUMBERS

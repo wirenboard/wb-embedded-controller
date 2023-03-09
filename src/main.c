@@ -14,6 +14,7 @@
 #include "systick.h"
 #include "wdt.h"
 #include "wb-power.h"
+#include "gpio-subsystem.h"
 
 
 void SystemInit(void)
@@ -32,6 +33,7 @@ int main(void)
 
     // Init drivers
     systick_init();
+    gpio_init();
     wb_power_init();
     system_led_init();
     pwrkey_init();
@@ -54,6 +56,7 @@ int main(void)
         system_led_do_periodic_work();
         pwrkey_do_periodic_work();
         wdt_do_periodic_work();
+        gpio_do_periodic_work();
 
         // Sybsystems
         rtc_alarm_do_periodic_work();
