@@ -33,9 +33,9 @@
 #define WBEC_LINUX_POWER_OFF_DELAY_MS           60000
 
 
-#define ADC_VREF_EXT_MV                 2500
+#define ADC_VREF_EXT_MV                 3300 /* TODO 2500 */
 #define NTC_RES_KOHM                    10
-#define NTC_PULLUP_RES_KOHM             33
+#define NTC_PULLUP_RES_KOHM             36 /*TODO 33 */
 
 // TODO Add other channels
 #define ADC_CHANNELS_DESC(macro) \
@@ -44,11 +44,11 @@
         macro(ADC_IN2,              2,      GPIOA,  2,      50,     55.0 / 2.7  ) \
         macro(ADC_IN3,              3,      GPIOA,  3,      50,     55.0 / 2.7  ) \
         macro(ADC_IN4,              4,      GPIOA,  4,      50,     55.0 / 2.7  ) \
-        macro(ADC_V_IN,             5,      GPIOA,  5,      50,     55.0 / 2.7  ) \
-        macro(ADC_5V,               6,      GPIOA,  6,      50,     22.0 / 10.0 ) \
+        macro(ADC_V_IN,             5,      GPIOA,  5,      50,     50.9 / 3.9  /* TODO 55.0 / 2.7 */  ) \
+        macro(ADC_5V,               6,      GPIOA,  6,      50,     23.3 / 10.0 /* TODO 22.0 / 10.0 */ ) \
         macro(ADC_3V3,              7,      GPIOA,  7,      50,     32.0 / 22.0 ) \
         macro(ADC_NTC,              8,      GPIOB,  0,      50,     1.0         ) \
-        macro(ADC_VBUS_DEBUG,       9,      GPIOB,  1,      50,     22.0 / 10.0 ) \
+        macro(ADC_VBUS_DEBUG,       11,     GPIOB,  10,      50,     22.0 / 10.0 ) /* TODO CH9, GPIOB1 */ \
         macro(ADC_VBUS_NETWORK,     10,     GPIOB,  2,      50,     22.0 / 10.0 ) \
         macro(ADC_HW_VER,           15,     GPIOB,  11,     50,     1.0         ) \
 
