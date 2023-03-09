@@ -5,6 +5,7 @@
 #include "wdt.h"
 #include "wb-power.h"
 #include "system-led.h"
+#include "ntc.h"
 
 static const uint8_t fw_ver[] = { MODBUS_DEVICE_FW_VERSION_NUMBERS };
 
@@ -60,5 +61,32 @@ void wbec_do_periodic_work(void)
         system_led_blink(50, 50);
         wb_power_reset();
     }
+
+    // Get voltages
+    struct REGMAP_ADC_DATA adc;
+    adc.v_a1 = adc_get_ch_mv(ADC_CHANNEL_ADC_IN1);
+    adc.v_a2 = adc_get_ch_mv(ADC_CHANNEL_ADC_IN2);
+    adc.v_a3 = adc_get_ch_mv(ADC_CHANNEL_ADC_IN3);
+    adc.v_a4 = adc_get_ch_mv(ADC_CHANNEL_ADC_IN4);
+    adc.v_in = adc_get_ch_mv(ADC_CHANNEL_ADC_V_IN);
+    adc.v_5_0 = adc_get_ch_mv(ADC_CHANNEL_ADC_5V);
+    adc.v_3_3 = adc_get_ch_mv(ADC_CHANNEL_ADC_3V3);
+    adc.vbus_console = adc_get_ch_mv(ADC_CHANNEL_ADC_VBUS_DEBUG);
+    adc.vbus_network = adc_get_ch_mv(ADC_CHANNEL_ADC_VBUS_NETWORK);
+
+    // Calc NTC temp
+    fix16_t ntc_raw = adc_get_ch_mv(ADC_CHANNEL_ADC_NTC);
+    // Convert to x10 *C
+    adc.temp = fix16_to_int(
+        fix16_mul(
+            ntc_get_temp(ntc_raw),
+            F16(10)
+        )
+    );
+
+    // TODO VBAT?
+    adc.v_bat = 0;
+
+    regmap_set_region_data(REGMAP_REGION_ADC_DATA, &adc, sizeof(adc));
 }
 
