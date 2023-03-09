@@ -50,8 +50,8 @@
         uint16_t v_a3; \
         uint16_t v_a4; \
         uint16_t temp; \
-        uint16_t v_usb_debug_console; \
-        uint16_t v_usb_debug_network; \
+        uint16_t vbus_console; \
+        uint16_t vbus_network; \
     ) \
     /*  Name        Addr    RO/RW */ \
     m(  ADC_CFG,    0x60,   RW, \
