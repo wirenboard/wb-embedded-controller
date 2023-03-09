@@ -2,6 +2,8 @@
 #include <stm32g0xx.h>
 #include "gpio.h"
 #include "config.h"
+#include <stdbool.h>
+#include "systick.h"
 
 #define ADC_CAL_VREF_MV                 3000
 // TS ADC raw data acquired at a temperature of 30 °C (± 5 °C), VDDA = VREF+ = 3.0 V (± 10 mV)
@@ -9,14 +11,20 @@
 // Raw data acquired at a temperature of 30 °C (± 5 °C), VDDA = VREF+ = 3.0 V (± 10 mV)
 #define ADC_CAL_VREFINT                 (*((uint16_t*)0x1FFF75AA))
 
-#define ADC_POLL_PERIOD_US              5000
+#define ADC_FILTRATION_PERIOD_MS        5
 #define ADC_NO_GPIO_PIN                 0
 
-uint16_t adc_raw_values[ADC_CHANNEL_COUNT];
-fix16_t  adc_lowpass_values[ADC_CHANNEL_COUNT] = {0};
-fix16_t  adc_lowpass_factors[ADC_CHANNEL_COUNT];
+struct adc_ctx {
+    bool initialized;
+    systime_t timestamp;
+    uint16_t raw_values[ADC_CHANNEL_COUNT];
+    fix16_t  lowpass_values[ADC_CHANNEL_COUNT];
+    fix16_t  lowpass_factors[ADC_CHANNEL_COUNT];
+};
 
-#define ADC_CHANNEL_DATA(alias, ch_num, port, pin, rc_factor)   {ADC_CHSELR_CHSEL##ch_num, port, pin, rc_factor}
+struct adc_ctx adc_ctx = {};
+
+#define ADC_CHANNEL_DATA(alias, ch_num, port, pin, rc_factor, k)    {ADC_CHSELR_CHSEL##ch_num, port, pin, rc_factor, F16(k)},
 /* This buffer contain order number in dma read sequence adc channels for each record in struct adc_channel adc_ch. It is set in runtime in adc_init() */
 static uint8_t chan_index_in_dma_buff[ADC_CHANNEL_COUNT] = {};
 #define ADC_CHANNEL_INDEX(ch)                                   (chan_index_in_dma_buff[ch])
@@ -26,6 +34,7 @@ struct adc_config_record {
     GPIO_TypeDef *port;
     uint8_t pin;
     uint32_t rc_factor;
+    fix16_t k;
 };
 
 struct adc_config_record adc_cfg[ADC_CHANNEL_COUNT] = {
@@ -40,7 +49,7 @@ static inline fix16_t calculate_rc_factor(uint32_t tau_ms)
             fix16_one,
             fix16_div(
                 fix16_from_int(tau_ms),
-                fix16_from_int(ADC_POLL_PERIOD_US / 1000)
+                fix16_from_int(ADC_FILTRATION_PERIOD_MS)
             )
         )
     );
@@ -48,6 +57,11 @@ static inline fix16_t calculate_rc_factor(uint32_t tau_ms)
 
 void adc_init(void)
 {
+    // Init VREF EN GPIO
+    GPIO_SET_PUSHPULL(GPIO_VREF_EN_PORT, GPIO_VREF_EN_PIN);
+    GPIO_SET_OUTPUT(GPIO_VREF_EN_PORT, GPIO_VREF_EN_PIN);
+    GPIO_SET(GPIO_VREF_EN_PORT, GPIO_VREF_EN_PIN);
+
     // init DMA
     RCC->AHBENR |= RCC_AHBENR_DMA1EN;
 
@@ -57,18 +71,13 @@ void adc_init(void)
     DMA1_Channel1->CCR |= DMA_CCR_MSIZE_0 | DMA_CCR_PSIZE_0;    // 16 bit -> 16 bit
     DMA1_Channel1->CCR |= DMA_CCR_MINC;                         // memory increment
     DMA1_Channel1->CCR |= DMA_CCR_CIRC;                         // circular mode
-    DMA1_Channel1->CCR |= DMA_CCR_TCIE;                         // transfer complete IE
 
     DMA1_Channel1->CPAR = (uint32_t)&(ADC1->DR);                // peripheral address
-    DMA1_Channel1->CMAR = (uint32_t)adc_raw_values;             // memory address
+    DMA1_Channel1->CMAR = (uint32_t)adc_ctx.raw_values;         // memory address
 
     DMA1_Channel1->CNDTR = ADC_CHANNEL_COUNT;
 
     DMA1_Channel1->CCR |= DMA_CCR_EN;
-
-    DMA1->IFCR |= DMA_IFCR_CGIF1;                               // clear flags
-    NVIC_EnableIRQ(DMA1_Channel1_IRQn);
-    NVIC_SetPriority(DMA1_Channel1_IRQn, 0);
 
     // Init ADC
     RCC->APBENR2 |= RCC_APBENR2_ADCEN;
@@ -79,9 +88,9 @@ void adc_init(void)
     ADC->CCR |= ADC_CCR_VREFEN | ADC_CCR_TSEN;
 
     ADC1->CFGR1 |= ADC_CFGR1_DMACFG | ADC_CFGR1_DMAEN;          // DMA enable, DMA circular mode
+    ADC1->CFGR1 |= ADC_CFGR1_CONT;                              // Continuous conversion mode
 
     ADC1->SMPR |= ADC_SMPR_SMP1;                                // 160.5 ADC clock cycles
-    ADC1->CFGR1 |= ADC_CFGR1_EXTEN_0 | ADC_CFGR1_EXTSEL_0 | ADC_CFGR1_EXTSEL_1;      // TIM3_TRGO
     ADC1->CR |= ADC_CR_ADEN;
 
     for (uint8_t i = 0; i < ADC_CHANNEL_COUNT; i++) {
@@ -101,53 +110,60 @@ void adc_init(void)
             }
         }
     }
+
     for (uint8_t i = 0; i < ADC_CHANNEL_COUNT; i++) {
         // Init time ms parameters for software RC filter
-        adc_lowpass_factors[ADC_CHANNEL_INDEX(i)] = calculate_rc_factor(adc_cfg[i].rc_factor);
+        adc_set_lowpass_rc(i, adc_cfg[i].rc_factor);
     }
-
-    RCC->APBENR1 |= RCC_APBENR1_TIM3EN;
-    TIM3->PSC = F_CPU / 1000000 - 1;
-    TIM3->ARR = ADC_POLL_PERIOD_US - 1;
-    TIM3->CR2 |= TIM_CR2_MMS_1;             // The update event is selected as trigger output (TRGO).
-    TIM3->CR1 |= TIM_CR1_CEN;
 
     ADC1->CR |= ADC_CR_ADSTART;
 }
 
 void adc_set_lowpass_rc(enum adc_channel channel, uint16_t rc_ms)
 {
-    adc_lowpass_factors[channel] = fix16_div(
-        fix16_one,
-        fix16_add(
-            fix16_one,
-            fix16_div(
-                fix16_from_int(rc_ms),
-                F16(ADC_POLL_PERIOD_US / 1000.0)
-            )
-        )
+    uint8_t i = ADC_CHANNEL_INDEX(channel);
+
+    adc_ctx.lowpass_factors[i] = calculate_rc_factor(rc_ms);
+}
+
+fix16_t adc_get_ch_raw(enum adc_channel channel)
+{
+    uint8_t i = ADC_CHANNEL_INDEX(channel);
+
+    return adc_ctx.lowpass_values[i];
+}
+
+uint16_t adc_get_ch_mv(enum adc_channel channel)
+{
+    uint8_t i = ADC_CHANNEL_INDEX(channel);
+
+    fix16_t raw = adc_ctx.lowpass_values[i];
+    fix16_t pin_mv = fix16_mul(
+        fix16_div(raw, F16(4095)),
+        F16(ADC_VREF_EXT_MV)
     );
+    fix16_t res = fix16_mul(pin_mv, adc_cfg[i].k);
+
+    return res;
 }
 
-fix16_t adc_get_channel_raw_value(enum adc_channel channel)
+void adc_do_periodic_work(void)
 {
-    return adc_lowpass_values[ADC_CHANNEL_INDEX(channel)];
-}
-
-void DMA1_Channel1_IRQHandler(void)
-{
-    static uint8_t run_counter = 0;
-
-    if (DMA1->ISR & DMA_ISR_TCIF1) {
-        DMA1->IFCR |= DMA_IFCR_CGIF1;
+    if (!adc_ctx.initialized) {
         for (uint8_t i = 0; i < ADC_CHANNEL_COUNT; i++) {
-            if (run_counter >= 50) {
-                adc_lowpass_values[i] += fix16_mul(adc_lowpass_factors[i],
-                                                   fix16_sub(fix16_from_int(adc_raw_values[i]), adc_lowpass_values[i]));
-            } else {
-                adc_lowpass_values[i] = fix16_from_int(adc_raw_values[i]);
-                run_counter++;
-            }
+            adc_ctx.lowpass_values[i] = fix16_from_int(adc_ctx.raw_values[i]);
         }
+        adc_ctx.initialized = 1;
+        adc_ctx.timestamp = systick_get_system_time();
+        return;
+    }
+
+    if (systick_get_time_since_timestamp(adc_ctx.timestamp) < ADC_FILTRATION_PERIOD_MS) {
+        return;
+    }
+    adc_ctx.timestamp += ADC_FILTRATION_PERIOD_MS;
+
+    for (uint8_t i = 0; i < ADC_CHANNEL_COUNT; i++) {
+        adc_ctx.lowpass_values[i] = fix16_from_int(adc_ctx.raw_values[i]);
     }
 }

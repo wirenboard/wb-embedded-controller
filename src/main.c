@@ -49,6 +49,7 @@ int main(void)
 
     while (1) {
         // Drivers
+        adc_do_periodic_work();
         wb_power_do_periodic_work();
         system_led_do_periodic_work();
         pwrkey_do_periodic_work();
