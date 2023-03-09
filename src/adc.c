@@ -24,7 +24,7 @@ struct adc_ctx {
 
 struct adc_ctx adc_ctx = {};
 
-#define ADC_CHANNEL_DATA(alias, ch_num, port, pin, rc_factor, k)    {ADC_CHSELR_CHSEL##ch_num, port, pin, rc_factor, F16(k)},
+#define ADC_CHANNEL_DATA(alias, ch_num, port, pin, rc_factor, k)    {ADC_CHSELR_CHSEL##ch_num, port, pin, rc_factor, F16(ADC_VREF_EXT_MV * k / 4096.0)},
 /* This buffer contain order number in dma read sequence adc channels for each record in struct adc_channel adc_ch. It is set in runtime in adc_init() */
 static uint8_t chan_index_in_dma_buff[ADC_CHANNEL_COUNT] = {};
 #define ADC_CHANNEL_INDEX(ch)                                   (chan_index_in_dma_buff[ch])
@@ -137,14 +137,9 @@ uint16_t adc_get_ch_mv(enum adc_channel channel)
 {
     uint8_t i = ADC_CHANNEL_INDEX(channel);
 
-    fix16_t raw = adc_ctx.lowpass_values[i];
-    fix16_t pin_mv = fix16_mul(
-        fix16_div(raw, F16(4095)),
-        F16(ADC_VREF_EXT_MV)
-    );
-    fix16_t res = fix16_mul(pin_mv, adc_cfg[i].k);
+    fix16_t res = fix16_mul(adc_ctx.lowpass_values[i], adc_cfg[i].k);
 
-    return res;
+    return fix16_to_int(res);
 }
 
 void adc_do_periodic_work(void)
@@ -164,6 +159,12 @@ void adc_do_periodic_work(void)
     adc_ctx.timestamp += ADC_FILTRATION_PERIOD_MS;
 
     for (uint8_t i = 0; i < ADC_CHANNEL_COUNT; i++) {
-        adc_ctx.lowpass_values[i] = fix16_from_int(adc_ctx.raw_values[i]);
+        adc_ctx.lowpass_values[i] += fix16_mul(
+            adc_ctx.lowpass_factors[i],
+            fix16_sub(
+                fix16_from_int(adc_ctx.raw_values[i]),
+                adc_ctx.lowpass_values[i]
+            )
+        );
     }
 }
