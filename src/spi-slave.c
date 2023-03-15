@@ -13,8 +13,7 @@ enum spi_slave_op {
 
 struct spi_slave_ctx {
     enum spi_slave_op op;
-    uint8_t reg_addr;
-    uint16_t tx_cnt;
+    uint16_t reg_addr;
 };
 
 static struct spi_slave_ctx spi_slave_ctx;
@@ -37,11 +36,6 @@ static inline uint16_t spi_rd_u16(void)
 static inline void spi_enable_txe_int(void)
 {
     SPI2->CR2 |= SPI_CR2_TXEIE;
-}
-
-static inline void spi_disable_rxne_int(void)
-{
-    SPI2->CR2 &= ~SPI_CR2_RXNEIE;
 }
 
 static inline void reset_and_init_spi(void)
@@ -68,6 +62,10 @@ static inline void reset_and_init_spi(void)
 
 void spi_slave_init(void)
 {
+    // TODO Remove debug
+    GPIO_SET_OUTPUT(GPIOD, 0);
+    GPIO_SET_OUTPUT(GPIOD, 1);
+
     GPIO_SET_OUTPUT(GPIOB, 6);      // MISO
     GPIO_SET_INPUT(GPIOB, 7);       // MOSI
     GPIO_SET_INPUT(GPIOB, 8);       // SCK
@@ -98,12 +96,14 @@ void spi_slave_init(void)
 void SPI2_IRQHandler(void)
 {
     if (SPI2->SR & SPI_SR_RXNE) {
+        // TODO Remove debug
+        GPIO_SET(GPIOD, 0);
+
         uint16_t rd = spi_rd_u16();
         if (spi_slave_ctx.op == SPI_SLAVE_SET_ADDR) {
             if (rd & SPI_SLAVE_OPERATION_READ_MASK) {
                 spi_slave_ctx.op = SPI_SLAVE_TRANSMIT;
                 spi_enable_txe_int();
-                spi_disable_rxne_int();
                 regmap_make_snapshot();
                 spi_slave_ctx.reg_addr = rd & ~SPI_SLAVE_OPERATION_READ_MASK;
             } else {
@@ -112,18 +112,22 @@ void SPI2_IRQHandler(void)
         } else {
 
         }
+
+        // TODO Remove debug
+        GPIO_RESET(GPIOD, 0);
     }
 
     if (SPI2->SR & SPI_SR_TXE) {
-        uint16_t byte = regmap_get_snapshot_reg(spi_slave_ctx.reg_addr);
-        spi_tx_u16(byte);
+        // TODO Remove debug
+        GPIO_SET(GPIOD, 1);
+
+        // uint16_t w = regmap_get_snapshot_reg(spi_slave_ctx.reg_addr);
+        uint16_t w = spi_slave_ctx.reg_addr + 10;
+        spi_tx_u16(w);
         spi_slave_ctx.reg_addr++;
 
-        // if ((spi_slave_ctx.op == SPI_SLAVE_TRANSMIT)) {
-        // } else {
-        //     *(__IO uint8_t *)(&SPI2->DR) = 0x55;
-        // }
-        // spi_slave_ctx.tx_cnt++;
+        // TODO Remove debug
+        GPIO_RESET(GPIOD, 1);
     }
 }
 
