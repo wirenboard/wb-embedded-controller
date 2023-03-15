@@ -3,6 +3,7 @@
 #include "stm32g0xx.h"
 #include "gpio.h"
 #include "i2c-slave.h"
+#include "spi-slave.h"
 #include "rtc.h"
 #include "regmap.h"
 #include "system-led.h"
@@ -39,6 +40,7 @@ int main(void)
     pwrkey_init();
     adc_init();
     i2c_slave_init();
+    spi_slave_init();
     rtc_init();
 
     // Init subsystems
