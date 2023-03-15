@@ -10,7 +10,7 @@
 #define PWR_KEY_PIN         0
 
 #define INT_PORT            GPIOB
-#define INT_PIN             9
+#define INT_PIN             5
 
 #define SYSTEM_LED_PORT     GPIOB
 #define SYSTEM_LED_PIN      1
