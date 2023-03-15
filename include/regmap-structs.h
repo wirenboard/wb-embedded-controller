@@ -1,13 +1,12 @@
 #pragma once
 #include <stdint.h>
-#include <stdbool.h>
 
 #define REGMAP(m) \
     /*  Name        Addr    RO/RW */ \
     m(  INFO,       0x00,   RO, \
         /* Region data */ \
-        uint8_t wbec_id; \
-        uint8_t board_rev; \
+        uint16_t wbec_id; \
+        uint16_t board_rev; \
         uint8_t fw_ver_major; \
         uint8_t fw_ver_minor; \
         uint8_t fw_ver_patch; \
@@ -22,7 +21,7 @@
         uint8_t days; \
         uint8_t weekdays; \
         uint8_t months; \
-        uint8_t years; \
+        uint16_t years; \
     ) \
     /*  Name        Addr    RO/RW */ \
     m(  RTC_ALARM,  0x20,   RW, \
@@ -31,12 +30,12 @@
         uint8_t minutes; \
         uint8_t hours; \
         uint8_t days; \
-        bool en:1; \
+        uint16_t en:1; \
     ) \
     /*  Name        Addr    RO/RW */ \
     m(  RTC_CFG,    0x30,   RW, \
         /* Region data */ \
-        uint8_t offset; \
+        uint16_t offset; \
     ) \
     /*  Name        Addr    RO/RW */ \
     m(  ADC_DATA,   0x40,   RW, \
@@ -67,39 +66,39 @@
     /*  Name        Addr    RO/RW */ \
     m(  GPIO,       0x80,   RW, \
         /* Region data */ \
-        bool a1:1; \
-        bool a2:1; \
-        bool a3:1; \
-        bool a4:1; \
-        bool v_out:1; \
+        uint16_t a1:1; \
+        uint16_t a2:1; \
+        uint16_t a3:1; \
+        uint16_t a4:1; \
+        uint16_t v_out:1; \
     ) \
     /*  Name        Addr    RO/RW */ \
     m(  WDT,        0x90,   RW, \
         /* Region data */ \
-        uint8_t timeout; \
-        bool reset:1; \
-        bool run:1; \
+        uint16_t timeout; \
+        uint16_t reset:1; \
+        uint16_t run:1; \
     ) \
     /*  Name        Addr    RO/RW */ \
     m(  POWER_CTRL, 0xA0,   RW, \
         /* Region data */ \
-        bool off:1; \
-        bool reboot:1; \
+        uint16_t off:1; \
+        uint16_t reboot:1; \
     ) \
     /*  Name        Addr    RO/RW */ \
     m(  IRQ_FLAGS,  0xB0,   RO, \
         /* Region data */ \
-        uint8_t irqs; \
+        uint16_t irqs; \
     ) \
     /*  Name        Addr    RO/RW */ \
     m(  IRQ_MSK,    0xB2,   RW, \
         /* Region data */ \
-        uint8_t irqs; \
+        uint16_t irqs; \
     ) \
     /*  Name        Addr    RO/RW */ \
     m(  IRQ_CLEAR,  0xB4,   RW, \
         /* Region data */ \
-        uint8_t irqs; \
+        uint16_t irqs; \
     ) \
 
 

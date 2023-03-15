@@ -27,11 +27,11 @@ enum regmap_region {
 bool regmap_set_region_data(enum regmap_region r, const void * data, size_t size);
 
 void regmap_make_snapshot(void);
-uint8_t regmap_get_snapshot_reg(uint8_t addr);
+uint16_t regmap_get_snapshot_reg(uint16_t addr);
 void regmap_get_snapshop_region_data(enum regmap_region r, void * data, size_t size);
 
 
-int regmap_snapshot_set_reg(uint8_t addr, uint8_t value);
+int regmap_snapshot_set_reg(uint16_t addr, uint16_t value);
 bool regmap_snapshot_is_region_changed(enum regmap_region r);
 void regmap_snapshot_clear_changed(enum regmap_region r);
 void regmap_snapshot_set_write_complited(void);

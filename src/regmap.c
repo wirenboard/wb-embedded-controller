@@ -21,15 +21,15 @@ struct regmap {
 };
 
 struct regions_info {
-    uint8_t addr[REGMAP_REGION_COUNT];
-    uint8_t size[REGMAP_REGION_COUNT];
-    uint8_t struct_offset[REGMAP_REGION_COUNT];
+    uint16_t addr[REGMAP_REGION_COUNT];
+    uint16_t size[REGMAP_REGION_COUNT];
+    uint16_t struct_offset[REGMAP_REGION_COUNT];
     enum regmap_rw rw[REGMAP_REGION_COUNT];
 };
 
 struct regmap_ctx {
-    uint8_t regmap[REGMAP_SIZE];
-    uint8_t regmap_snapshot[REGMAP_SIZE];
+    uint16_t regmap[REGMAP_SIZE];
+    uint16_t regmap_snapshot[REGMAP_SIZE];
     bool region_is_changed[REGMAP_REGION_COUNT];
     int busy_semaphore;
     bool write_complited;
@@ -44,27 +44,27 @@ static const struct regions_info regions_info = {
 
 static struct regmap_ctx regmap_ctx = {};
 
-static inline uint8_t region_size(enum regmap_region r)
+static inline uint16_t region_size(enum regmap_region r)
 {
     return regions_info.size[r];
 }
 
-static inline uint8_t region_struct_offset(enum regmap_region r)
+static inline uint16_t region_struct_offset(enum regmap_region r)
 {
     return regions_info.struct_offset[r];
 }
 
-static inline uint8_t region_first_reg(enum regmap_region r)
+static inline uint16_t region_first_reg(enum regmap_region r)
 {
     return regions_info.addr[r];
 }
 
-static inline uint8_t region_last_reg(enum regmap_region r)
+static inline uint16_t region_last_reg(enum regmap_region r)
 {
     return region_first_reg(r) + region_size(r) - 1;
 }
 
-static inline int get_region_by_addr(uint8_t addr)
+static inline int get_region_by_addr(uint16_t addr)
 {
     enum regmap_region r = 0;
 
@@ -86,11 +86,11 @@ static inline bool is_region_rw(enum regmap_region r)
     return (regions_info.rw[r] == REGMAP_RW);
 }
 
-static uint8_t reg_addr_to_struct_offset(enum regmap_region r, uint8_t reg_addr)
+static uint16_t reg_addr_to_struct_offset(enum regmap_region r, uint16_t reg_addr)
 {
-    uint8_t region_offset = region_struct_offset(r);
-    uint8_t reg_offset = reg_addr - region_first_reg(r);
-    uint8_t offset = region_offset + reg_offset;
+    uint16_t region_offset = region_struct_offset(r);
+    uint16_t reg_offset = reg_addr - region_first_reg(r);
+    uint16_t offset = region_offset + reg_offset;
 
     return offset;
 }
@@ -104,7 +104,7 @@ bool regmap_set_region_data(enum regmap_region r, const void * data, size_t size
         return 0;
     }
 
-    uint8_t offset = region_struct_offset(r);
+    uint16_t offset = region_struct_offset(r);
     memcpy(&regmap_ctx.regmap[offset], data, size);
     return 1;
 }
@@ -114,19 +114,19 @@ void regmap_make_snapshot(void)
     memcpy(regmap_ctx.regmap_snapshot, regmap_ctx.regmap, sizeof(struct regmap));
 }
 
-uint8_t regmap_get_snapshot_reg(uint8_t addr)
+uint16_t regmap_get_snapshot_reg(uint16_t addr)
 {
     int r = get_region_by_addr(addr);
     if (r < 0) {
         return 0;
     }
 
-    uint8_t offset = reg_addr_to_struct_offset(r, addr);
+    uint16_t offset = reg_addr_to_struct_offset(r, addr);
 
     return regmap_ctx.regmap_snapshot[offset];
 }
 
-int regmap_snapshot_set_reg(uint8_t addr, uint8_t value)
+int regmap_snapshot_set_reg(uint16_t addr, uint16_t value)
 {
     int r = get_region_by_addr(addr);
     if (r < 0) {
@@ -137,7 +137,7 @@ int regmap_snapshot_set_reg(uint8_t addr, uint8_t value)
         return -EROFS;
     }
 
-    uint8_t offset = reg_addr_to_struct_offset(r, addr);
+    uint16_t offset = reg_addr_to_struct_offset(r, addr);
 
     if (regmap_ctx.regmap_snapshot[offset] != value) {
         regmap_ctx.regmap_snapshot[offset] = value;
@@ -197,6 +197,6 @@ void regmap_get_snapshop_region_data(enum regmap_region r, void * data, size_t s
         return;
     }
 
-    uint8_t offset = region_struct_offset(r);
+    uint16_t offset = region_struct_offset(r);
     memcpy(data, &regmap_ctx.regmap_snapshot[offset], size);
 }
