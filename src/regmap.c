@@ -1,44 +1,36 @@
 #include "regmap.h"
 #include <string.h>
 #include <stddef.h>
-#include "i2c-slave.h"
 
-#define REGMAP_SIZE                                             sizeof(struct regmap)
+#define REGMAP_TOTAL_REGS_COUNT                                 (REGMAP_ADDRESS_MASK + 1)
 
-#define REGMAP_MEMBER(name, addr, rw, members)                  struct REGMAP_##name name;
-#define REGMAP_REGION_SIZE(name, addr, rw, members)             (sizeof(struct REGMAP_##name)),
-#define REGMAP_REGION_STRUCT_OFFSET(name, addr, rw, members)    (offsetof(struct regmap, name)),
-#define REGMAP_REGION_RW(name, addr, rw, members)               REGMAP_##rw,
-#define REGMAP_REGION_ADDR(name, addr, rw, members)             addr,
+#define REGMAP_MEMBER(addr, name, rw, members)                  struct REGMAP_##name name;
+#define REGMAP_REGION_SIZE(addr, name, rw, members)             (sizeof(struct REGMAP_##name)),
+#define REGMAP_REGION_RW(addr, name, rw, members)               REGMAP_##rw,
+#define REGMAP_REGION_ADDR(addr, name, rw, members)             addr,
 
 enum regmap_rw {
     REGMAP_RO,
     REGMAP_RW
 };
 
-struct regmap {
-    REGMAP(REGMAP_MEMBER)
-};
-
 struct regions_info {
     uint16_t addr[REGMAP_REGION_COUNT];
     uint16_t size[REGMAP_REGION_COUNT];
-    uint16_t struct_offset[REGMAP_REGION_COUNT];
+    uint16_t reg_count[REGMAP_REGION_COUNT];
     enum regmap_rw rw[REGMAP_REGION_COUNT];
 };
 
 struct regmap_ctx {
-    uint16_t regmap[REGMAP_SIZE];
-    uint16_t regmap_snapshot[REGMAP_SIZE];
-    bool region_is_changed[REGMAP_REGION_COUNT];
-    int busy_semaphore;
-    bool write_complited;
+    uint16_t regs[REGMAP_TOTAL_REGS_COUNT];
+    bool changed_flags[REGMAP_TOTAL_REGS_COUNT];
+    uint16_t op_address;
+    bool is_busy;
 };
 
 static const struct regions_info regions_info = {
     .addr = { REGMAP(REGMAP_REGION_ADDR) },
     .size = { REGMAP(REGMAP_REGION_SIZE) },
-    .struct_offset = { REGMAP(REGMAP_REGION_STRUCT_OFFSET) },
     .rw = { REGMAP(REGMAP_REGION_RW) },
 };
 
@@ -49,9 +41,9 @@ static inline uint16_t region_size(enum regmap_region r)
     return regions_info.size[r];
 }
 
-static inline uint16_t region_struct_offset(enum regmap_region r)
+static inline uint16_t region_reg_count(enum regmap_region r)
 {
-    return regions_info.struct_offset[r];
+    return (region_size(r) + 1) / sizeof(uint16_t);
 }
 
 static inline uint16_t region_first_reg(enum regmap_region r)
@@ -61,24 +53,7 @@ static inline uint16_t region_first_reg(enum regmap_region r)
 
 static inline uint16_t region_last_reg(enum regmap_region r)
 {
-    return region_first_reg(r) + region_size(r) - 1;
-}
-
-static inline int get_region_by_addr(uint16_t addr)
-{
-    enum regmap_region r = 0;
-
-    // Find region
-    while (addr > region_last_reg(r)) {
-        r++;
-    }
-
-    // Check region fist reg
-    if (addr < region_first_reg(r)) {
-        return -EADDRNOTAVAIL;
-    }
-
-    return r;
+    return region_first_reg(r) + region_reg_count(r) - 1;
 }
 
 static inline bool is_region_rw(enum regmap_region r)
@@ -86,117 +61,104 @@ static inline bool is_region_rw(enum regmap_region r)
     return (regions_info.rw[r] == REGMAP_RW);
 }
 
-static uint16_t reg_addr_to_struct_offset(enum regmap_region r, uint16_t reg_addr)
-{
-    uint16_t region_offset = region_struct_offset(r);
-    uint16_t reg_offset = reg_addr - region_first_reg(r);
-    uint16_t offset = region_offset + reg_offset;
-
-    return offset;
-}
-
 bool regmap_set_region_data(enum regmap_region r, const void * data, size_t size)
 {
+    if (regmap_ctx.is_busy) {
+        return 0;
+    }
     if (r >= REGMAP_REGION_COUNT) {
         return 0;
     }
     if (size != region_size(r)) {
         return 0;
     }
+    if (regmap_is_region_changed(r)) {
+        return 0;
+    }
 
-    uint16_t offset = region_struct_offset(r);
-    memcpy(&regmap_ctx.regmap[offset], data, size);
+    uint16_t offset = region_first_reg(r);
+    memcpy(&regmap_ctx.regs[offset], data, size);
     return 1;
 }
 
-void regmap_make_snapshot(void)
+void regmap_get_region_data(enum regmap_region r, void * data, size_t size)
 {
-    memcpy(regmap_ctx.regmap_snapshot, regmap_ctx.regmap, sizeof(struct regmap));
-}
-
-uint16_t regmap_get_snapshot_reg(uint16_t addr)
-{
-    int r = get_region_by_addr(addr);
-    if (r < 0) {
-        return 0;
+    if (regmap_ctx.is_busy) {
+        return;
     }
-
-    uint16_t offset = reg_addr_to_struct_offset(r, addr);
-
-    return regmap_ctx.regmap_snapshot[offset];
-}
-
-int regmap_snapshot_set_reg(uint16_t addr, uint16_t value)
-{
-    int r = get_region_by_addr(addr);
-    if (r < 0) {
-        return -EADDRNOTAVAIL;
-    }
-
-    if (!is_region_rw(r)) {
-        return -EROFS;
-    }
-
-    uint16_t offset = reg_addr_to_struct_offset(r, addr);
-
-    if (regmap_ctx.regmap_snapshot[offset] != value) {
-        regmap_ctx.regmap_snapshot[offset] = value;
-
-        if (!regmap_ctx.region_is_changed[r]) {
-            regmap_ctx.busy_semaphore++;
-            regmap_ctx.region_is_changed[r] = 1;
-        }
-        return 1;
-    }
-
-    return 0;
-}
-
-bool regmap_snapshot_is_region_changed(enum regmap_region r)
-{
-    if (r >= REGMAP_REGION_COUNT) {
-        return 0;
-    }
-    if (!regmap_ctx.write_complited) {
-        return 0;
-    }
-
-    return regmap_ctx.region_is_changed[r];
-}
-
-void regmap_snapshot_clear_changed(enum regmap_region r)
-{
     if (r >= REGMAP_REGION_COUNT) {
         return;
     }
-
-    if (regmap_ctx.region_is_changed[r]) {
-        regmap_ctx.region_is_changed[r] = 0;
-        regmap_ctx.busy_semaphore--;
-        if (regmap_ctx.busy_semaphore == 0) {
-            i2c_slave_set_free();
-            regmap_ctx.write_complited = 0;
-        }
-    }
-}
-
-void regmap_snapshot_set_write_complited(void)
-{
-    if (regmap_ctx.busy_semaphore > 0) {
-        regmap_ctx.write_complited = 1;
-    }
-}
-
-void regmap_get_snapshop_region_data(enum regmap_region r, void * data, size_t size)
-{
-    if (r >= REGMAP_REGION_COUNT) {
-        return;
-    }
-
     if (size != region_size(r)) {
         return;
     }
 
-    uint16_t offset = region_struct_offset(r);
-    memcpy(data, &regmap_ctx.regmap_snapshot[offset], size);
+    uint16_t offset = region_first_reg(r);
+    memcpy(data, &regmap_ctx.regs[offset], size);
+}
+
+bool regmap_is_region_changed(enum regmap_region r)
+{
+    if (regmap_ctx.is_busy) {
+        return 0;
+    }
+    if (r >= REGMAP_REGION_COUNT) {
+        return 0;
+    }
+
+    uint16_t r_start = region_first_reg(r);
+    uint16_t r_end = region_last_reg(r);
+
+    for (uint16_t i = r_start; i <= r_end; i++) {
+        if (regmap_ctx.changed_flags[i]) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+
+void regmap_clear_changed(enum regmap_region r)
+{
+    if (regmap_ctx.is_busy) {
+        return;
+    }
+    if (r >= REGMAP_REGION_COUNT) {
+        return;
+    }
+
+    uint16_t r_start = region_first_reg(r);
+    uint16_t r_end = region_last_reg(r);
+
+    for (uint16_t i = r_start; i <= r_end; i++) {
+        regmap_ctx.changed_flags[i] = 0;
+    }
+}
+
+
+void regmap_ext_prepare_operation(uint16_t start_addr)
+{
+    regmap_ctx.op_address = start_addr;
+    regmap_ctx.is_busy = 1;
+}
+
+void regmap_ext_end_operation(void)
+{
+    regmap_ctx.is_busy = 0;
+}
+
+uint16_t regmap_ext_read_reg_autoinc(void)
+{
+    uint16_t r = regmap_ctx.regs[regmap_ctx.op_address];
+    regmap_ctx.op_address++;
+    regmap_ctx.op_address &= REGMAP_ADDRESS_MASK;
+    return r;
+}
+
+void regmap_ext_write_reg_autoinc(uint16_t val)
+{
+    regmap_ctx.regs[regmap_ctx.op_address] = val;
+    regmap_ctx.changed_flags[regmap_ctx.op_address] = 1;
+    regmap_ctx.op_address++;
+    regmap_ctx.op_address &= REGMAP_ADDRESS_MASK;
 }

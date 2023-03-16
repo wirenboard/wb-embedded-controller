@@ -41,9 +41,9 @@ void wbec_do_periodic_work(void)
     }
 
     // Linux is ready to power off
-    if (regmap_snapshot_is_region_changed(REGMAP_REGION_POWER_CTRL)) {
+    if (regmap_is_region_changed(REGMAP_REGION_POWER_CTRL)) {
         struct REGMAP_POWER_CTRL p;
-        regmap_get_snapshop_region_data(REGMAP_REGION_POWER_CTRL, &p, sizeof(p));
+        regmap_get_region_data(REGMAP_REGION_POWER_CTRL, &p, sizeof(p));
         if (p.off) {
             wb_power_off_and_sleep(0);
         }
@@ -53,7 +53,7 @@ void wbec_do_periodic_work(void)
             wb_power_reset();
         }
 
-        regmap_snapshot_clear_changed(REGMAP_REGION_POWER_CTRL);
+        regmap_clear_changed(REGMAP_REGION_POWER_CTRL);
     }
 
     // Check watchdog timed out

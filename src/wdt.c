@@ -50,9 +50,9 @@ void wdt_do_periodic_work(void)
         }
     }
 
-    if (regmap_snapshot_is_region_changed(REGMAP_REGION_WDT)) {
+    if (regmap_is_region_changed(REGMAP_REGION_WDT)) {
         struct REGMAP_WDT w;
-        regmap_get_snapshop_region_data(REGMAP_REGION_WDT, &w, sizeof(w));
+        regmap_get_region_data(REGMAP_REGION_WDT, &w, sizeof(w));
 
         wdt_set_timeout(w.timeout);
         if (w.run && !wdt_ctx.run) {
@@ -64,7 +64,7 @@ void wdt_do_periodic_work(void)
             wdt_start_reset();
         }
 
-        regmap_snapshot_clear_changed(REGMAP_REGION_WDT);
+        regmap_clear_changed(REGMAP_REGION_WDT);
     }
 
     struct REGMAP_WDT w;

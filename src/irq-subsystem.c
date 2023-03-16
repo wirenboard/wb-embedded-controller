@@ -46,22 +46,23 @@ void irq_do_periodic_work(void)
     }
 
     // IRQ to regmap
-    irq_flags_t irq_flags = irq_get_flags();
-    regmap_set_region_data(REGMAP_REGION_IRQ_FLAGS, &irq_flags, sizeof(irq_flags));
+    struct REGMAP_IRQ_FLAGS f;
+    f.irqs = flags;
+    regmap_set_region_data(REGMAP_REGION_IRQ_FLAGS, &f, sizeof(f));
 
-    if (regmap_snapshot_is_region_changed(REGMAP_REGION_IRQ_MSK)) {
-        irq_flags_t msk;
-        regmap_get_snapshop_region_data(REGMAP_REGION_IRQ_MSK, &msk, sizeof(msk));
-        irq_set_mask(msk);
+    if (regmap_is_region_changed(REGMAP_REGION_IRQ_MSK)) {
+        struct REGMAP_IRQ_MSK m;
+        regmap_get_region_data(REGMAP_REGION_IRQ_MSK, &m, sizeof(m));
+        irq_set_mask(m.irqs);
 
-        regmap_snapshot_clear_changed(REGMAP_REGION_IRQ_MSK);
+        regmap_clear_changed(REGMAP_REGION_IRQ_MSK);
     }
 
-    if (regmap_snapshot_is_region_changed(REGMAP_REGION_IRQ_CLEAR)) {
-        irq_flags_t clear;
-        regmap_get_snapshop_region_data(REGMAP_REGION_IRQ_CLEAR, &clear, sizeof(clear));
-        irq_clear_flags(clear);
+    if (regmap_is_region_changed(REGMAP_REGION_IRQ_CLEAR)) {
+        struct REGMAP_IRQ_CLEAR c;
+        regmap_get_region_data(REGMAP_REGION_IRQ_CLEAR, &c, sizeof(c));
+        irq_clear_flags(c.irqs);
 
-        regmap_snapshot_clear_changed(REGMAP_REGION_IRQ_CLEAR);
+        regmap_clear_changed(REGMAP_REGION_IRQ_CLEAR);
     }
 }

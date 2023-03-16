@@ -12,9 +12,9 @@ void gpio_init(void)
 
 void gpio_do_periodic_work(void)
 {
-    if (regmap_snapshot_is_region_changed(REGMAP_REGION_GPIO)) {
+    if (regmap_is_region_changed(REGMAP_REGION_GPIO)) {
         struct REGMAP_GPIO g;
-        regmap_get_snapshop_region_data(REGMAP_REGION_GPIO, &g, sizeof(g));
+        regmap_get_region_data(REGMAP_REGION_GPIO, &g, sizeof(g));
 
         // TODO Check UVLO/OVP
         if (g.v_out) {
@@ -31,6 +31,6 @@ void gpio_do_periodic_work(void)
 
         regmap_set_region_data(REGMAP_REGION_GPIO, &g, sizeof(g));
 
-        regmap_snapshot_clear_changed(REGMAP_REGION_GPIO);
+        regmap_clear_changed(REGMAP_REGION_GPIO);
     }
 }

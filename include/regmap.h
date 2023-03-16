@@ -7,7 +7,7 @@
 #include "adc.h"
 #include <errno.h>
 
-#define __REGMAP_REGION_NAME(name, addr, rw, members)              REGMAP_REGION_##name,
+#define __REGMAP_REGION_NAME(addr, name, rw, members)              REGMAP_REGION_##name,
 
 enum regmap_region {
     REGMAP(__REGMAP_REGION_NAME)
@@ -15,23 +15,12 @@ enum regmap_region {
     REGMAP_REGION_COUNT
 };
 
-/**
- * @brief Sets data to regmap
- * 
- * @param r 
- * @param data 
- * @param size 
- * @return true 
- * @return false 
- */
 bool regmap_set_region_data(enum regmap_region r, const void * data, size_t size);
+void regmap_get_region_data(enum regmap_region r, void * data, size_t size);
+bool regmap_is_region_changed(enum regmap_region r);
+void regmap_clear_changed(enum regmap_region r);
 
-void regmap_make_snapshot(void);
-uint16_t regmap_get_snapshot_reg(uint16_t addr);
-void regmap_get_snapshop_region_data(enum regmap_region r, void * data, size_t size);
-
-
-int regmap_snapshot_set_reg(uint16_t addr, uint16_t value);
-bool regmap_snapshot_is_region_changed(enum regmap_region r);
-void regmap_snapshot_clear_changed(enum regmap_region r);
-void regmap_snapshot_set_write_complited(void);
+void regmap_ext_prepare_operation(uint16_t start_addr);
+void regmap_ext_end_operation(void);
+uint16_t regmap_ext_read_reg_autoinc(void);
+void regmap_ext_write_reg_autoinc(uint16_t val);

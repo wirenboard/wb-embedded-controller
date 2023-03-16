@@ -10,7 +10,7 @@ enum irq_flag {
     IRQ_COUNT
 };
 
-typedef uint8_t irq_flags_t;
+typedef uint16_t irq_flags_t;
 
 irq_flags_t irq_get_flags(void);
 void irq_set_flag(enum irq_flag f);

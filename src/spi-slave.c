@@ -6,14 +6,13 @@
 #define SPI_SLAVE_OPERATION_READ_MASK            0x8000
 
 enum spi_slave_op {
-    SPI_SLAVE_SET_ADDR,
+    SPI_SLAVE_INIT_OP,
     SPI_SLAVE_RECEIVE,
     SPI_SLAVE_TRANSMIT,
 };
 
 struct spi_slave_ctx {
     enum spi_slave_op op;
-    uint16_t reg_addr;
 };
 
 static struct spi_slave_ctx spi_slave_ctx;
@@ -57,7 +56,7 @@ static inline void reset_and_init_spi(void)
     // spi_tx_u8(0x55);
     spi_tx_u16(0xAA55);
 
-    spi_slave_ctx.op = SPI_SLAVE_SET_ADDR;
+    spi_slave_ctx.op = SPI_SLAVE_INIT_OP;
 }
 
 void spi_slave_init(void)
@@ -100,17 +99,17 @@ void SPI2_IRQHandler(void)
         GPIO_SET(GPIOD, 0);
 
         uint16_t rd = spi_rd_u16();
-        if (spi_slave_ctx.op == SPI_SLAVE_SET_ADDR) {
+        if (spi_slave_ctx.op == SPI_SLAVE_INIT_OP) {
+            uint16_t addr = rd & ~SPI_SLAVE_OPERATION_READ_MASK;
+            regmap_ext_prepare_operation(addr);
             if (rd & SPI_SLAVE_OPERATION_READ_MASK) {
                 spi_slave_ctx.op = SPI_SLAVE_TRANSMIT;
                 spi_enable_txe_int();
-                regmap_make_snapshot();
-                spi_slave_ctx.reg_addr = rd & ~SPI_SLAVE_OPERATION_READ_MASK;
             } else {
                 spi_slave_ctx.op = SPI_SLAVE_RECEIVE;
             }
-        } else {
-
+        } else if (spi_slave_ctx.op == SPI_SLAVE_RECEIVE) {
+            regmap_ext_write_reg_autoinc(rd);
         }
 
         // TODO Remove debug
@@ -121,10 +120,12 @@ void SPI2_IRQHandler(void)
         // TODO Remove debug
         GPIO_SET(GPIOD, 1);
 
-        // uint16_t w = regmap_get_snapshot_reg(spi_slave_ctx.reg_addr);
-        uint16_t w = spi_slave_ctx.reg_addr + 10;
+        uint16_t w = 0;
+        if (spi_slave_ctx.op == SPI_SLAVE_TRANSMIT) {
+            w = regmap_ext_read_reg_autoinc();
+            // uint16_t w = spi_slave_ctx.reg_addr + 10;
+        }
         spi_tx_u16(w);
-        spi_slave_ctx.reg_addr++;
 
         // TODO Remove debug
         GPIO_RESET(GPIOD, 1);
@@ -135,6 +136,7 @@ void EXTI4_15_IRQHandler(void)
 {
     if (EXTI->RPR1 & EXTI_RPR1_RPIF9) {
         EXTI->RPR1 = EXTI_RPR1_RPIF9;
+        regmap_ext_end_operation();
         reset_and_init_spi();
     }
 }
