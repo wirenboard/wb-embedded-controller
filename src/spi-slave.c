@@ -17,6 +17,9 @@ struct spi_slave_ctx {
 
 static struct spi_slave_ctx spi_slave_ctx;
 
+static void spi_irq_handler(void);
+static void exti_irq_handler(void);
+
 static inline void spi_tx_u8(uint8_t byte)
 {
     *(__IO uint8_t *)(&SPI2->DR) = byte;
@@ -81,6 +84,7 @@ void spi_slave_init(void)
     EXTI->IMR1 |= (1 << 9);
     EXTI->EXTICR[9 / 4] |= ((uint32_t)0x01 << ((9 % 4) * 8));
 
+    NVIC_SetHandler(EXTI4_15_IRQn, exti_irq_handler);
     NVIC_EnableIRQ(EXTI4_15_IRQn);
     NVIC_SetPriority(EXTI4_15_IRQn, 0);
 
@@ -88,11 +92,12 @@ void spi_slave_init(void)
 
     reset_and_init_spi();
 
+    NVIC_SetHandler(SPI2_IRQn, spi_irq_handler);
     NVIC_EnableIRQ(SPI2_IRQn);
     NVIC_SetPriority(SPI2_IRQn, 0);
 }
 
-void SPI2_IRQHandler(void)
+static void spi_irq_handler(void)
 {
     if (SPI2->SR & SPI_SR_RXNE) {
         // TODO Remove debug
@@ -132,7 +137,7 @@ void SPI2_IRQHandler(void)
     }
 }
 
-void EXTI4_15_IRQHandler(void)
+static void exti_irq_handler(void)
 {
     if (EXTI->RPR1 & EXTI_RPR1_RPIF9) {
         EXTI->RPR1 = EXTI_RPR1_RPIF9;

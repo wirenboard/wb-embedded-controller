@@ -1,5 +1,5 @@
 #pragma once
-#include "stm32g0xx.h"
+#include "wbmcu_system.h"
 
 typedef struct {
     GPIO_TypeDef* port;

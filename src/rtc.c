@@ -1,5 +1,5 @@
 #include "rtc.h"
-#include "stm32g0xx.h"
+#include "wbmcu_system.h"
 #include "gpio.h"
 
 static const struct rtc_time init_time = {

@@ -1,6 +1,6 @@
 #include <stdint.h>
 
-#include "stm32g0xx.h"
+#include "wbmcu_system.h"
 #include "gpio.h"
 #include "spi-slave.h"
 #include "rtc.h"
