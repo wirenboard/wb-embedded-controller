@@ -17,7 +17,7 @@ LD_DIR = ldscripts
 SUBMODULES_DIR = libfixmath/libfixmath
 
 #order important
-LDSCRIPT = STM32G030C6Tx_FLASH.ld
+LDSCRIPT = stm32g030x6_noboot.ld
 OPT = -Os
 CPU_FAMILY = -mcpu=cortex-m0plus
 
@@ -28,6 +28,6 @@ HSE_VALUE = 8000000
 STACK_SIZE = 512
 
 
-# LDSCRIPT += wbmcu_sections_modbus_storage.ld
+LDSCRIPT += wbmcu_noboot_clean.ld
 
-include build_common.mk
+include libwbmcu-system/build_common.mk
