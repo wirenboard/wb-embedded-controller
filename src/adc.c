@@ -1,5 +1,5 @@
 #include "adc.h"
-#include <stm32g0xx.h>
+#include "wbmcu_system.h"
 #include "gpio.h"
 #include "config.h"
 #include <stdbool.h>
