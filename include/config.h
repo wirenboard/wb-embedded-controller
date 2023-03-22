@@ -1,7 +1,7 @@
 #pragma once
 #include <stdint.h>
 
-#define F_CPU       16000000
+#define F_CPU       64000000
 
 #define PWRKEY_DEBOUNCE_MS                  50
 #define PWRKEY_LONG_PRESS_TIME_MS           3000
