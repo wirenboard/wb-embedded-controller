@@ -1,4 +1,5 @@
 #include "wbmcu_system.h"
+#include "spi-slave.h"
 
 
 static inline void rcc_set_hsi_pll_64mhz_clock(void)
@@ -21,6 +22,14 @@ static inline void rcc_set_hsi_pll_64mhz_clock(void)
 int main(void)
 {
     rcc_set_hsi_pll_64mhz_clock();
+
+    RCC->IOPENR |= RCC_IOPENR_GPIOAEN;
+    RCC->IOPENR |= RCC_IOPENR_GPIOBEN;
+    RCC->IOPENR |= RCC_IOPENR_GPIOCEN;
+    RCC->IOPENR |= RCC_IOPENR_GPIODEN;
+
+    // Init drivers
+    spi_slave_init();
 
     while (1) {
 
