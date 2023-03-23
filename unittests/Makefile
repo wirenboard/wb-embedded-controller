@@ -1,12 +1,11 @@
 
 UNIT_FOLDER = ../src
 TEST_LIST = regmap_test
-SUBMODULES_DIR = ../libfixmath/libfixmath
-INC = . ../include $(SUBMODULES_DIR)
+INC = . ../include
 
 all: $(TEST_LIST)
 
-%_test: %_test.c $(UNIT_FOLDER)/%.c $(SUBMODULES_DIR)/*.c
+%_test: %_test.c $(UNIT_FOLDER)/%.c
 	gcc $(addprefix -D, $(DEFS)) $(addprefix -I, $(INC)) $^ -o $@
 	./$@
 	rm -f $@
