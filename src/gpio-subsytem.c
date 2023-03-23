@@ -1,7 +1,7 @@
 #include "gpio-subsystem.h"
 #include "config.h"
 #include "gpio.h"
-#include "regmap.h"
+#include "regmap-int.h"
 
 void gpio_init(void)
 {

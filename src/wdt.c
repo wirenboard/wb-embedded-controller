@@ -1,6 +1,6 @@
 #include "wdt.h"
 #include "systick.h"
-#include "regmap.h"
+#include "regmap-int.h"
 
 struct wdt_ctx {
     uint8_t timeout_s;

@@ -1,6 +1,6 @@
 #include "irq-subsystem.h"
 #include <assert.h>
-#include "regmap.h"
+#include "regmap-int.h"
 #include "config.h"
 #include "gpio.h"
 

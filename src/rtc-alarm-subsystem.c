@@ -1,5 +1,5 @@
 #include "rtc.h"
-#include "regmap.h"
+#include "regmap-int.h"
 #include "irq-subsystem.h"
 
 void rtc_alarm_do_periodic_work(void)

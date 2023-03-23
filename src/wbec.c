@@ -1,11 +1,12 @@
 #include "config.h"
-#include "regmap.h"
+#include "regmap-int.h"
 #include "pwrkey.h"
 #include "irq-subsystem.h"
 #include "wdt.h"
 #include "wb-power.h"
 #include "system-led.h"
 #include "ntc.h"
+#include "adc.h"
 
 static const uint8_t fw_ver[] = { MODBUS_DEVICE_FW_VERSION_NUMBERS };
 
