@@ -17,7 +17,7 @@
 #include "gpio-subsystem.h"
 
 
-static inline void set_hsi_pll_64mhz_clock(void)
+static inline void rcc_set_hsi_pll_64mhz_clock(void)
 {
     FLASH->ACR |= FLASH_ACR_LATENCY_1;                      // Two wait states
 
@@ -36,7 +36,7 @@ static inline void set_hsi_pll_64mhz_clock(void)
 
 int main(void)
 {
-    set_hsi_pll_64mhz_clock();
+    rcc_set_hsi_pll_64mhz_clock();
 
     RCC->IOPENR |= RCC_IOPENR_GPIOAEN;
     RCC->IOPENR |= RCC_IOPENR_GPIOBEN;
