@@ -89,7 +89,11 @@
         /* 0xB4 */  uint16_t irqs; \
     ) \
 
-#define REGMAP_ADDRESS_MASK         0x00FF
+// Общее число регистров в адресном пространстве
+// Число должно быть больше или равно адресу последнего регистра
+// Должно быть степенью двойки
+// По этому числу происходит циклической автоинкремент адреса
+#define REGMAP_TOTAL_REGS_COUNT         256
 
 #define __REGMAP_STRUCTS(addr, name, rw, members)       struct __attribute__((packed)) REGMAP_##name { members };
 
