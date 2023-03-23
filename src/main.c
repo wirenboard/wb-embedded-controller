@@ -1,5 +1,3 @@
-#include <stdint.h>
-
 #include "wbmcu_system.h"
 #include "gpio.h"
 #include "spi-slave.h"

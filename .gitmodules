@@ -1,7 +1,6 @@
-[submodule "libfixmath"]
-	path = libfixmath
-	url = git@github.com:PetteriAimonen/libfixmath.git
-	branch = master
 [submodule "libwbmcu-system"]
 	path = libwbmcu-system
 	url = git@github.com:wirenboard/libwbmcu-system.git
+[submodule "libfixmath"]
+	path = libfixmath
+	url = git@github.com:PetteriAimonen/libfixmath.git
