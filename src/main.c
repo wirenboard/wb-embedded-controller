@@ -2,7 +2,6 @@
 #include "gpio.h"
 #include "spi-slave.h"
 #include "rtc.h"
-#include "regmap.h"
 #include "system-led.h"
 #include "adc.h"
 #include "irq-subsystem.h"
