@@ -1,0 +1,3 @@
+[submodule "libwbmcu-system"]
+	path = libwbmcu-system
+	url = git@github.com:wirenboard/libwbmcu-system.git
