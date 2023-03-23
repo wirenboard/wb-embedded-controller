@@ -2,7 +2,7 @@
 UNIT_FOLDER = ../src
 TEST_LIST = regmap_test
 SUBMODULES_DIR = ../libfixmath/libfixmath
-INC = ../include $(SUBMODULES_DIR)
+INC = . ../include $(SUBMODULES_DIR)
 
 all: $(TEST_LIST)
 
