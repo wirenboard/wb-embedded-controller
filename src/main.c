@@ -1,5 +1,6 @@
 #include "wbmcu_system.h"
 #include "spi-slave.h"
+#include "regmap-int.h"
 
 
 static inline void rcc_set_hsi_pll_64mhz_clock(void)
@@ -30,6 +31,7 @@ int main(void)
 
     // Init drivers
     spi_slave_init();
+    regmap_init();
 
     while (1) {
 

@@ -29,10 +29,11 @@ struct regions_info {
 
 // Состояние regmap
 struct regmap_ctx {
-    uint16_t regs[REGMAP_TOTAL_REGS_COUNT];         // Массив для хранения данных
-    bool written_flags[REGMAP_TOTAL_REGS_COUNT];    // Флаги записи каждого регистра
-    uint16_t op_address;                            // Адрес текущей операции
-    bool is_busy;                                   // Флаг занятости regmap
+    uint16_t regs[REGMAP_TOTAL_REGS_COUNT];                 // Массив для хранения данных
+    uint32_t written_flags[REGMAP_TOTAL_REGS_COUNT / 32];   // Битовые флаги записи каждого регистра
+    uint32_t rw_flags[REGMAP_TOTAL_REGS_COUNT / 32];        // Признак того, что в регистр можно записывать данные снаружи
+    uint16_t op_address;                                    // Адрес текущей операции
+    bool is_busy;                                           // Флаг занятости regmap
 };
 
 static const struct regions_info regions_info = {
@@ -71,6 +72,20 @@ static inline uint16_t region_last_reg(enum regmap_region r)
 static inline bool is_region_rw(enum regmap_region r)
 {
     return (regions_info.rw[r] == REGMAP_RW);
+}
+
+void regmap_init(void)
+{
+    // Fill RW bits for each register
+    for (unsigned r = 0; r < REGMAP_REGION_COUNT; r++) {
+        if (is_region_rw(r)) {
+            for (unsigned i = region_first_reg(r); i <= region_last_reg(r); i++) {
+                uint16_t bit_addr = i >> 4;
+                uint16_t bit_mask = 1 << (i & 0x0F);
+                regmap_ctx.rw_flags[bit_addr] |= bit_mask;
+            }
+        }
+    }
 }
 
 // Записывает данные в регион
@@ -191,8 +206,14 @@ uint16_t regmap_ext_read_reg_autoinc(void)
 // Выполняется в контексте прерывания
 void regmap_ext_write_reg_autoinc(uint16_t val)
 {
-    regmap_ctx.regs[regmap_ctx.op_address] = val;
-    regmap_ctx.written_flags[regmap_ctx.op_address] = 1;
-    regmap_ctx.op_address++;
-    regmap_ctx.op_address &= REGMAP_ADDRESS_MASK;
+    uint16_t addr = regmap_ctx.op_address;
+    uint16_t rw_bit_addr = regmap_ctx.op_address >> 4;
+    uint32_t rw_bit_mask = 1 << (regmap_ctx.op_address & 0x0F);
+
+    if (regmap_ctx.rw_flags[rw_bit_addr] & rw_bit_mask) {
+        regmap_ctx.regs[addr] = val;
+        regmap_ctx.written_flags[rw_bit_addr] |= rw_bit_mask;
+        regmap_ctx.op_address++;
+        regmap_ctx.op_address &= REGMAP_ADDRESS_MASK;
+    }
 }
