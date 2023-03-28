@@ -55,12 +55,7 @@ void wdt_do_periodic_work(void)
         regmap_get_region_data(REGMAP_REGION_WDT, &w, sizeof(w));
 
         wdt_set_timeout(w.timeout);
-        if (w.run && !wdt_ctx.run) {
-            wdt_start_reset();
-        } else if (!w.run) {
-            wdt_stop();
-        }
-        if (w.run && w.reset) {
+        if (w.reset) {
             wdt_start_reset();
         }
 
@@ -69,7 +64,6 @@ void wdt_do_periodic_work(void)
 
     struct REGMAP_WDT w;
     w.reset = 0;
-    w.run = wdt_ctx.run;
     w.timeout = wdt_ctx.timeout_s;
     regmap_set_region_data(REGMAP_REGION_WDT, &w, sizeof(w));
 }
