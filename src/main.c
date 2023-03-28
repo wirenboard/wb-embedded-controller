@@ -1,6 +1,9 @@
 #include "wbmcu_system.h"
 #include "spi-slave.h"
 #include "regmap-int.h"
+#include "rtc.h"
+#include "rtc-alarm-subsystem.h"
+#include "irq-subsystem.h"
 
 
 static inline void rcc_set_hsi_pll_64mhz_clock(void)
@@ -32,8 +35,15 @@ int main(void)
     // Init drivers
     spi_slave_init();
     regmap_init();
+    rtc_init();
+    rtc_enable_pc13_1hz_clkout();
+
+    // Init subsystems
+    irq_init();
 
     while (1) {
-
+        // Sybsystems
+        rtc_alarm_do_periodic_work();
+        irq_do_periodic_work();
     }
 }
