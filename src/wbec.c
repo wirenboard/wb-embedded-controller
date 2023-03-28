@@ -41,6 +41,7 @@ static const char * power_reason_strings[] = {
     "Power key pressed",
     "RTC alarm",
     "Reboot",
+    "Reboot instead of poweroff",
     "Watchdog",
     "Unknown",
 };
@@ -55,7 +56,6 @@ enum wbec_state {
 };
 
 struct wbec_ctx {
-    enum poweron_reason poweron_reason;
     enum wbec_state state;
     systime_t timestamp;
 };
@@ -192,7 +192,6 @@ void wbec_init(void)
     PWR->CR3 |= PWR_CR3_EIWUL;
 
     // Set BUTTON pin as wakeup source
-    // TODO change for real GPIO
     PWR->CR3 |= PWR_CR3_EWUP1;
     // Set falling edge as wakeup trigger
     PWR->CR4 |= PWR_CR4_WP1;
@@ -203,6 +202,7 @@ void wbec_init(void)
 
     wdt_set_timeout(WDEC_WATCHDOG_INITIAL_TIMEOUT_S);
 
+    wbec_ctx.state = WBEC_STATE_WAIT_STARTUP;
     wbec_ctx.timestamp = 0;
 }
 
@@ -234,9 +234,9 @@ void wbec_do_periodic_work(void)
         // Также возможна ситуация, когда при обновлении прошивки МК перезагружается,
         // а линукс в это время работает. Тогда его не надо перезагружать.
         // Факт работы линукса определяется по наличию +5В
-        if ((wbec_ctx.poweron_reason == REASON_POWER_ON) && (adc.v_5_0 > 4500)) {
+        if ((wbec_info.poweron_reason == REASON_POWER_ON) && (adc.v_5_0 > 4500)) {
             // Если после включени МК +5В есть - значить линукс уже работает
-            // Не нужно вывоодить информацию в уарт
+            // Не нужно выводить информацию в уарт
             // Тут ничего не нужно делать
         } else {
             // В ином случае перехватываем питание (выключаем)
@@ -293,7 +293,7 @@ void wbec_do_periodic_work(void)
         // Если было долгое нажатие - выключаемся сразу
         if (pwrkey_handle_long_press()) {
             linux_power_off();
-            // TODO Put info to uart
+            usart_tx_strn_blocking("\nPower key long press detected, power off without delay.\n\n");
             goto_standby();
         }
 
@@ -305,11 +305,12 @@ void wbec_do_periodic_work(void)
             // Поэтому здесь нужно проверить наличие будильника и если он есть - выключиться
             // иначе - перезагрузиться
             linux_power_off();
+            usart_tx_strn_blocking("\nPower off request from Linux.\n\n");
             if (rtc_alarm_is_alarm_enabled()) {
-                // TODO Put info to uart
+                usart_tx_strn_blocking("\nAlarm is set, power is off.\n\n");
                 goto_standby();
             } else {
-                // TODO Put info to uart
+                usart_tx_strn_blocking("\nAlarm not set, reboot system instead of power off.\n\n");
                 wbec_info.poweron_reason = REASON_REBOOT_NO_ALARM;
                 wbec_ctx.state = WBEC_STATE_WAIT_POWER_RESET;
                 wbec_ctx.timestamp = systick_get_system_time();
@@ -320,7 +321,7 @@ void wbec_do_periodic_work(void)
             wbec_ctx.state = WBEC_STATE_WAIT_POWER_RESET;
             wbec_ctx.timestamp = systick_get_system_time();
             linux_power_off();
-            // TODO Put info to uart
+            usart_tx_strn_blocking("\nReboot request, reset power.\n\n");
         }
 
         // Если сработал WDT - перезагружаемся по питанию
@@ -330,7 +331,7 @@ void wbec_do_periodic_work(void)
             wbec_ctx.state = WBEC_STATE_WAIT_POWER_RESET;
             wbec_ctx.timestamp = systick_get_system_time();
             linux_power_off();
-            // TODO Put info to uart
+            usart_tx_strn_blocking("\nWatchdog is timed out, reset power.\n\n");
         }
 
         break;
@@ -344,12 +345,12 @@ void wbec_do_periodic_work(void)
         if (linux_powerctrl_req == LINUX_POWERCTRL_OFF) {
             // Штатное выключение (запрос на выключение был с кнопки)
             linux_power_off();
-            // TODO Put info to uart
+            usart_tx_strn_blocking("\nPower off request from Linux after power key pressed. Power is off.\n\n");
             goto_standby();
         } else if (systick_get_time_since_timestamp(wbec_ctx.timestamp) >= WBEC_LINUX_POWER_OFF_DELAY_MS) {
             // Аварийное выключение (можно как-то дополнительно обработать)
             linux_power_off();
-            // TODO Put info to uart
+            usart_tx_strn_blocking("\nNo power off request from Linux after power key pressed. Power is forced off.\n\n");
             goto_standby();
         }
 
