@@ -75,6 +75,11 @@ void wb_power_on(void)
     a40_5v_on();
 }
 
+void wb_power_off(void)
+{
+    a40_5v_off();
+}
+
 void wb_power_reset(void)
 {
     a40_5v_off();
