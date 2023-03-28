@@ -43,6 +43,8 @@ int main(void)
     // Init drivers
     spi_slave_init();
     regmap_init();
+    rtc_init();
+    rtc_enable_pc13_1hz_clkout();
 
     RCC->IOPENR |= RCC_IOPENR_GPIOAEN;
     RCC->IOPENR |= RCC_IOPENR_GPIOBEN;
@@ -69,7 +71,6 @@ int main(void)
 
     system_led_blink(500, 1000);
 
-    while (1) {
         // Drivers
         adc_do_periodic_work();
         system_led_do_periodic_work();

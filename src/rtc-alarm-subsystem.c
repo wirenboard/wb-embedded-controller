@@ -2,6 +2,13 @@
 #include "regmap-int.h"
 #include "irq-subsystem.h"
 
+/**
+ * Модуль занимается:
+ *  - перекладывает данные из RTC в regmap, при этом конвертирует их из BCD в обычный код
+ *  - проверяет, записаны ли регистры RTC снаружи и переписывает их из regmap в RTC
+ *  - выставляет флаг будильника в IRQ, если он сработал
+ */
+
 static bool alarm_enabled = 0;
 
 bool rtc_alarm_is_alarm_enabled(void)
@@ -33,6 +40,10 @@ void rtc_alarm_do_periodic_work(void)
         regmap_alarm.hours = BCD_TO_BIN(rtc_alarm.hours);
         regmap_alarm.days = BCD_TO_BIN(rtc_alarm.days);
         regmap_set_region_data(REGMAP_REGION_RTC_ALARM, &regmap_alarm, sizeof(regmap_alarm));
+
+        struct REGMAP_RTC_CFG cfg;
+        cfg.offset = rtc_get_offset();
+        regmap_set_region_data(REGMAP_REGION_RTC_CFG, &cfg, sizeof(cfg));
 
         if (rtc_alarm.flag) {
             irq_set_flag(IRQ_ALARM);
@@ -83,6 +94,10 @@ void rtc_alarm_do_periodic_work(void)
     }
 
     if (regmap_is_region_changed(REGMAP_REGION_RTC_CFG)) {
+        struct REGMAP_RTC_CFG cfg;
+        regmap_get_region_data(REGMAP_REGION_RTC_ALARM, &cfg, sizeof(cfg));
+
+        rtc_set_offset(cfg.offset);
 
         regmap_clear_changed(REGMAP_REGION_RTC_CFG);
     }

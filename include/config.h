@@ -54,3 +54,7 @@
         macro(ADC_VBUS_NETWORK,     10,     GPIOB,  2,      50,     22.0 / 10.0 ) \
         macro(ADC_HW_VER,           15,     GPIOB,  11,     50,     1.0         ) \
 
+// Линия прерывания от EC в линукс
+// Меняет состояние на активное, если в EC есть флаги событий
+#define EC_GPIO_INT                     GPIOB, 5
+#define EC_GPIO_INT_ACTIVE_HIGH

@@ -4,16 +4,52 @@
 #include "config.h"
 #include "gpio.h"
 
+/**
+ * IRQ subsystem представляет интерфейс для работы с флагами прерываний в regmap
+ *
+ * Есть 3 типа регистров:
+ *  - флаги
+ *  - маска
+ *  - сброс
+ *
+ * Все они имеют одинаковый формат - в одном бите хранится один флаг прерывания
+ * Активные биты - "1"
+ * Если есть флаги прерываний и в соответствующих битах маски "1" - устанавливается активный уровень на INT GPIO
+ * Чтобы сбросить флаг прерывания - нужно записать "1" в соответствующий бит регистра сброса
+ *
+ * В линуксе для этого есть удобный интерфейс regmap_irq_chip
+ */
+
 static_assert((sizeof(irq_flags_t) * 8) >= IRQ_COUNT, "IRQ flags not fitted to `irq_flags` type");
+
+static const gpio_pin_t int_gpio = { EC_GPIO_INT };
 
 static irq_flags_t flags = 0;
 static irq_flags_t mask = 0;
 
+static inline void set_int_gpio_active(void)
+{
+    #ifdef EC_GPIO_INT_ACTIVE_HIGH
+        GPIO_S_SET(int_gpio);
+    #else
+        GPIO_S_RESET(int_gpio);
+    #endif
+}
+
+static inline void set_int_gpio_inactive(void)
+{
+    #ifdef EC_GPIO_INT_ACTIVE_HIGH
+        GPIO_S_RESET(int_gpio);
+    #else
+        GPIO_S_SET(int_gpio);
+    #endif
+}
+
 void irq_init(void)
 {
-    GPIO_RESET(INT_PORT, INT_PIN);
-    GPIO_SET_OD(INT_PORT, INT_PIN);
-    GPIO_SET_OUTPUT(INT_PORT, INT_PIN);
+    set_int_gpio_inactive();
+    GPIO_S_SET_PUSHPULL(int_gpio);
+    GPIO_S_SET_OUTPUT(int_gpio);
 }
 
 irq_flags_t irq_get_flags(void)
@@ -38,11 +74,10 @@ void irq_clear_flags(irq_flags_t f)
 
 void irq_do_periodic_work(void)
 {
-    // Set INT pin
     if (flags & mask) {
-        GPIO_SET(INT_PORT, INT_PIN);
+        set_int_gpio_active();
     } else {
-        GPIO_RESET(INT_PORT, INT_PIN);
+        set_int_gpio_inactive();
     }
 
     // IRQ to regmap

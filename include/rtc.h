@@ -31,4 +31,8 @@ void rtc_get_datetime(struct rtc_time * tm);
 void rtc_set_datetime(const struct rtc_time * tm);
 void rtc_get_alarm(struct rtc_alarm * alarm);
 void rtc_set_alarm(const struct rtc_alarm * alarm);
+uint16_t rtc_get_offset(void);
+void rtc_set_offset(uint16_t offeset);
 void rtc_clear_alarm_flag(void);
+void rtc_enable_pc13_1hz_clkout(void);
+void rtc_disable_pc13_1hz_clkout(void);
