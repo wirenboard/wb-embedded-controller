@@ -6,6 +6,8 @@
 #define PWRKEY_DEBOUNCE_MS                  50
 #define PWRKEY_LONG_PRESS_TIME_MS           3000
 
+#define EC_GPIO_LINUX_POWER                 GPIOD, 2
+
 #define PWR_KEY_PORT        GPIOA
 #define PWR_KEY_PIN         0
 
@@ -14,9 +16,6 @@
 
 #define SYSTEM_LED_PORT     GPIOB
 #define SYSTEM_LED_PIN      1
-
-#define A40_POWER_OFF_PORT  GPIOD
-#define A40_POWER_OFF_PIN   2
 
 #define GPIO_VREF_EN_PORT   GPIOD
 #define GPIO_VREF_EN_PIN    1

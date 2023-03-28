@@ -1,9 +1,9 @@
 #include "config.h"
+#include "gpio.h"
 #include "regmap-int.h"
 #include "pwrkey.h"
 #include "irq-subsystem.h"
 #include "wdt.h"
-#include "wb-power.h"
 #include "system-led.h"
 #include "ntc.h"
 #include "adc.h"
@@ -15,6 +15,7 @@
 #define WBEC_STARTUP_TIMEOUT_MS                     20
 
 static const char fwver_chars[] = { MODBUS_DEVICE_FW_VERSION_STRING };
+static const gpio_pin_t gpio_linux_power = { EC_GPIO_LINUX_POWER };
 
 // Причина включения питания Linux
 enum poweron_reason {
@@ -63,6 +64,40 @@ static struct REGMAP_INFO wbec_info = {
 };
 
 static struct wbec_ctx wbec_ctx;
+
+static inline void linux_power_off(void)
+{
+    GPIO_S_RESET(gpio_linux_power);
+}
+
+static inline void linux_power_on(void)
+{
+    GPIO_S_SET(gpio_linux_power);
+}
+
+static inline void linux_power_gpio_init(void)
+{
+    GPIO_S_SET_PUSHPULL(gpio_linux_power);
+    GPIO_S_SET_OUTPUT(gpio_linux_power);
+}
+
+static inline void goto_standby(void)
+{
+    // Apply pull-up and pull-down configuration
+    PWR->CR3 |= PWR_CR3_APC;
+
+    // Clear WKUP flags
+    PWR->SCR = PWR_SCR_CWUF;
+
+    // SLEEPDEEP
+    SCB->SCR |= SCB_SCR_SLEEPDEEP_Msk;
+
+    // 011: Standby mode
+    PWR->CR1 |= PWR_CR1_LPMS_0 | PWR_CR1_LPMS_1;
+
+    __WFI();
+    while (1) {};
+}
 
 static inline enum poweron_reason get_poweron_reason(void)
 {
@@ -137,6 +172,29 @@ static inline enum linux_powerctrl_req get_linux_powerctrl_req(void)
 
 void wbec_init(void)
 {
+    // Здесь нельзя инициализировать GPIO управления питанием
+    // т.к. исходно оно можут быть включено (если это была перепрошивка EC)
+    // или выключено (в остальных случаях)
+    // И нужно сначала понять, какой случай, а потом настраивать GPIO как выход
+    // Иначе управление питанием перехватится раньше, чем нужно
+    // Инициализация GPIO выполняется в WBEC_STATE_VOLTAGE_CHECK
+
+    // Подтяжка вниз в режиме standby для GPIO управления питанием линукса
+    // Таким образом, в standby линукс будет выключен
+    PWR->PDCRD |= (1 << gpio_linux_power.pin);
+
+    // Подтяжка вверх для кнопки питания в standby (кнопка замыкает вход на землю)
+    PWR->PUCRA |= (1 << PWR_KEY_PIN);
+
+    // Enable internal wakeup line (for RTC)
+    PWR->CR3 |= PWR_CR3_EIWUL;
+
+    // Set BUTTON pin as wakeup source
+    // TODO change for real GPIO
+    PWR->CR3 |= PWR_CR3_EWUP1;
+    // Set falling edge as wakeup trigger
+    PWR->CR4 |= PWR_CR4_WP1;
+
     wbec_info.poweron_reason = get_poweron_reason();
 
     regmap_set_region_data(REGMAP_REGION_INFO, &wbec_info, sizeof(wbec_info));
@@ -181,7 +239,8 @@ void wbec_do_periodic_work(void)
         } else {
             // В ином случае перехватываем питание (выключаем)
             // И отправляем информацию в уарт
-            wb_power_off();
+            linux_power_off();
+            linux_power_gpio_init();
 
             // Блокирующая отправка здесь - не страшно,
             // т.к. устройство в этом состоянии больше ничего не делает
@@ -209,7 +268,9 @@ void wbec_do_periodic_work(void)
         wdt_set_timeout(WDEC_WATCHDOG_INITIAL_TIMEOUT_S);
         // TODO: uncomment
         // wdt_start_reset();
-        wb_power_on();
+
+        linux_power_on();
+        linux_power_gpio_init();
         wbec_ctx.state = WBEC_STATE_WORKING;
         break;
 
@@ -222,7 +283,6 @@ void wbec_do_periodic_work(void)
         if (pwrkey_handle_short_press()) {
             wdt_stop();
             irq_set_flag(IRQ_PWR_OFF_REQ);
-            // wb_power_off_and_sleep(WBEC_LINUX_POWER_OFF_DELAY_MS);
             system_led_blink(250, 250);
             wbec_ctx.state = WBEC_STATE_WAIT_LINUX_POWER_OFF;
             wbec_ctx.timestamp = systick_get_system_time();
@@ -230,29 +290,34 @@ void wbec_do_periodic_work(void)
 
         // Если было долгое нажатие - выключаемся сразу
         if (pwrkey_handle_long_press()) {
-            wb_power_off_and_sleep(0);
+            linux_power_off();
             // TODO Put info to uart
-            // standby
+            goto_standby();
         }
 
         if (linux_powerctrl_req == LINUX_POWERCTRL_OFF) {
             // Если прилетел запрос из линукса на выключение - выключаем питание
             // TODO Дополнительно тут можно проверить наличие будильника
-
+            linux_power_off();
+            // TODO Put info to uart
+            goto_standby();
         } else if (linux_powerctrl_req == LINUX_POWERCTRL_REBOOT) {
             // Если запрос на перезагрузку - перезагружается
             wbec_info.poweron_reason = REASON_REBOOT;
             wbec_ctx.state = WBEC_STATE_WAIT_POWER_RESET;
             wbec_ctx.timestamp = systick_get_system_time();
+            linux_power_off();
+            // TODO Put info to uart
         }
 
-        // Если сработал WDT - перезагрузаемся по питанию
+        // Если сработал WDT - перезагружаемся по питанию
         if (wdt_handle_timed_out()) {
             system_led_blink(50, 50);
-            wb_power_reset();
             wbec_info.poweron_reason = REASON_WATHDOG;
             wbec_ctx.state = WBEC_STATE_WAIT_POWER_RESET;
             wbec_ctx.timestamp = systick_get_system_time();
+            linux_power_off();
+            // TODO Put info to uart
         }
 
         break;
@@ -264,16 +329,22 @@ void wbec_do_periodic_work(void)
         // выключение питания - то выключить его принудительно
 
         if (linux_powerctrl_req == LINUX_POWERCTRL_OFF) {
-            // Штатное выключение
-
+            // Штатное выключение (запрос на выключение был с кнопки)
+            linux_power_off();
+            // TODO Put info to uart
+            goto_standby();
         } else if (systick_get_time_since_timestamp(wbec_ctx.timestamp) >= WBEC_LINUX_POWER_OFF_DELAY_MS) {
             // Аварийное выключение (можно как-то дополнительно обработать)
+            linux_power_off();
+            // TODO Put info to uart
+            goto_standby();
         }
 
         break;
 
     case WBEC_STATE_WAIT_POWER_RESET:
         // В это состояние попадаем, когда нужно дернуть питание для перезагрузки
+        // Питание линукса в этом состоянии выключено
         // Тут нужно подождать, пока разрядятся конденсаторы и перейти в INIT
         // Где всё заново включится
 
