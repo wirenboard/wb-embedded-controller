@@ -11,6 +11,7 @@
 #include "systick.h"
 #include "wbmcu_system.h"
 #include "array_size.h"
+#include "rtc-alarm-subsystem.h"
 
 #define WBEC_STARTUP_TIMEOUT_MS                     20
 
@@ -23,6 +24,7 @@ enum poweron_reason {
     REASON_POWER_KEY,       // Нажата кнопка питания (до этого было выключено)
     REASON_RTC_ALARM,       // Будильник
     REASON_REBOOT,          // Перезагрузка
+    REASON_REBOOT_NO_ALARM, // Перезагрузка вместо выключения, т.к. нет будильника
     REASON_WATHDOG,         // Сработал watchdog
     REASON_UNKNOWN,         // Неизветсно что (на всякий случай)
 };
@@ -296,11 +298,22 @@ void wbec_do_periodic_work(void)
         }
 
         if (linux_powerctrl_req == LINUX_POWERCTRL_OFF) {
-            // Если прилетел запрос из линукса на выключение - выключаем питание
-            // TODO Дополнительно тут можно проверить наличие будильника
+            // Если прилетел запрос из линукса на выключение
+            // Это была выполнена команда `poweroff` или `rtcwake -moff`
+            // Не должно быть возможности программно выключить контроллер так, чтобы
+            // нужно было ехать нажить кнопку чтобы его включить обратно
+            // Поэтому здесь нужно проверить наличие будильника и если он есть - выключиться
+            // иначе - перезагрузиться
             linux_power_off();
-            // TODO Put info to uart
-            goto_standby();
+            if (rtc_alarm_is_alarm_enabled()) {
+                // TODO Put info to uart
+                goto_standby();
+            } else {
+                // TODO Put info to uart
+                wbec_info.poweron_reason = REASON_REBOOT_NO_ALARM;
+                wbec_ctx.state = WBEC_STATE_WAIT_POWER_RESET;
+                wbec_ctx.timestamp = systick_get_system_time();
+            }
         } else if (linux_powerctrl_req == LINUX_POWERCTRL_REBOOT) {
             // Если запрос на перезагрузку - перезагружается
             wbec_info.poweron_reason = REASON_REBOOT;
