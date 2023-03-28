@@ -26,6 +26,13 @@ enum poweron_reason {
     REASON_UNKNOWN,         // Неизветсно что (на всякий случай)
 };
 
+// Запрос из Linux на управление питанием
+enum linux_powerctrl_req {
+    LINUX_POWERCTRL_NO_ACTION,
+    LINUX_POWERCTRL_OFF,
+    LINUX_POWERCTRL_REBOOT,
+};
+
 static const char * power_reason_strings[] = {
     "Wiren Board supply on",
     "Power key pressed",
@@ -40,9 +47,8 @@ enum wbec_state {
     WBEC_STATE_WAIT_STARTUP,
     WBEC_STATE_VOLTAGE_CHECK,
     WBEC_STATE_WORKING,
-    WBEC_POWERING_OFF,
-    WBEC_REBOOTING,
-    WBEC_WAIT_STANDBY,
+    WBEC_STATE_WAIT_LINUX_POWER_OFF,
+    WBEC_STATE_WAIT_POWER_RESET,
 };
 
 struct wbec_ctx {
@@ -86,28 +92,47 @@ static inline const char * get_poweron_reason_string(enum poweron_reason r)
     return power_reason_strings[r];
 }
 
-static inline void collect_adc_data(struct REGMAP_ADC_DATA adc)
+static inline void collect_adc_data(struct REGMAP_ADC_DATA * adc)
 {
     // Get voltages
-    adc.v_a1 = adc_get_ch_mv(ADC_CHANNEL_ADC_IN1);
-    adc.v_a2 = adc_get_ch_mv(ADC_CHANNEL_ADC_IN2);
-    adc.v_a3 = adc_get_ch_mv(ADC_CHANNEL_ADC_IN3);
-    adc.v_a4 = adc_get_ch_mv(ADC_CHANNEL_ADC_IN4);
-    adc.v_in = adc_get_ch_mv(ADC_CHANNEL_ADC_V_IN);
-    adc.v_5_0 = adc_get_ch_mv(ADC_CHANNEL_ADC_5V);
-    adc.v_3_3 = adc_get_ch_mv(ADC_CHANNEL_ADC_3V3);
-    adc.vbus_console = adc_get_ch_mv(ADC_CHANNEL_ADC_VBUS_DEBUG);
-    adc.vbus_network = adc_get_ch_mv(ADC_CHANNEL_ADC_VBUS_NETWORK);
+    adc->v_a1 = adc_get_ch_mv(ADC_CHANNEL_ADC_IN1);
+    adc->v_a2 = adc_get_ch_mv(ADC_CHANNEL_ADC_IN2);
+    adc->v_a3 = adc_get_ch_mv(ADC_CHANNEL_ADC_IN3);
+    adc->v_a4 = adc_get_ch_mv(ADC_CHANNEL_ADC_IN4);
+    adc->v_in = adc_get_ch_mv(ADC_CHANNEL_ADC_V_IN);
+    adc->v_5_0 = adc_get_ch_mv(ADC_CHANNEL_ADC_5V);
+    adc->v_3_3 = adc_get_ch_mv(ADC_CHANNEL_ADC_3V3);
+    adc->vbus_console = adc_get_ch_mv(ADC_CHANNEL_ADC_VBUS_DEBUG);
+    adc->vbus_network = adc_get_ch_mv(ADC_CHANNEL_ADC_VBUS_NETWORK);
 
     // Calc NTC temp
     fix16_t ntc_raw = adc_get_ch_mv(ADC_CHANNEL_ADC_NTC);
     // Convert to x10 *C
-    adc.temp = fix16_to_int(
+    adc->temp = fix16_to_int(
         fix16_mul(
             ntc_get_temp(ntc_raw),
             F16(100)
         )
     );
+}
+
+static inline enum linux_powerctrl_req get_linux_powerctrl_req(void)
+{
+    // Linux is ready to power off
+    if (regmap_is_region_changed(REGMAP_REGION_POWER_CTRL)) {
+        struct REGMAP_POWER_CTRL p;
+        regmap_get_region_data(REGMAP_REGION_POWER_CTRL, &p, sizeof(p));
+        if (p.off) {
+            return LINUX_POWERCTRL_OFF;
+        }
+        if (p.reboot) {
+            return LINUX_POWERCTRL_REBOOT;
+        }
+
+        regmap_clear_changed(REGMAP_REGION_POWER_CTRL);
+    }
+
+    return LINUX_POWERCTRL_NO_ACTION;
 }
 
 void wbec_init(void)
@@ -126,6 +151,8 @@ void wbec_do_periodic_work(void)
     struct REGMAP_ADC_DATA adc;
     collect_adc_data(&adc);
     regmap_set_region_data(REGMAP_REGION_ADC_DATA, &adc, sizeof(adc));
+
+    enum linux_powerctrl_req linux_powerctrl_req = get_linux_powerctrl_req();
 
 
     switch (wbec_ctx.state) {
@@ -153,9 +180,11 @@ void wbec_do_periodic_work(void)
             // Тут ничего не нужно делать
         } else {
             // В ином случае перехватываем питание (выключаем)
-            // И отправляем инофрмацию в уарт
+            // И отправляем информацию в уарт
             wb_power_off();
 
+            // Блокирующая отправка здесь - не страшно,
+            // т.к. устройство в этом состоянии больше ничего не делает
             usart_tx_strn_blocking("Wirenboard Embedded Controller\n");
             usart_tx_strn_blocking("Version: ");
             usart_tx_str_blocking(fwver_chars, ARRAY_SIZE(fwver_chars));
@@ -168,11 +197,18 @@ void wbec_do_periodic_work(void)
             usart_tx_strn_blocking(get_poweron_reason_string(wbec_info.poweron_reason));
             usart_tx_strn_blocking("\n\n");
 
-            // TODO? usart_tx_strn_blocking("Voltages: ");
+            // TODO Display voltages and temp
 
             usart_tx_strn_blocking("Power on now...\n\n");
         }
 
+        // Перед включеним питания сбросим события с кнопки
+        pwrkey_handle_short_press();
+        pwrkey_handle_long_press();
+        // Установим время WDT и запустим его
+        wdt_set_timeout(WDEC_WATCHDOG_INITIAL_TIMEOUT_S);
+        // TODO: uncomment
+        // wdt_start_reset();
         wb_power_on();
         wbec_ctx.state = WBEC_STATE_WORKING;
         break;
@@ -181,47 +217,71 @@ void wbec_do_periodic_work(void)
         // В этом состоянии линукс работает
         // И всё остальное тоже работает
 
+        // Если было короткое нажатие - отправляем в линукс запрос на выключение
+        // И переходим в состояние ожидания выключения
+        if (pwrkey_handle_short_press()) {
+            wdt_stop();
+            irq_set_flag(IRQ_PWR_OFF_REQ);
+            // wb_power_off_and_sleep(WBEC_LINUX_POWER_OFF_DELAY_MS);
+            system_led_blink(250, 250);
+            wbec_ctx.state = WBEC_STATE_WAIT_LINUX_POWER_OFF;
+            wbec_ctx.timestamp = systick_get_system_time();
+        }
 
+        // Если было долгое нажатие - выключаемся сразу
+        if (pwrkey_handle_long_press()) {
+            wb_power_off_and_sleep(0);
+            // TODO Put info to uart
+            // standby
+        }
+
+        if (linux_powerctrl_req == LINUX_POWERCTRL_OFF) {
+            // Если прилетел запрос из линукса на выключение - выключаем питание
+            // TODO Дополнительно тут можно проверить наличие будильника
+
+        } else if (linux_powerctrl_req == LINUX_POWERCTRL_REBOOT) {
+            // Если запрос на перезагрузку - перезагружается
+            wbec_info.poweron_reason = REASON_REBOOT;
+            wbec_ctx.state = WBEC_STATE_WAIT_POWER_RESET;
+            wbec_ctx.timestamp = systick_get_system_time();
+        }
+
+        // Если сработал WDT - перезагрузаемся по питанию
+        if (wdt_handle_timed_out()) {
+            system_led_blink(50, 50);
+            wb_power_reset();
+            wbec_info.poweron_reason = REASON_WATHDOG;
+            wbec_ctx.state = WBEC_STATE_WAIT_POWER_RESET;
+            wbec_ctx.timestamp = systick_get_system_time();
+        }
 
         break;
 
-    }
+    case WBEC_STATE_WAIT_LINUX_POWER_OFF:
+        // В это состояние попадаем после короткого нажатия кнопки
+        // Запрос на выключение в линукс уже отправлен (бит в регистре установлен)
+        // Тут нужно подождать и если линукс не отправит запрос на
+        // выключение питания - то выключить его принудительно
 
+        if (linux_powerctrl_req == LINUX_POWERCTRL_OFF) {
+            // Штатное выключение
 
-
-    // Power off request from button
-    if (pwrkey_handle_short_press()) {
-        wdt_stop();
-        irq_set_flag(IRQ_PWR_OFF_REQ);
-        wb_power_off_and_sleep(WBEC_LINUX_POWER_OFF_DELAY_MS);
-        system_led_blink(250, 250);
-    }
-
-    // Immediately power off from button
-    if (pwrkey_handle_long_press()) {
-        wb_power_off_and_sleep(0);
-    }
-
-    // Linux is ready to power off
-    if (regmap_is_region_changed(REGMAP_REGION_POWER_CTRL)) {
-        struct REGMAP_POWER_CTRL p;
-        regmap_get_region_data(REGMAP_REGION_POWER_CTRL, &p, sizeof(p));
-        if (p.off) {
-            wb_power_off_and_sleep(0);
-        }
-        if (p.reboot) {
-            wdt_stop();
-            system_led_blink(50, 50);
-            wb_power_reset();
+        } else if (systick_get_time_since_timestamp(wbec_ctx.timestamp) >= WBEC_LINUX_POWER_OFF_DELAY_MS) {
+            // Аварийное выключение (можно как-то дополнительно обработать)
         }
 
-        regmap_clear_changed(REGMAP_REGION_POWER_CTRL);
-    }
+        break;
 
-    // Check watchdog timed out
-    if (wdt_handle_timed_out()) {
-        system_led_blink(50, 50);
-        wb_power_reset();
+    case WBEC_STATE_WAIT_POWER_RESET:
+        // В это состояние попадаем, когда нужно дернуть питание для перезагрузки
+        // Тут нужно подождать, пока разрядятся конденсаторы и перейти в INIT
+        // Где всё заново включится
+
+        if (systick_get_time_since_timestamp(wbec_ctx.timestamp) >= WBEC_POWER_RESET_TIME_MS) {
+            wbec_ctx.state = WBEC_STATE_VOLTAGE_CHECK;
+        }
+
+        break;
     }
 }
 
