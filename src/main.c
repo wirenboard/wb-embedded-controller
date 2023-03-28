@@ -1,6 +1,6 @@
 #include "wbmcu_system.h"
-#include "gpio.h"
 #include "spi-slave.h"
+#include "regmap-int.h"
 #include "rtc.h"
 #include "system-led.h"
 #include "adc.h"
@@ -35,6 +35,15 @@ static inline void rcc_set_hsi_pll_64mhz_clock(void)
 int main(void)
 {
     rcc_set_hsi_pll_64mhz_clock();
+
+    RCC->IOPENR |= RCC_IOPENR_GPIOAEN;
+    RCC->IOPENR |= RCC_IOPENR_GPIOBEN;
+    RCC->IOPENR |= RCC_IOPENR_GPIOCEN;
+    RCC->IOPENR |= RCC_IOPENR_GPIODEN;
+
+    // Init drivers
+    spi_slave_init();
+    regmap_init();
 
     RCC->IOPENR |= RCC_IOPENR_GPIOAEN;
     RCC->IOPENR |= RCC_IOPENR_GPIOBEN;

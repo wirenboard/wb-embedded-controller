@@ -1,5 +1,4 @@
 #include "spi-slave.h"
-#include "config.h"
 #include "array_size.h"
 #include "gpio.h"
 #include "regmap-ext.h"
