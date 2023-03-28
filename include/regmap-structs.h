@@ -10,6 +10,7 @@
         /* -//- */  uint16_t fw_ver_minor : 8; \
         /* 0x04 */  uint16_t fw_ver_patch : 8; \
         /* -//- */  int16_t fw_ver_suffix : 8; \
+        /* 0x05 */  uint16_t poweron_reason; \
     ) \
     /*     Addr     Name            RO/RW */ \
     m(     0x10,    RTC_TIME,       RW, \
