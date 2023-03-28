@@ -12,6 +12,7 @@
 #include "wdt.h"
 #include "wb-power.h"
 #include "gpio-subsystem.h"
+#include "usart_tx.h"
 
 
 static inline void rcc_set_hsi_pll_64mhz_clock(void)
@@ -51,6 +52,7 @@ int main(void)
     adc_init();
     spi_slave_init();
     rtc_init();
+    usart_init();
 
     // Init subsystems
     irq_init();
