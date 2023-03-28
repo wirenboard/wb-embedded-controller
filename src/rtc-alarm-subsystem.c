@@ -2,6 +2,13 @@
 #include "regmap-int.h"
 #include "irq-subsystem.h"
 
+/**
+ * Модуль занимается:
+ *  - перекладывает данные из RTC в regmap, при этом конвертирует их из BCD в обычный код
+ *  - проверяет, записаны ли регистры RTC снаружи и переписывает их из regmap в RTC
+ *  - выставляет флаг будильника в IRQ, если он сработал
+ */
+
 void rtc_alarm_do_periodic_work(void)
 {
     if (rtc_get_ready_read()) {
