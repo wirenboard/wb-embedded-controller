@@ -10,7 +10,6 @@
 #include "pwrkey.h"
 #include "systick.h"
 #include "wdt.h"
-#include "wb-power.h"
 #include "gpio-subsystem.h"
 #include "usart_tx.h"
 
@@ -55,7 +54,6 @@ int main(void)
     // Init drivers
     systick_init();
     gpio_init();
-    wb_power_init();
     system_led_init();
     pwrkey_init();
     adc_init();
@@ -74,7 +72,6 @@ int main(void)
     while (1) {
         // Drivers
         adc_do_periodic_work();
-        wb_power_do_periodic_work();
         system_led_do_periodic_work();
         pwrkey_do_periodic_work();
         wdt_do_periodic_work();
