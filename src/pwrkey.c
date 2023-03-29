@@ -2,7 +2,26 @@
 #include "config.h"
 #include "gpio.h"
 #include "systick.h"
+#include "assert.h"
 
+/**
+ * Модуль ловит события с кнопки включения питания:
+ *  - короткое нажатие
+ *  - длинное нажатие
+ *
+ * Также занимается подавлением дребезга
+ * и настраивает кнопку питания как источник пробуждения из standby
+ *
+ * На данный момент поддерживается только GPIOA!
+ * Для других портов требуются доработки по части подтяжки в режиме standby
+ */
+
+
+static_assert(EC_GPIO_PWRKEY_WKUP_NUM >= 1 && EC_GPIO_PWRKEY_WKUP_NUM <= 6, "Unsupported WKUP number");
+
+static const gpio_pin_t pwrkey_gpio = { EC_GPIO_PWRKEY };
+
+// Состояние gpio. Используется для подавления дребезга
 struct pwrkey_gpio_ctx {
     systime_t timestamp;
     bool prev_gpio_state;
@@ -10,6 +29,7 @@ struct pwrkey_gpio_ctx {
     bool initializated;
 };
 
+// Состояние кнопки после антидребезга. Используется для детектирования нажатий
 struct pwrkey_logic_ctx {
     systime_t timestamp;
     bool prev_logic_state;
@@ -23,20 +43,38 @@ static struct pwrkey_logic_ctx logic_ctx;
 
 static inline bool get_pwrkey_state(void)
 {
-    return !GPIO_TEST(PWR_KEY_PORT, PWR_KEY_PIN);
+    #ifdef EC_GPIO_PWRKEY_ACTIVE_LOW
+        return !GPIO_S_TEST(pwrkey_gpio);
+    #else
+        return GPIO_S_TEST(pwrkey_gpio);
+    #endif
 }
 
 void pwrkey_init(void)
 {
-    GPIO_SET_INPUT(PWR_KEY_PORT, PWR_KEY_PIN);
-    GPIO_SET_PULLUP(PWR_KEY_PORT, PWR_KEY_PIN);
+    GPIO_S_SET_INPUT(pwrkey_gpio);
+    GPIO_S_SET_PULLUP(pwrkey_gpio);
+
+    #ifdef EC_GPIO_PWRKEY_ACTIVE_LOW
+        // Подтяжка вверх для кнопки питания в standby (кнопка замыкает вход на землю)
+        PWR->PUCRA |= (1 << pwrkey_gpio.pin);
+        // Set falling edge as wakeup trigger
+        PWR->CR4 |= (1 << (EC_GPIO_PWRKEY_WKUP_NUM - 1));
+    #else
+        PWR->PDCRA |= (1 << pwrkey_gpio.pin);
+    #endif
+
+    // Set BUTTON pin as wakeup source
+    PWR->CR3 |= (1 << (EC_GPIO_PWRKEY_WKUP_NUM - 1));
 }
 
 void pwrkey_do_periodic_work(void)
 {
     bool current_state = get_pwrkey_state();
 
-    // Wait for button released after startup
+    // После включения питания кнопка может быть нажата
+    // (если кнопка и есть источник включения)
+    // Поэтому прежде чем делать всё остальное, нужно подождать пока кнопку отпустят
     if (!gpio_ctx.initializated) {
         if (current_state) {
             gpio_ctx.timestamp = systick_get_system_time();

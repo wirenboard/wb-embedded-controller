@@ -3,13 +3,9 @@
 
 #define F_CPU       64000000
 
-#define PWRKEY_DEBOUNCE_MS                  50
-#define PWRKEY_LONG_PRESS_TIME_MS           3000
+
 
 #define EC_GPIO_LINUX_POWER                 GPIOD, 2
-
-#define PWR_KEY_PORT        GPIOA
-#define PWR_KEY_PIN         0
 
 #define INT_PORT            GPIOB
 #define INT_PIN             5
@@ -61,3 +57,10 @@
 // TODO GPIOC, 6
 #define EC_GPIO_LED                     GPIOB, 1
 #define EC_GPIO_LED_ACTIVE_HIGH
+
+// Кнопка включения
+#define EC_GPIO_PWRKEY                  GPIOA, 0
+#define EC_GPIO_PWRKEY_ACTIVE_LOW       1
+#define EC_GPIO_PWRKEY_WKUP_NUM         1
+#define PWRKEY_DEBOUNCE_MS              50
+#define PWRKEY_LONG_PRESS_TIME_MS       3000

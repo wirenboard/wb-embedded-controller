@@ -185,16 +185,8 @@ void wbec_init(void)
     // Таким образом, в standby линукс будет выключен
     PWR->PDCRD |= (1 << gpio_linux_power.pin);
 
-    // Подтяжка вверх для кнопки питания в standby (кнопка замыкает вход на землю)
-    PWR->PUCRA |= (1 << PWR_KEY_PIN);
-
     // Enable internal wakeup line (for RTC)
     PWR->CR3 |= PWR_CR3_EIWUL;
-
-    // Set BUTTON pin as wakeup source
-    PWR->CR3 |= PWR_CR3_EWUP1;
-    // Set falling edge as wakeup trigger
-    PWR->CR4 |= PWR_CR4_WP1;
 
     wbec_info.poweron_reason = get_poweron_reason();
 
