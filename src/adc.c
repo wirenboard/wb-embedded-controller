@@ -5,12 +5,6 @@
 #include <stdbool.h>
 #include "systick.h"
 
-#define ADC_CAL_VREF_MV                 3000
-// TS ADC raw data acquired at a temperature of 30 °C (± 5 °C), VDDA = VREF+ = 3.0 V (± 10 mV)
-#define ADC_CAL_TS                      (*((uint16_t*)0x1FFF75A8))
-// Raw data acquired at a temperature of 30 °C (± 5 °C), VDDA = VREF+ = 3.0 V (± 10 mV)
-#define ADC_CAL_VREFINT                 (*((uint16_t*)0x1FFF75AA))
-
 #define ADC_FILTRATION_PERIOD_MS        5
 #define ADC_NO_GPIO_PIN                 0
 
@@ -57,10 +51,12 @@ static inline fix16_t calculate_rc_factor(uint32_t tau_ms)
 
 void adc_init(void)
 {
-    // Init VREF EN GPIO
-    GPIO_SET_PUSHPULL(GPIO_VREF_EN_PORT, GPIO_VREF_EN_PIN);
-    GPIO_SET_OUTPUT(GPIO_VREF_EN_PORT, GPIO_VREF_EN_PIN);
-    GPIO_SET(GPIO_VREF_EN_PORT, GPIO_VREF_EN_PIN);
+    #ifdef ADC_VREF_EXT_EN_GPIO
+        const gpio_pin_t vref_en_gpio = { ADC_VREF_EXT_EN_GPIO };
+        GPIO_S_SET_PUSHPULL(vref_en_gpio);
+        GPIO_S_SET_OUTPUT(vref_en_gpio);
+        GPIO_S_SET(vref_en_gpio);
+    #endif
 
     // init DMA
     RCC->AHBENR |= RCC_AHBENR_DMA1EN;

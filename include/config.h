@@ -10,9 +10,6 @@
 #define INT_PORT            GPIOB
 #define INT_PIN             5
 
-#define GPIO_VREF_EN_PORT   GPIOD
-#define GPIO_VREF_EN_PIN    1
-
 #define WBEC_ID             0xD2
 
 #ifndef MODBUS_DEVICE_FW_VERSION_NUMBERS
@@ -25,24 +22,6 @@
 #define WBEC_LINUX_POWER_OFF_DELAY_MS           60000
 
 
-#define ADC_VREF_EXT_MV                 3300 /* TODO 2500 */
-#define NTC_RES_KOHM                    10
-#define NTC_PULLUP_RES_KOHM             36 /*TODO 33 */
-
-// TODO Add other channels
-#define ADC_CHANNELS_DESC(macro) \
-        /*    Channel name          ADC CH  PORT    PIN     RC      K          */ \
-        macro(ADC_IN1,              1,      GPIOA,  1,      50,     55.0 / 2.7  ) \
-        macro(ADC_IN2,              2,      GPIOA,  2,      50,     55.0 / 2.7  ) \
-        macro(ADC_IN3,              3,      GPIOA,  3,      50,     55.0 / 2.7  ) \
-        macro(ADC_IN4,              4,      GPIOA,  4,      50,     55.0 / 2.7  ) \
-        macro(ADC_V_IN,             5,      GPIOA,  5,      50,     50.9 / 3.9  /* TODO 55.0 / 2.7 */  ) \
-        macro(ADC_5V,               6,      GPIOA,  6,      50,     23.3 / 10.0 /* TODO 22.0 / 10.0 */ ) \
-        macro(ADC_3V3,              7,      GPIOA,  7,      50,     32.0 / 22.0 ) \
-        macro(ADC_NTC,              8,      GPIOB,  0,      50,     1.0         ) \
-        macro(ADC_VBUS_DEBUG,       11,     GPIOB,  10,      50,     22.0 / 10.0 ) /* TODO CH9, GPIOB1 */ \
-        macro(ADC_VBUS_NETWORK,     10,     GPIOB,  2,      50,     22.0 / 10.0 ) \
-        macro(ADC_HW_VER,           15,     GPIOB,  11,     50,     1.0         ) \
 
 // Линия прерывания от EC в линукс
 // Меняет состояние на активное, если в EC есть флаги событий
@@ -67,3 +46,25 @@
 // Состояние модуля WBMZ
 // WBMZ тянет вход вниз, если работает step-up на WBMZ
 #define EC_GPIO_STATUS_BAT              GPIOB, 5
+
+
+// Конфигурация АЦП
+#define ADC_VREF_EXT_MV                 2500
+#define ADC_VREF_EXT_EN_GPIO            GPIOD, 3
+#define NTC_RES_KOHM                    10
+#define NTC_PULLUP_RES_KOHM             33
+
+#define ADC_CHANNELS_DESC(macro) \
+        /*    Channel name          ADC CH  PORT    PIN     RC      K              */ \
+        macro(ADC_IN1,              10,     GPIOB,  2,      50,     1               ) \
+        macro(ADC_IN2,              11,     GPIOB,  10,     50,     1               ) \
+        macro(ADC_IN3,              15,     GPIOB,  11,     50,     1               ) \
+        macro(ADC_IN4,              16,     GPIOB,  12,     50,     1               ) \
+        macro(ADC_V_IN,             9,      GPIOB,  1,      50,     210.0 / 10.0    ) \
+        macro(ADC_5V,               8,      GPIOB,  0,      50,     22.0 / 10.0     ) \
+        macro(ADC_3V3,              7,      GPIOA,  7,      50,     32.0 / 22.0     ) \
+        macro(ADC_NTC,              6,      GPIOA,  6,      50,     1               ) \
+        macro(ADC_VBUS_DEBUG,       4,      GPIOA,  4,      50,     22.0 / 10.0     ) \
+        macro(ADC_VBUS_NETWORK,     5,      GPIOA,  5,      50,     22.0 / 10.0     ) \
+        macro(ADC_HW_VER,           2,      GPIOA,  2,      50,     1               ) \
+
