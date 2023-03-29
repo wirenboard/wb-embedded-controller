@@ -149,7 +149,7 @@ void adc_do_periodic_work(void)
             adc_ctx.lowpass_values[i] = fix16_from_int(adc_ctx.raw_values[i]);
         }
         adc_ctx.initialized = 1;
-        adc_ctx.timestamp = systick_get_system_time();
+        adc_ctx.timestamp = systick_get_system_time_ms();
         return;
     }
 

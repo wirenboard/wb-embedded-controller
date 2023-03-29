@@ -21,7 +21,7 @@ void wdt_set_timeout(uint8_t secs)
 
 void wdt_start_reset(void)
 {
-    wdt_ctx.timestamp = systick_get_system_time();
+    wdt_ctx.timestamp = systick_get_system_time_ms();
     wdt_ctx.run = 1;
 }
 

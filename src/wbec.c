@@ -279,7 +279,7 @@ void wbec_do_periodic_work(void)
             irq_set_flag(IRQ_PWR_OFF_REQ);
             system_led_blink(250, 250);
             wbec_ctx.state = WBEC_STATE_WAIT_LINUX_POWER_OFF;
-            wbec_ctx.timestamp = systick_get_system_time();
+            wbec_ctx.timestamp = systick_get_system_time_ms();
         }
 
         // Если было долгое нажатие - выключаемся сразу
@@ -305,13 +305,13 @@ void wbec_do_periodic_work(void)
                 usart_tx_strn_blocking("\nAlarm not set, reboot system instead of power off.\n\n");
                 wbec_info.poweron_reason = REASON_REBOOT_NO_ALARM;
                 wbec_ctx.state = WBEC_STATE_WAIT_POWER_RESET;
-                wbec_ctx.timestamp = systick_get_system_time();
+                wbec_ctx.timestamp = systick_get_system_time_ms();
             }
         } else if (linux_powerctrl_req == LINUX_POWERCTRL_REBOOT) {
             // Если запрос на перезагрузку - перезагружается
             wbec_info.poweron_reason = REASON_REBOOT;
             wbec_ctx.state = WBEC_STATE_WAIT_POWER_RESET;
-            wbec_ctx.timestamp = systick_get_system_time();
+            wbec_ctx.timestamp = systick_get_system_time_ms();
             linux_power_off();
             usart_tx_strn_blocking("\nReboot request, reset power.\n\n");
         }
@@ -321,7 +321,7 @@ void wbec_do_periodic_work(void)
             system_led_blink(50, 50);
             wbec_info.poweron_reason = REASON_WATHDOG;
             wbec_ctx.state = WBEC_STATE_WAIT_POWER_RESET;
-            wbec_ctx.timestamp = systick_get_system_time();
+            wbec_ctx.timestamp = systick_get_system_time_ms();
             linux_power_off();
             usart_tx_strn_blocking("\nWatchdog is timed out, reset power.\n\n");
         }
