@@ -21,3 +21,10 @@
 #define EC_GPIO_PWRKEY_WKUP_NUM         1
 #define PWRKEY_DEBOUNCE_MS              50
 #define PWRKEY_LONG_PRESS_TIME_MS       3000
+
+// Включение V_OUT
+#define EC_GPIO_VOUT_EN                 GPIOA, 15
+
+// Состояние модуля WBMZ
+// WBMZ тянет вход вниз, если работает step-up на WBMZ
+#define EC_GPIO_STATUS_BAT              GPIOB, 5
