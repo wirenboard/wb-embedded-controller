@@ -4,6 +4,17 @@
 #include "systick.h"
 #include <stdbool.h>
 
+/**
+ * Модуль управляет ситемным светодиодом
+ *
+ * Есть несколько режимов:
+ *  - выключен
+ *  - включен
+ *  - мигание с заданным временем паузы/свечения
+ */
+
+static const gpio_pin_t system_led_gpio = { EC_GPIO_LED };
+
 enum led_mode {
     LED_OFF,
     LED_ON,
@@ -22,21 +33,29 @@ static struct led_ctx led_ctx = {};
 
 static inline void led_gpio_on(void)
 {
-    GPIO_SET(SYSTEM_LED_PORT, SYSTEM_LED_PIN);
+    #ifdef EC_GPIO_LED_ACTIVE_HIGH
+        GPIO_S_SET(system_led_gpio);
+    #else
+        GPIO_S_RESET(system_led_gpio);
+    #endif
     led_ctx.state = 1;
 }
 
 static inline void led_gpio_off(void)
 {
-    GPIO_RESET(SYSTEM_LED_PORT, SYSTEM_LED_PIN);
+    #ifdef EC_GPIO_LED_ACTIVE_HIGH
+        GPIO_S_RESET(system_led_gpio);
+    #else
+        GPIO_S_SET(system_led_gpio);
+    #endif
     led_ctx.state = 0;
 }
 
 void system_led_init(void)
 {
     led_gpio_off();
-    GPIO_SET_OUTPUT(SYSTEM_LED_PORT, SYSTEM_LED_PIN);
-    GPIO_SET_PUSHPULL(SYSTEM_LED_PORT, SYSTEM_LED_PIN);
+    GPIO_S_SET_PUSHPULL(system_led_gpio);
+    GPIO_S_SET_OUTPUT(system_led_gpio);
 }
 
 void system_led_disable(void)

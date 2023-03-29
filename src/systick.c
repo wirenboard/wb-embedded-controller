@@ -2,6 +2,14 @@
 #include "wbmcu_system.h"
 #include "config.h"
 
+/**
+ * Модуль считает время с дискретностью 1 мс
+ * Используется SysTick таймер
+ *
+ * Функция systick_get_time_since_timestamp позволяет получить время,
+ * прошедшее с момента сохраненной метки времени
+ */
+
 static systime_t system_time = 0;
 
 static void systick_irq_handler(void)

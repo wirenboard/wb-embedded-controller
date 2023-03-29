@@ -14,9 +14,6 @@
 #define INT_PORT            GPIOB
 #define INT_PIN             5
 
-#define SYSTEM_LED_PORT     GPIOB
-#define SYSTEM_LED_PIN      1
-
 #define GPIO_VREF_EN_PORT   GPIOD
 #define GPIO_VREF_EN_PIN    1
 
@@ -58,3 +55,9 @@
 // Меняет состояние на активное, если в EC есть флаги событий
 #define EC_GPIO_INT                     GPIOB, 5
 #define EC_GPIO_INT_ACTIVE_HIGH
+
+// Светодиод для индикации режима работы EC
+// Установлен на плате, снаружи не виден
+// TODO GPIOC, 6
+#define EC_GPIO_LED                     GPIOB, 1
+#define EC_GPIO_LED_ACTIVE_HIGH
