@@ -21,12 +21,18 @@ enum led_mode {
     LED_BLINK,
 };
 
+enum led_time_settings {
+    LED_TIME_ON,
+    LED_TIME_OFF,
+
+    LED_TIME_COUNT,
+};
+
 struct led_ctx {
     enum led_mode mode;
     systime_t timestamp;
-    bool state;
-    uint16_t on_time_ms;
-    uint16_t off_time_ms;
+    uint8_t state;
+    uint16_t time[LED_TIME_COUNT];
 };
 
 static struct led_ctx led_ctx = {};
@@ -77,9 +83,9 @@ void system_led_enable(void)
 void system_led_blink(uint16_t on_ms, uint16_t off_ms)
 {
     led_ctx.mode = LED_BLINK;
-    led_ctx.on_time_ms = on_ms;
-    led_ctx.off_time_ms = off_ms;
-    led_ctx.timestamp = systick_get_system_time();
+    led_ctx.time[LED_TIME_ON] = on_ms;
+    led_ctx.time[LED_TIME_OFF] = off_ms;
+    led_ctx.timestamp = systick_get_system_time_ms();
 }
 
 void system_led_do_periodic_work(void)
@@ -88,7 +94,10 @@ void system_led_do_periodic_work(void)
         return;
     }
 
-    systime_t delay = led_ctx.state ? led_ctx.off_time_ms : led_ctx.on_time_ms;
+    // state принимает значения 0 или 1, используем его как индекс массива для получения
+    // времени ожидания
+    // Если светодиод сейчас выключен (state == 0), нужно получить время до включения (LED_TIME_ON == 0)
+    systime_t delay = led_ctx.time[led_ctx.state];
     if (systick_get_time_since_timestamp(led_ctx.timestamp) < delay) {
         return;
     }
@@ -98,5 +107,5 @@ void system_led_do_periodic_work(void)
     } else {
         led_gpio_on();
     }
-    led_ctx.timestamp = systick_get_system_time();
+    led_ctx.timestamp = systick_get_system_time_ms();
 }
