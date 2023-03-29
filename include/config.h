@@ -12,8 +12,7 @@
 
 // Светодиод для индикации режима работы EC
 // Установлен на плате, снаружи не виден
-// TODO GPIOC, 6
-#define EC_GPIO_LED                     GPIOB, 1
+#define EC_GPIO_LED                     GPIOC, 6
 #define EC_GPIO_LED_ACTIVE_HIGH
 
 // Кнопка включения
