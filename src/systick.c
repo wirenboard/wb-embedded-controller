@@ -10,16 +10,16 @@
  * прошедшее с момента сохраненной метки времени
  */
 
-static systime_t system_time = 0;
+static systime_t system_time_ms = 0;
 
 static void systick_irq_handler(void)
 {
-    system_time++;
+    system_time_ms++;
 }
 
 void systick_init(void)
 {
-    system_time = 0;
+    system_time_ms = 0;
 
     SysTick->VAL = 0;
     SysTick->LOAD = F_CPU / 8 / 1000 - 1;
@@ -28,12 +28,12 @@ void systick_init(void)
     NVIC_EnableIRQ(SysTick_IRQn);
 }
 
-systime_t systick_get_system_time(void)
+systime_t systick_get_system_time_ms(void)
 {
-    return system_time;
+    return system_time_ms;
 }
 
 systime_t systick_get_time_since_timestamp(systime_t timestamp)
 {
-    return (int32_t)(system_time - timestamp);
+    return (int32_t)(system_time_ms - timestamp);
 }

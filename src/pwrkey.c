@@ -79,7 +79,7 @@ void pwrkey_do_periodic_work(void)
     // Поэтому прежде чем делать всё остальное, нужно подождать пока кнопку отпустят
     if (!gpio_ctx.initializated) {
         if (current_state) {
-            gpio_ctx.timestamp = systick_get_system_time();
+            gpio_ctx.timestamp = systick_get_system_time_ms();
         } else {
             if (systick_get_time_since_timestamp(gpio_ctx.timestamp) > PWRKEY_DEBOUNCE_MS) {
                 gpio_ctx.initializated = 1;
@@ -91,7 +91,7 @@ void pwrkey_do_periodic_work(void)
     // If GPIO state changed - save timestamp
     if (gpio_ctx.prev_gpio_state != current_state) {
         gpio_ctx.prev_gpio_state = current_state;
-        gpio_ctx.timestamp = systick_get_system_time();
+        gpio_ctx.timestamp = systick_get_system_time_ms();
     }
 
     // If logic state and GPIO state differs - check debounce time elapsed
@@ -107,7 +107,7 @@ void pwrkey_do_periodic_work(void)
         logic_ctx.prev_logic_state = gpio_ctx.logic_state;
         if (gpio_ctx.logic_state) {
             // If button pressed - save timestamp
-            logic_ctx.timestamp = systick_get_system_time();
+            logic_ctx.timestamp = systick_get_system_time_ms();
             logic_ctx.long_pressed_detected = 0;
         } else {
             // If button released - check that it is not long press
