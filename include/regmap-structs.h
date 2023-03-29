@@ -65,6 +65,7 @@
         /* -//- */  uint16_t a3 : 1; \
         /* -//- */  uint16_t a4 : 1; \
         /* -//- */  uint16_t v_out : 1; \
+        /* -//- */  uint16_t status_bat : 1; \
     ) \
     /*     Addr     Name            RO/RW */ \
     m(     0x90,    WDT,            RW, \
