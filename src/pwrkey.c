@@ -45,7 +45,7 @@ static inline bool get_pwrkey_state(void)
 {
     #ifdef EC_GPIO_PWRKEY_ACTIVE_LOW
         return !GPIO_S_TEST(pwrkey_gpio);
-    #else
+    #elif EC_GPIO_PWRKEY_ACTIVE_HIGH
         return GPIO_S_TEST(pwrkey_gpio);
     #endif
 }
@@ -60,8 +60,10 @@ void pwrkey_init(void)
         PWR->PUCRA |= (1 << pwrkey_gpio.pin);
         // Set falling edge as wakeup trigger
         PWR->CR4 |= (1 << (EC_GPIO_PWRKEY_WKUP_NUM - 1));
-    #else
+    #elif EC_GPIO_PWRKEY_ACTIVE_HIGH
         PWR->PDCRA |= (1 << pwrkey_gpio.pin);
+    #else
+        #error "pwrkey polarity not defined
     #endif
 
     // Set BUTTON pin as wakeup source
