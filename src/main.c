@@ -4,6 +4,9 @@
 #include "rtc.h"
 #include "rtc-alarm-subsystem.h"
 #include "irq-subsystem.h"
+#include "system-led.h"
+#include "pwrkey.h"
+#include "systick.h"
 
 
 static inline void rcc_set_hsi_pll_64mhz_clock(void)
@@ -32,7 +35,12 @@ int main(void)
     RCC->IOPENR |= RCC_IOPENR_GPIOCEN;
     RCC->IOPENR |= RCC_IOPENR_GPIODEN;
 
+    RCC->APBENR1 |= RCC_APBENR1_PWREN;
+
     // Init drivers
+    systick_init();
+    system_led_init();
+    pwrkey_init();
     spi_slave_init();
     regmap_init();
     rtc_init();
@@ -41,7 +49,13 @@ int main(void)
     // Init subsystems
     irq_init();
 
+    system_led_blink(500, 1000);
+
     while (1) {
+        // Drivers
+        system_led_do_periodic_work();
+        pwrkey_do_periodic_work();
+
         // Sybsystems
         rtc_alarm_do_periodic_work();
         irq_do_periodic_work();
