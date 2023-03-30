@@ -10,7 +10,7 @@
 #define INT_PORT            GPIOB
 #define INT_PIN             5
 
-#define WBEC_ID             0xD2
+#define WBEC_ID             0x3CD2
 
 #ifndef MODBUS_DEVICE_FW_VERSION_NUMBERS
 #define MODBUS_DEVICE_FW_VERSION_NUMBERS 1,0,0,0
