@@ -13,7 +13,22 @@
  * инициализацию lowpass фильтра и фильтрацию значений
  *
  * Функция adc_get_ch_mv позволяет получить значение в mV
- */
+ *
+ * Конфигурация каналов задается макросом:
+ *
+ * #define ADC_CHANNELS_DESC(macro) \
+ *          Channel name          ADC CH  PORT    PIN     RC      K                 \
+ *    macro(ADC_IN1,              10,     GPIOB,  2,      50,     1               ) \
+ *    macro(ADC_IN2,              11,     GPIOB,  10,     50,     1.0 / 11.0      ) \
+ *
+ * Channel name - имя канала, превращается в enum ADC_CHANNEL_<name>
+ * ADC CH - номер канала АЦП МК
+ * PORT, PIN - GPIO
+ * RC - постоянная RC (можно поменять в рантайме)
+ * K - коэффициент пересчёта (делитель, в примере выше 1к + 10к). Если делителя нет, указать 1
+ *
+ * Если используются внутренние каналы, то вместо PORT и PIN указать ADC_NO_GPIO_PIN
+*/
 
 #define ADC_FILTRATION_PERIOD_MS        5
 #define ADC_NO_GPIO_PIN                 0
@@ -132,13 +147,17 @@ void adc_set_lowpass_rc(enum adc_channel channel, uint16_t rc_ms)
     adc_ctx.lowpass_factors[i] = calculate_rc_factor(rc_ms);
 }
 
-fix16_t adc_get_ch_raw(enum adc_channel channel)
+// Возвращает единицы АЦП после lowpass фильтра
+// [0, 4095] в целой части
+// и результат усреднения в дробной части
+fix16_t adc_get_ch_adc_raw(enum adc_channel channel)
 {
     uint8_t i = ADC_CHANNEL_INDEX(channel);
 
     return adc_ctx.lowpass_values[i];
 }
 
+// Возвращает милливольты с учётом делителя (K) после lowpass фильтра
 uint16_t adc_get_ch_mv(enum adc_channel channel)
 {
     uint8_t i = ADC_CHANNEL_INDEX(channel);

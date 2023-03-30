@@ -124,7 +124,7 @@ static fix16_t ntc_kohm_to_temp(fix16_t ntc_kohm)
     return temp;
 }
 
-fix16_t ntc_get_temp(fix16_t adc_val)
+fix16_t ntc_convert_adc_raw_to_temp(fix16_t adc_val)
 {
     fix16_t kohm = ntc_get_res_kohm(adc_val);
 

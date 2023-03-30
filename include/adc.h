@@ -13,6 +13,6 @@ enum adc_channel {
 
 void adc_init(void);
 void adc_set_lowpass_rc(enum adc_channel channel, uint16_t rc_ms);
-fix16_t adc_get_ch_raw(enum adc_channel channel);
+fix16_t adc_get_ch_adc_raw(enum adc_channel channel);
 uint16_t adc_get_ch_mv(enum adc_channel channel);
 void adc_do_periodic_work(void);
