@@ -5,6 +5,7 @@
 #include "rtc-alarm-subsystem.h"
 #include "irq-subsystem.h"
 #include "system-led.h"
+#include "adc.h"
 #include "pwrkey.h"
 #include "systick.h"
 #include "gpio-subsystem.h"
@@ -43,6 +44,7 @@ int main(void)
     gpio_init();
     system_led_init();
     pwrkey_init();
+    adc_init();
     spi_slave_init();
     regmap_init();
     rtc_init();
@@ -55,6 +57,7 @@ int main(void)
 
     while (1) {
         // Drivers
+        adc_do_periodic_work();
         system_led_do_periodic_work();
         pwrkey_do_periodic_work();
         gpio_do_periodic_work();
