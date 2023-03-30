@@ -7,9 +7,6 @@
 
 #define EC_GPIO_LINUX_POWER                 GPIOD, 2
 
-#define INT_PORT            GPIOB
-#define INT_PIN             5
-
 #define WBEC_ID             0x3CD2
 
 #ifndef MODBUS_DEVICE_FW_VERSION_NUMBERS
