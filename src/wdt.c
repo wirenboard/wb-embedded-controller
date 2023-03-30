@@ -66,7 +66,13 @@ void wdt_do_periodic_work(void)
         struct REGMAP_WDT w;
         regmap_get_region_data(REGMAP_REGION_WDT, &w, sizeof(w));
 
-        wdt_set_timeout(w.timeout);
+        if (w.timeout != wdt_ctx.timeout_s) {
+            wdt_set_timeout(w.timeout);
+            // После установки нового таймаута нужно сбросить watchdog,
+            // т.к. в случае изменения таймаута на меньший возможно ложное срабатывание,
+            // если операции установки таймаута и сброса будут разными посылками в regmap
+            wdt_start_reset();
+        }
         if (w.reset) {
             wdt_start_reset();
         }
