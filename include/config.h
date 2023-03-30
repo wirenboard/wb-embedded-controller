@@ -28,3 +28,25 @@
 // Состояние модуля WBMZ
 // WBMZ тянет вход вниз, если работает step-up на WBMZ
 #define EC_GPIO_STATUS_BAT              GPIOB, 5
+
+
+// Конфигурация АЦП
+#define ADC_VREF_EXT_MV                 2500
+#define ADC_VREF_EXT_EN_GPIO            GPIOD, 3
+#define NTC_RES_KOHM                    10
+#define NTC_PULLUP_RES_KOHM             33
+
+#define ADC_CHANNELS_DESC(macro) \
+        /*    Channel name          ADC CH  PORT    PIN     RC      K              */ \
+        macro(ADC_IN1,              10,     GPIOB,  2,      50,     1               ) \
+        macro(ADC_IN2,              11,     GPIOB,  10,     50,     1               ) \
+        macro(ADC_IN3,              15,     GPIOB,  11,     50,     1               ) \
+        macro(ADC_IN4,              16,     GPIOB,  12,     50,     1               ) \
+        macro(ADC_V_IN,             9,      GPIOB,  1,      50,     210.0 / 10.0    ) \
+        macro(ADC_5V,               8,      GPIOB,  0,      50,     22.0 / 10.0     ) \
+        macro(ADC_3V3,              7,      GPIOA,  7,      50,     32.0 / 22.0     ) \
+        macro(ADC_NTC,              6,      GPIOA,  6,      50,     1               ) \
+        macro(ADC_VBUS_DEBUG,       4,      GPIOA,  4,      50,     22.0 / 10.0     ) \
+        macro(ADC_VBUS_NETWORK,     5,      GPIOA,  5,      50,     22.0 / 10.0     ) \
+        macro(ADC_HW_VER,           2,      GPIOA,  2,      50,     1               ) \
+
