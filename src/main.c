@@ -8,6 +8,7 @@
 #include "adc.h"
 #include "pwrkey.h"
 #include "systick.h"
+#include "wdt.h"
 #include "gpio-subsystem.h"
 
 
@@ -60,6 +61,7 @@ int main(void)
         adc_do_periodic_work();
         system_led_do_periodic_work();
         pwrkey_do_periodic_work();
+        wdt_do_periodic_work();
         gpio_do_periodic_work();
 
         // Sybsystems
