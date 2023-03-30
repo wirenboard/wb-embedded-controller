@@ -143,11 +143,11 @@ static inline void collect_adc_data(struct REGMAP_ADC_DATA * adc)
     adc->vbus_network = adc_get_ch_mv(ADC_CHANNEL_ADC_VBUS_NETWORK);
 
     // Calc NTC temp
-    fix16_t ntc_raw = adc_get_ch_mv(ADC_CHANNEL_ADC_NTC);
+    fix16_t ntc_raw = adc_get_ch_adc_raw(ADC_CHANNEL_ADC_NTC);
     // Convert to x10 *C
     adc->temp = fix16_to_int(
         fix16_mul(
-            ntc_get_temp(ntc_raw),
+            ntc_convert_adc_raw_to_temp(ntc_raw),
             F16(100)
         )
     );
