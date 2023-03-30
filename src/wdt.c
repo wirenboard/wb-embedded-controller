@@ -2,8 +2,20 @@
 #include "systick.h"
 #include "regmap-int.h"
 
+/**
+ * Модуль реализует watchdog через regmap
+ *
+ * Позволяет:
+ *  - задавать таймаут в секундах (как из прошивки, так и через regmap)
+ *  - запускать и останавливать watchdog из прошивки
+ *  - сбрасывать watchdog через regmap
+ *  - ловить событие срабатывания watchdog
+ *
+ * Работает через системное время, не использует аппаратных ресурсов
+ */
+
 struct wdt_ctx {
-    uint8_t timeout_s;
+    uint16_t timeout_s;
     systime_t timestamp;
     bool run;
     bool timed_out;
@@ -11,7 +23,7 @@ struct wdt_ctx {
 
 static struct wdt_ctx wdt_ctx = {};
 
-void wdt_set_timeout(uint8_t secs)
+void wdt_set_timeout(uint16_t secs)
 {
     if (secs == 0) {
         secs = 1;
