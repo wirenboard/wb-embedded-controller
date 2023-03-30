@@ -147,7 +147,9 @@ void adc_set_lowpass_rc(enum adc_channel channel, uint16_t rc_ms)
     adc_ctx.lowpass_factors[i] = calculate_rc_factor(rc_ms);
 }
 
-// Возвращает единицы АЦП [0, 4095] после lowpass фильтра
+// Возвращает единицы АЦП после lowpass фильтра
+// [0, 4095] в целой части
+// и результат усреднения в дробной части
 fix16_t adc_get_ch_adc_raw(enum adc_channel channel)
 {
     uint8_t i = ADC_CHANNEL_INDEX(channel);
