@@ -7,6 +7,7 @@
 #include "system-led.h"
 #include "pwrkey.h"
 #include "systick.h"
+#include "gpio-subsystem.h"
 
 
 static inline void rcc_set_hsi_pll_64mhz_clock(void)
@@ -39,6 +40,7 @@ int main(void)
 
     // Init drivers
     systick_init();
+    gpio_init();
     system_led_init();
     pwrkey_init();
     spi_slave_init();
@@ -55,6 +57,7 @@ int main(void)
         // Drivers
         system_led_do_periodic_work();
         pwrkey_do_periodic_work();
+        gpio_do_periodic_work();
 
         // Sybsystems
         rtc_alarm_do_periodic_work();
