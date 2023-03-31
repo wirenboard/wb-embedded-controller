@@ -70,7 +70,6 @@
     m(     0x90,    WDT,            RW, \
         /* 0x90 */  uint16_t timeout; \
         /* 0x91 */  uint16_t reset : 1; \
-        /* -//- */  uint16_t run : 1; \
     ) \
     /*     Addr     Name            RO/RW */ \
     m(     0xA0,    POWER_CTRL,     RW, \
