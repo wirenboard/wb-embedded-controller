@@ -15,7 +15,7 @@
 
 #define WDEC_WATCHDOG_INITIAL_TIMEOUT_S         60
 
-#define WBEC_POWER_RESET_TIME_MS                500
+#define WBEC_POWER_RESET_TIME_MS                1000
 #define WBEC_LINUX_POWER_OFF_DELAY_MS           60000
 
 
