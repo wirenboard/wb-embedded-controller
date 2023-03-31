@@ -1,4 +1,5 @@
 #include "wdt.h"
+#include "config.h"
 #include "systick.h"
 #include "regmap-int.h"
 
@@ -21,12 +22,16 @@ struct wdt_ctx {
     bool timed_out;
 };
 
-static struct wdt_ctx wdt_ctx = {};
+static struct wdt_ctx wdt_ctx = {
+    .timeout_s = WDEC_WATCHDOG_INITIAL_TIMEOUT_S,
+};
 
 void wdt_set_timeout(uint16_t secs)
 {
     if (secs == 0) {
         secs = 1;
+    } else if (secs > WDEC_WATCHDOG_MAX_TIMEOUT_S) {
+        secs = WDEC_WATCHDOG_MAX_TIMEOUT_S;
     }
     wdt_ctx.timeout_s = secs;
 }
