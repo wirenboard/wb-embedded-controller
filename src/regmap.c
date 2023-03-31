@@ -253,7 +253,7 @@ void regmap_ext_write_reg_autoinc(uint16_t val)
     if (rw_flags[rw_bit_addr] & rw_bit_mask) {
         regs[addr] = val;
         written_flags[rw_bit_addr] |= rw_bit_mask;
-        op_address++;
-        op_address &= REGMAP_ADDRESS_MASK;
     }
+    op_address++;
+    op_address &= REGMAP_ADDRESS_MASK;
 }
