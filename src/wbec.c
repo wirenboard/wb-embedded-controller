@@ -155,21 +155,26 @@ static inline void collect_adc_data(struct REGMAP_ADC_DATA * adc)
 
 static inline enum linux_powerctrl_req get_linux_powerctrl_req(void)
 {
-    // Linux is ready to power off
+    enum linux_powerctrl_req ret = LINUX_POWERCTRL_NO_ACTION;
+
     if (regmap_is_region_changed(REGMAP_REGION_POWER_CTRL)) {
         struct REGMAP_POWER_CTRL p;
         regmap_get_region_data(REGMAP_REGION_POWER_CTRL, &p, sizeof(p));
+        // Linux is ready to power off
         if (p.off) {
-            return LINUX_POWERCTRL_OFF;
+            p.off = 0;
+            ret = LINUX_POWERCTRL_OFF;
         }
         if (p.reboot) {
-            return LINUX_POWERCTRL_REBOOT;
+            p.reboot = 0;
+            ret = LINUX_POWERCTRL_REBOOT;
         }
 
         regmap_clear_changed(REGMAP_REGION_POWER_CTRL);
+        regmap_set_region_data(REGMAP_REGION_POWER_CTRL, &p, sizeof(p));
     }
 
-    return LINUX_POWERCTRL_NO_ACTION;
+    return ret;
 }
 
 void wbec_init(void)
