@@ -2,7 +2,6 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-void wdt_init(void);
 void wdt_set_timeout(uint16_t secs);
 void wdt_start_reset(void);
 void wdt_stop(void);
