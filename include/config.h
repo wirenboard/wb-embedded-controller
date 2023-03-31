@@ -3,6 +3,11 @@
 
 #define F_CPU       64000000
 
+// Таймаут, который устанавливается после включения питания
+// Должен быть больше, чем время загрузки Linux
+#define WDEC_WATCHDOG_INITIAL_TIMEOUT_S         60
+// Максимальный таймаут
+#define WDEC_WATCHDOG_MAX_TIMEOUT_S             600
 
 
 // Линия прерывания от EC в линукс
