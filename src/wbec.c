@@ -270,6 +270,7 @@ void wbec_do_periodic_work(void)
 
         linux_power_on();
         linux_power_gpio_init();
+        system_led_blink(500, 1000);
         wbec_ctx.state = WBEC_STATE_WORKING;
         break;
 
