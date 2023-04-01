@@ -109,7 +109,7 @@ void pwrkey_init(void)
     #elif EC_GPIO_PWRKEY_ACTIVE_HIGH
         PWR->PDCRA |= (1 << pwrkey_gpio.pin);
     #else
-        #error "pwrkey polarity not defined
+        #error "pwrkey polarity not defined"
     #endif
 
     // Set BUTTON pin as wakeup source
