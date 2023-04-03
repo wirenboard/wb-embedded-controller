@@ -243,21 +243,21 @@ void wbec_do_periodic_work(void)
 
             // Блокирующая отправка здесь - не страшно,
             // т.к. устройство в этом состоянии больше ничего не делает
-            usart_tx_strn_blocking("Wirenboard Embedded Controller\r\n");
-            usart_tx_strn_blocking("Version: ");
-            usart_tx_str_blocking(fwver_chars, ARRAY_SIZE(fwver_chars));
-            usart_tx_strn_blocking("\r\n");
-            usart_tx_strn_blocking("Git info: ");
-            usart_tx_strn_blocking(MODBUS_DEVICE_GIT_INFO);
-            usart_tx_strn_blocking("\r\n\n");
+            usart_tx_str_blocking("Wirenboard Embedded Controller\r\n");
+            usart_tx_str_blocking("Version: ");
+            usart_tx_buf_blocking(fwver_chars, ARRAY_SIZE(fwver_chars));
+            usart_tx_str_blocking("\r\n");
+            usart_tx_str_blocking("Git info: ");
+            usart_tx_str_blocking(MODBUS_DEVICE_GIT_INFO);
+            usart_tx_str_blocking("\r\n\n");
 
-            usart_tx_strn_blocking("Power on reason: ");
-            usart_tx_strn_blocking(get_poweron_reason_string(wbec_info.poweron_reason));
-            usart_tx_strn_blocking("\r\n\n");
+            usart_tx_str_blocking("Power on reason: ");
+            usart_tx_str_blocking(get_poweron_reason_string(wbec_info.poweron_reason));
+            usart_tx_str_blocking("\r\n\n");
 
             // TODO Display voltages and temp
 
-            usart_tx_strn_blocking("Power on now...\r\n\n");
+            usart_tx_str_blocking("Power on now...\r\n\n");
         }
 
         // Перед включеним питания сбросим события с кнопки
@@ -291,7 +291,7 @@ void wbec_do_periodic_work(void)
         // Если было долгое нажатие - выключаемся сразу
         if (pwrkey_handle_long_press()) {
             linux_power_off();
-            usart_tx_strn_blocking("\n\rPower key long press detected, power off without delay.\r\n\n");
+            usart_tx_str_blocking("\n\rPower key long press detected, power off without delay.\r\n\n");
             goto_standby();
         }
 
@@ -303,12 +303,12 @@ void wbec_do_periodic_work(void)
             // Поэтому здесь нужно проверить наличие будильника и если он есть - выключиться
             // иначе - перезагрузиться
             linux_power_off();
-            usart_tx_strn_blocking("\n\rPower off request from Linux.\r\n\n");
+            usart_tx_str_blocking("\n\rPower off request from Linux.\r\n\n");
             if (rtc_alarm_is_alarm_enabled()) {
-                usart_tx_strn_blocking("\r\nAlarm is set, power is off.\r\n\n");
+                usart_tx_str_blocking("\r\nAlarm is set, power is off.\r\n\n");
                 goto_standby();
             } else {
-                usart_tx_strn_blocking("\r\nAlarm not set, reboot system instead of power off.\r\n\n");
+                usart_tx_str_blocking("\r\nAlarm not set, reboot system instead of power off.\r\n\n");
                 wbec_info.poweron_reason = REASON_REBOOT_NO_ALARM;
                 wbec_ctx.state = WBEC_STATE_WAIT_POWER_RESET;
                 wbec_ctx.timestamp = systick_get_system_time_ms();
@@ -319,7 +319,7 @@ void wbec_do_periodic_work(void)
             wbec_ctx.state = WBEC_STATE_WAIT_POWER_RESET;
             wbec_ctx.timestamp = systick_get_system_time_ms();
             linux_power_off();
-            usart_tx_strn_blocking("\r\nReboot request, reset power.\r\n\n");
+            usart_tx_str_blocking("\r\nReboot request, reset power.\r\n\n");
         }
 
         // Если сработал WDT - перезагружаемся по питанию
@@ -329,7 +329,7 @@ void wbec_do_periodic_work(void)
             wbec_ctx.state = WBEC_STATE_WAIT_POWER_RESET;
             wbec_ctx.timestamp = systick_get_system_time_ms();
             linux_power_off();
-            usart_tx_strn_blocking("\r\nWatchdog is timed out, reset power.\r\n\n");
+            usart_tx_str_blocking("\r\nWatchdog is timed out, reset power.\r\n\n");
         }
 
         break;
@@ -343,12 +343,12 @@ void wbec_do_periodic_work(void)
         if (linux_powerctrl_req == LINUX_POWERCTRL_OFF) {
             // Штатное выключение (запрос на выключение был с кнопки)
             linux_power_off();
-            usart_tx_strn_blocking("\r\nPower off request from Linux after power key pressed. Power is off.\r\n\n");
+            usart_tx_str_blocking("\r\nPower off request from Linux after power key pressed. Power is off.\r\n\n");
             goto_standby();
         } else if (systick_get_time_since_timestamp(wbec_ctx.timestamp) >= WBEC_LINUX_POWER_OFF_DELAY_MS) {
             // Аварийное выключение (можно как-то дополнительно обработать)
             linux_power_off();
-            usart_tx_strn_blocking("\r\nNo power off request from Linux after power key pressed. Power is forced off.\r\n\n");
+            usart_tx_str_blocking("\r\nNo power off request from Linux after power key pressed. Power is forced off.\r\n\n");
             goto_standby();
         }
 
