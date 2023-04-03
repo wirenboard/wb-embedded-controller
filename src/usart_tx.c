@@ -43,15 +43,15 @@ void usart_init(void)
     D_USART->CR1 |= USART_CR1_TE | USART_CR1_UE;
 }
 
-void usart_tx_str_blocking(const char str[], size_t size)
+void usart_tx_buf_blocking(const void * buf, size_t size)
 {
     for (size_t i = 0; i < size; i++) {
-        usart_transmit_char(str[i]);
+        usart_transmit_char(((const char *)buf)[i]);
     }
     usart_wait_tranmission_complete();
 }
 
-void usart_tx_strn_blocking(const char str[])
+void usart_tx_str_blocking(const char str[])
 {
     while (*str) {
         usart_transmit_char(*str);
