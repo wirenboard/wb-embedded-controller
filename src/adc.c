@@ -162,7 +162,7 @@ uint16_t adc_get_ch_mv(enum adc_channel channel)
 {
     uint8_t i = ADC_CHANNEL_INDEX(channel);
 
-    fix16_t res = fix16_mul(adc_ctx.lowpass_values[i], adc_cfg[i].k);
+    fix16_t res = fix16_mul(adc_ctx.lowpass_values[i], adc_cfg[channel].k);
 
     return fix16_to_int(res);
 }
