@@ -33,7 +33,11 @@ static inline void rcc_set_hsi_pll_64mhz_clock(void)
 
 int main(void)
 {
-    rcc_set_hsi_pll_64mhz_clock();
+    #if F_CPU == 64000000
+        rcc_set_hsi_pll_64mhz_clock();
+    #else
+        #error "Unsupported F_CPU"
+    #endif
 
     RCC->IOPENR |= RCC_IOPENR_GPIOAEN;
     RCC->IOPENR |= RCC_IOPENR_GPIOBEN;
