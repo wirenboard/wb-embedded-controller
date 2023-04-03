@@ -37,7 +37,7 @@
 // USART TX - передача сообщений в Debug Console
 // Выводит сообщения в ту же консоль, что и Linux
 // Подключен через диод к DEBUG_TX
-#define EC_USE_USART1_DEBUG_TX
+#define EC_DEBUG_USART_USE_USART1
 #define EC_DEBUG_USART_BAUDRATE         115200
 #define EC_DEBUG_USART_GPIO             GPIOA, 9
 #define EC_DEBUG_USART_GPIO_AF          1
