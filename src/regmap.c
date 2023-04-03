@@ -94,25 +94,29 @@ static inline bool is_region_rw(enum regmap_region r)
     return (regions_info.rw[r] == REGMAP_RW);
 }
 
+static inline uint32_t addr_to_bit_mask(uint16_t addr)
+{
+    return 1 << (addr & 0x01F);
+}
+
+static inline uint32_t addr_to_bit_addr(uint16_t addr)
+{
+    return addr >> 5;
+}
+
 static inline void set_bit_flag(uint16_t addr, uint32_t bit_array[])
 {
-    uint16_t bit_addr = addr >> 5;              // Адрес элемента массива, в каждом элементе 32 флага
-    uint32_t bit_mask = 1 << (addr & 0x01F);    // Битовая маска, которую нужно применить к элементу
-    bit_array[bit_addr] |= bit_mask;
+    bit_array[addr_to_bit_addr(addr)] |= addr_to_bit_mask(addr);
 }
 
 static inline void clear_bit_flag(uint16_t addr, uint32_t bit_array[])
 {
-    uint16_t bit_addr = addr >> 5;              // Адрес элемента массива, в каждом элементе 32 флага
-    uint32_t bit_mask = 1 << (addr & 0x01F);    // Битовая маска, которую нужно применить к элементу
-    bit_array[bit_addr] &= ~bit_mask;
+    bit_array[addr_to_bit_addr(addr)] &= ~addr_to_bit_mask(addr);
 }
 
 static inline bool get_bit_flag(uint16_t addr, const uint32_t bit_array[])
 {
-    uint16_t bit_addr = addr >> 5;              // Адрес элемента массива, в каждом элементе 32 флага
-    uint32_t bit_mask = 1 << (addr & 0x01F);    // Битовая маска, которую нужно применить к элементу
-    return bit_array[bit_addr] & bit_mask;
+    return bit_array[addr_to_bit_addr(addr)] & addr_to_bit_mask(addr);
 }
 
 void regmap_init(void)
@@ -245,13 +249,12 @@ uint16_t regmap_ext_read_reg_autoinc(void)
 // Выполняется в контексте прерывания
 void regmap_ext_write_reg_autoinc(uint16_t val)
 {
-    uint16_t addr = op_address;
     // Для ускорения не используем функции, т.к. rw_bit_addr и rw_bit_mask нужны в двух местах
-    uint16_t rw_bit_addr = op_address >> 5;
-    uint32_t rw_bit_mask = 1 << (op_address & 0x1F);
+    uint16_t rw_bit_addr = addr_to_bit_addr(op_address);
+    uint32_t rw_bit_mask = addr_to_bit_mask(op_address);
 
     if (rw_flags[rw_bit_addr] & rw_bit_mask) {
-        regs[addr] = val;
+        regs[op_address] = val;
         written_flags[rw_bit_addr] |= rw_bit_mask;
     }
     op_address++;
