@@ -1,29 +1,27 @@
 #pragma once
 #include <stdint.h>
 
-#define F_CPU       64000000
+#define F_CPU                                   64000000
+
+/* ====== Параметры работы EC ====== */
 
 // Таймаут, который устанавливается после включения питания
 // Должен быть больше, чем время загрузки Linux
-#define WDEC_WATCHDOG_INITIAL_TIMEOUT_S         60
+#define WDEC_WATCHDOG_INITIAL_TIMEOUT_S         120
 // Максимальный таймаут
 #define WDEC_WATCHDOG_MAX_TIMEOUT_S             600
 
+// ID, лежит в карте регистров как константа
+#define WBEC_ID                                 0x3CD2
 
-#define EC_GPIO_LINUX_POWER                 GPIOD, 2
-
-#define WBEC_ID             0x3CD2
-
-#ifndef MODBUS_DEVICE_FW_VERSION_NUMBERS
-#define MODBUS_DEVICE_FW_VERSION_NUMBERS 1,0,0,0
-#endif
-
-#define WDEC_WATCHDOG_INITIAL_TIMEOUT_S         60
-
+// Время, на которое выключается питание при перезагрузке
 #define WBEC_POWER_RESET_TIME_MS                1000
+// Время от короткого нажатия кнопки (запрос в линукс)
+// до принудительного выключения (если линукс не ответил)
 #define WBEC_LINUX_POWER_OFF_DELAY_MS           60000
 
 
+/* ====== Подключения EC к Wiren Board ====== */
 
 // Линия прерывания от EC в линукс
 // Меняет состояние на активное, если в EC есть флаги событий
@@ -48,6 +46,11 @@
 // Состояние модуля WBMZ
 // WBMZ тянет вход вниз, если работает step-up на WBMZ
 #define EC_GPIO_STATUS_BAT              GPIOB, 5
+
+// Управляет питанием Linux
+#define EC_GPIO_LINUX_POWER             GPIOD, 2
+
+
 
 // USART TX - передача сообщений в Debug Console
 // Выводит сообщения в ту же консоль, что и Linux
