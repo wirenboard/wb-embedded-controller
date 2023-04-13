@@ -57,11 +57,11 @@ static const struct regions_info regions_info = {
 
 // Состояние regmap
 // Если не объединять в структуру, код работает немного быстрее
-static uint16_t regs[REGMAP_TOTAL_REGS_COUNT];                 // Массив для хранения данных
-static uint32_t written_flags[REGMAP_TOTAL_REGS_COUNT / 32];   // Битовые флаги записи каждого регистра
-static uint32_t rw_flags[REGMAP_TOTAL_REGS_COUNT / 32];        // Признак того, что в регистр можно записывать данные снаружи
-static uint16_t op_address;                                    // Адрес текущей операции
-static bool is_busy;                                           // Флаг занятости regmap
+static uint16_t regs[REGMAP_TOTAL_REGS_COUNT] = {};                 // Массив для хранения данных
+static uint32_t written_flags[REGMAP_TOTAL_REGS_COUNT / 32] = {};   // Битовые флаги записи каждого регистра
+static uint32_t rw_flags[REGMAP_TOTAL_REGS_COUNT / 32] = {};        // Признак того, что в регистр можно записывать данные снаружи
+static uint16_t op_address = 0;                                     // Адрес текущей операции
+static bool is_busy = 0;                                            // Флаг занятости regmap
 
 
 // Возвращает размер региона в байтах
@@ -94,15 +94,38 @@ static inline bool is_region_rw(enum regmap_region r)
     return (regions_info.rw[r] == REGMAP_RW);
 }
 
+static inline uint32_t addr_to_bit_mask(uint16_t addr)
+{
+    return 1 << (addr & 0x01F);
+}
+
+static inline uint32_t addr_to_bit_addr(uint16_t addr)
+{
+    return addr >> 5;
+}
+
+static inline void set_bit_flag(uint16_t addr, uint32_t bit_array[])
+{
+    bit_array[addr_to_bit_addr(addr)] |= addr_to_bit_mask(addr);
+}
+
+static inline void clear_bit_flag(uint16_t addr, uint32_t bit_array[])
+{
+    bit_array[addr_to_bit_addr(addr)] &= ~addr_to_bit_mask(addr);
+}
+
+static inline bool get_bit_flag(uint16_t addr, const uint32_t bit_array[])
+{
+    return bit_array[addr_to_bit_addr(addr)] & addr_to_bit_mask(addr);
+}
+
 void regmap_init(void)
 {
     // Fill RW bits for each register
     for (unsigned r = 0; r < REGMAP_REGION_COUNT; r++) {
         if (is_region_rw(r)) {
             for (unsigned i = region_first_reg(r); i <= region_last_reg(r); i++) {
-                uint16_t bit_addr = i >> 4;
-                uint16_t bit_mask = 1 << (i & 0x0F);
-                rw_flags[bit_addr] |= bit_mask;
+                set_bit_flag(i, rw_flags);
             }
         }
     }
@@ -169,7 +192,7 @@ bool regmap_is_region_changed(enum regmap_region r)
     uint16_t r_end = region_last_reg(r);
 
     for (uint16_t i = r_start; i <= r_end; i++) {
-        if (written_flags[i]) {
+        if (get_bit_flag(i, written_flags)) {
             return 1;
         }
     }
@@ -191,7 +214,7 @@ void regmap_clear_changed(enum regmap_region r)
             return;
         }
         for (uint16_t i = r_start; i <= r_end; i++) {
-            written_flags[i] = 0;
+            clear_bit_flag(i, written_flags);
         }
     }
 }
@@ -226,14 +249,14 @@ uint16_t regmap_ext_read_reg_autoinc(void)
 // Выполняется в контексте прерывания
 void regmap_ext_write_reg_autoinc(uint16_t val)
 {
-    uint16_t addr = op_address;
-    uint16_t rw_bit_addr = op_address >> 4;
-    uint32_t rw_bit_mask = 1 << (op_address & 0x0F);
+    // Для ускорения не используем функции, т.к. rw_bit_addr и rw_bit_mask нужны в двух местах
+    uint16_t rw_bit_addr = addr_to_bit_addr(op_address);
+    uint32_t rw_bit_mask = addr_to_bit_mask(op_address);
 
     if (rw_flags[rw_bit_addr] & rw_bit_mask) {
-        regs[addr] = val;
+        regs[op_address] = val;
         written_flags[rw_bit_addr] |= rw_bit_mask;
-        op_address++;
-        op_address &= REGMAP_ADDRESS_MASK;
     }
+    op_address++;
+    op_address &= REGMAP_ADDRESS_MASK;
 }
