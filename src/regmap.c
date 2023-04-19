@@ -4,6 +4,7 @@
 #include <assert.h>
 #include "regmap-int.h"
 #include "atomic.h"
+#include "div_round_up.h"
 
 /**
  * regmap - определяет набор регистров устройства и предоставляет доступ к ним снаружи и изнутри
@@ -32,6 +33,8 @@
 #define REGMAP_REGION_RW(addr, name, rw, members)               REGMAP_##rw,
 #define REGMAP_REGION_ADDR(addr, name, rw, members)             addr,
 
+#define REGMAP_BIT_ARRAYS_LEN                                   DIV_ROUND_UP(REGMAP_TOTAL_REGS_COUNT, 32)
+
 enum regmap_rw {
     REGMAP_RO,
     REGMAP_RW
@@ -53,8 +56,8 @@ static const struct regions_info regions_info = {
 // Состояние regmap
 // Если не объединять в структуру, код работает немного быстрее
 static uint16_t regs[REGMAP_TOTAL_REGS_COUNT] = {};                 // Массив для хранения данных
-static uint32_t written_flags[REGMAP_TOTAL_REGS_COUNT / 32] = {};   // Битовые флаги записи каждого регистра
-static uint32_t rw_flags[REGMAP_TOTAL_REGS_COUNT / 32] = {};        // Признак того, что в регистр можно записывать данные снаружи
+static uint32_t written_flags[REGMAP_BIT_ARRAYS_LEN] = {};          // Битовые флаги записи каждого регистра
+static uint32_t rw_flags[REGMAP_BIT_ARRAYS_LEN] = {};               // Признак того, что в регистр можно записывать данные снаружи
 static uint16_t op_address = 0;                                     // Адрес текущей операции
 static bool is_busy = 0;                                            // Флаг занятости regmap
 
