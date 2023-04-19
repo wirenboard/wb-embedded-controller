@@ -27,15 +27,10 @@
  * с автоинкрементом адреса
  */
 
-#define REGMAP_ADDRESS_MASK                                     (REGMAP_TOTAL_REGS_COUNT - 1)
-
 #define REGMAP_MEMBER(addr, name, rw, members)                  struct REGMAP_##name name;
 #define REGMAP_REGION_SIZE(addr, name, rw, members)             (sizeof(struct REGMAP_##name)),
 #define REGMAP_REGION_RW(addr, name, rw, members)               REGMAP_##rw,
 #define REGMAP_REGION_ADDR(addr, name, rw, members)             addr,
-
-// Check that regs count is power of two
-static_assert((REGMAP_TOTAL_REGS_COUNT & REGMAP_ADDRESS_MASK) == 0, "Registers count must be power of two");
 
 enum regmap_rw {
     REGMAP_RO,
@@ -99,24 +94,24 @@ static inline uint32_t addr_to_bit_mask(uint16_t addr)
     return 1 << (addr & 0x01F);
 }
 
-static inline uint32_t addr_to_bit_addr(uint16_t addr)
+static inline uint32_t addr_to_word_offset(uint16_t addr)
 {
     return addr >> 5;
 }
 
 static inline void set_bit_flag(uint16_t addr, uint32_t bit_array[])
 {
-    bit_array[addr_to_bit_addr(addr)] |= addr_to_bit_mask(addr);
+    bit_array[addr_to_word_offset(addr)] |= addr_to_bit_mask(addr);
 }
 
 static inline void clear_bit_flag(uint16_t addr, uint32_t bit_array[])
 {
-    bit_array[addr_to_bit_addr(addr)] &= ~addr_to_bit_mask(addr);
+    bit_array[addr_to_word_offset(addr)] &= ~addr_to_bit_mask(addr);
 }
 
 static inline bool get_bit_flag(uint16_t addr, const uint32_t bit_array[])
 {
-    return bit_array[addr_to_bit_addr(addr)] & addr_to_bit_mask(addr);
+    return bit_array[addr_to_word_offset(addr)] & addr_to_bit_mask(addr);
 }
 
 void regmap_init(void)
@@ -241,7 +236,9 @@ uint16_t regmap_ext_read_reg_autoinc(void)
 {
     uint16_t r = regs[op_address];
     op_address++;
-    op_address &= REGMAP_ADDRESS_MASK;
+    if (op_address >= REGMAP_TOTAL_REGS_COUNT) {
+        op_address = 0;
+    }
     return r;
 }
 
@@ -250,7 +247,7 @@ uint16_t regmap_ext_read_reg_autoinc(void)
 void regmap_ext_write_reg_autoinc(uint16_t val)
 {
     // Для ускорения не используем функции, т.к. rw_bit_addr и rw_bit_mask нужны в двух местах
-    uint16_t rw_bit_addr = addr_to_bit_addr(op_address);
+    uint16_t rw_bit_addr = addr_to_word_offset(op_address);
     uint32_t rw_bit_mask = addr_to_bit_mask(op_address);
 
     if (rw_flags[rw_bit_addr] & rw_bit_mask) {
@@ -258,5 +255,7 @@ void regmap_ext_write_reg_autoinc(uint16_t val)
         written_flags[rw_bit_addr] |= rw_bit_mask;
     }
     op_address++;
-    op_address &= REGMAP_ADDRESS_MASK;
+    if (op_address >= REGMAP_TOTAL_REGS_COUNT) {
+        op_address = 0;
+    }
 }
