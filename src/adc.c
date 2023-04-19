@@ -142,9 +142,9 @@ void adc_init(void)
 
 void adc_set_lowpass_rc(enum adc_channel channel, uint16_t rc_ms)
 {
-    uint8_t i = ADC_CHANNEL_INDEX(channel);
+    uint8_t ch_index_in_dma_buff = ADC_CHANNEL_INDEX(channel);
 
-    adc_ctx.lowpass_factors[i] = calculate_rc_factor(rc_ms);
+    adc_ctx.lowpass_factors[ch_index_in_dma_buff] = calculate_rc_factor(rc_ms);
 }
 
 // Возвращает единицы АЦП после lowpass фильтра
@@ -152,17 +152,17 @@ void adc_set_lowpass_rc(enum adc_channel channel, uint16_t rc_ms)
 // и результат усреднения в дробной части
 fix16_t adc_get_ch_adc_raw(enum adc_channel channel)
 {
-    uint8_t i = ADC_CHANNEL_INDEX(channel);
+    uint8_t ch_index_in_dma_buff = ADC_CHANNEL_INDEX(channel);
 
-    return adc_ctx.lowpass_values[i];
+    return adc_ctx.lowpass_values[ch_index_in_dma_buff];
 }
 
 // Возвращает милливольты с учётом делителя (K) после lowpass фильтра
 uint16_t adc_get_ch_mv(enum adc_channel channel)
 {
-    uint8_t i = ADC_CHANNEL_INDEX(channel);
+    uint8_t ch_index_in_dma_buff = ADC_CHANNEL_INDEX(channel);
 
-    fix16_t res = fix16_mul(adc_ctx.lowpass_values[i], adc_cfg[channel].k);
+    fix16_t res = fix16_mul(adc_ctx.lowpass_values[ch_index_in_dma_buff], adc_cfg[channel].k);
 
     return fix16_to_int(res);
 }
