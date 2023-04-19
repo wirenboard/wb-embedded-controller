@@ -1,7 +1,7 @@
 
 UNIT_FOLDER = ../src
 TEST_LIST = regmap_test
-INC = . ../include
+INC = . ../include ../libwbmcu-system/include
 
 all: $(TEST_LIST)
 
