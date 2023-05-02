@@ -25,7 +25,7 @@
 
 // Линия прерывания от EC в линукс
 // Меняет состояние на активное, если в EC есть флаги событий
-#define EC_GPIO_INT                     GPIOB, 5
+#define EC_GPIO_INT                     GPIOA, 8
 #define EC_GPIO_INT_ACTIVE_HIGH
 
 // Светодиод для индикации режима работы EC
@@ -48,8 +48,11 @@
 #define EC_GPIO_STATUS_BAT              GPIOB, 5
 
 // Управляет питанием Linux
-#define EC_GPIO_LINUX_POWER             GPIOD, 2
+#define EC_GPIO_LINUX_POWER             GPIOD, 1
 
+// Управление ключами питания с USB портов
+#define EC_GPIO_USB_CONSOLE_PWR_EN      GPIOA, 10
+#define EC_GPIO_USB_NETWORK_PWR_EN      GPIOA, 12
 
 
 // USART TX - передача сообщений в Debug Console
