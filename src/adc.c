@@ -103,8 +103,20 @@ void adc_init(void)
     // Init ADC
     RCC->APBENR2 |= RCC_APBENR2_ADCEN;
 
-    //ADC1->CR |= ADC_CR_ADCAL;
-    //while (ADC1->CR & ADC_CR_ADCAL);
+
+    // RM0454: 14.3.2
+    // The ADC has a specific internal voltage regulator which must be enabled and stable before using the ADC
+    // The software must wait for the ADC voltage regulator startup time
+    // (tADCVREG_SETUP) before launching a calibration or enabling the ADC. This delay must be
+    // managed by software (for details on tADCVREG_SETUP, refer to the device datasheet).
+    // tADCVREG_SETUP = 20 us
+    ADC1->CR |= ADC_CR_ADVREGEN;
+    // Wait 1-2 ms - two lsb of system time
+    systime_t t = systick_get_system_time_ms();
+    while (systick_get_time_since_timestamp(t) < 1) {};
+
+    ADC1->CR |= ADC_CR_ADCAL;
+    while (ADC1->CR & ADC_CR_ADCAL) {};
 
     ADC->CCR |= ADC_CCR_VREFEN | ADC_CCR_TSEN;
 
