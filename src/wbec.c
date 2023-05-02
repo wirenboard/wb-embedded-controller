@@ -17,6 +17,16 @@
 
 static const char fwver_chars[] = { MODBUS_DEVICE_FW_VERSION_STRING };
 static const gpio_pin_t gpio_linux_power = { EC_GPIO_LINUX_POWER };
+static const gpio_pin_t gpio_usb_console = { EC_GPIO_USB_CONSOLE_PWR_EN };
+static const gpio_pin_t gpio_usb_network = { EC_GPIO_USB_NETWORK_PWR_EN };
+
+
+enum power_source {
+    POWER_SRC_V_IN,
+    POWER_SRC_USB_CONSOLE,
+    POWER_SRC_USB_NETWORK,
+    POWER_SRC_BOTH_USB,
+};
 
 // Причина включения питания Linux
 enum poweron_reason {
@@ -57,6 +67,7 @@ enum wbec_state {
 
 struct wbec_ctx {
     enum wbec_state state;
+    enum power_source power_src;
     systime_t timestamp;
 };
 
@@ -83,8 +94,30 @@ static inline void linux_power_gpio_init(void)
     GPIO_S_SET_OUTPUT(gpio_linux_power);
 }
 
+static inline void power_from_vin(void)
+{
+    GPIO_S_RESET(gpio_usb_console);
+    GPIO_S_RESET(gpio_usb_network);
+}
+
+static inline void power_from_usb_console(void)
+{
+    GPIO_S_SET(gpio_usb_console);
+    GPIO_S_RESET(gpio_usb_network);
+}
+
+static inline void power_from_usb_network(void)
+{
+    GPIO_S_RESET(gpio_usb_console);
+    GPIO_S_SET(gpio_usb_network);
+}
+
 static inline void goto_standby(void)
 {
+    // Подтяжка вниз в режиме standby для GPIO управления питанием линукса
+    // Таким образом, в standby линукс будет выключен
+    PWR->PDCRD |= (1 << gpio_linux_power.pin);
+
     // Apply pull-up and pull-down configuration
     PWR->CR3 |= PWR_CR3_APC;
 
@@ -144,7 +177,7 @@ static inline void collect_adc_data(struct REGMAP_ADC_DATA * adc)
 
     // Calc NTC temp
     fix16_t ntc_raw = adc_get_ch_adc_raw(ADC_CHANNEL_ADC_NTC);
-    // Convert to x10 *C
+    // Convert to x100 *C
     adc->temp = fix16_to_int(
         fix16_mul(
             ntc_convert_adc_raw_to_temp(ntc_raw),
@@ -179,16 +212,16 @@ static inline enum linux_powerctrl_req get_linux_powerctrl_req(void)
 
 void wbec_init(void)
 {
+    power_from_vin();
+    GPIO_S_SET_OUTPUT(gpio_usb_console);
+    GPIO_S_SET_OUTPUT(gpio_usb_network);
+
     // Здесь нельзя инициализировать GPIO управления питанием
     // т.к. исходно оно можут быть включено (если это была перепрошивка EC)
     // или выключено (в остальных случаях)
     // И нужно сначала понять, какой случай, а потом настраивать GPIO как выход
     // Иначе управление питанием перехватится раньше, чем нужно
     // Инициализация GPIO выполняется в WBEC_STATE_VOLTAGE_CHECK
-
-    // Подтяжка вниз в режиме standby для GPIO управления питанием линукса
-    // Таким образом, в standby линукс будет выключен
-    PWR->PDCRD |= (1 << gpio_linux_power.pin);
 
     // Enable internal wakeup line (for RTC)
     PWR->CR3 |= PWR_CR3_EIWUL;
@@ -199,6 +232,7 @@ void wbec_init(void)
 
     wdt_set_timeout(WDEC_WATCHDOG_INITIAL_TIMEOUT_S);
 
+    wbec_ctx.power_src = POWER_SRC_V_IN;
     wbec_ctx.state = WBEC_STATE_WAIT_STARTUP;
     wbec_ctx.timestamp = 0;
 }
@@ -211,6 +245,38 @@ void wbec_do_periodic_work(void)
 
     enum linux_powerctrl_req linux_powerctrl_req = get_linux_powerctrl_req();
 
+    // Управлять питанием USB нужно всегда, кроме самого первого состояния,
+    // когда ждем измерения напряжений
+    if (wbec_ctx.state != WBEC_STATE_WAIT_STARTUP) {
+        // Питание от портов USB выполнено через диоды, которые могут быть зашунтированы ключами
+        // для снижения падения напряжений.
+        // Проблема при таком решении в том, что открый ключ пропускает ток в обе стороны
+        // и при подключении обоих USB нельзя понять, когда один из них отключится
+        // и выбрать нужный USB для питания
+        // Поэтому, если напряжение есть на обоих USB, то ключи закрываем и работаем через диоды
+        if (adc.v_in > 9000) {
+            // Если есть входное напряжение - работает от него, ключи на USB закрыты
+            if (wbec_ctx.power_src != POWER_SRC_V_IN) {
+                wbec_ctx.power_src = POWER_SRC_V_IN;
+                power_from_vin();
+            }
+        } else if ((adc.vbus_console > 4800) && (adc.vbus_network < 1000)) {
+            if (wbec_ctx.power_src != POWER_SRC_USB_CONSOLE) {
+                wbec_ctx.power_src = POWER_SRC_USB_CONSOLE;
+                power_from_usb_console();
+            }
+        } else if ((adc.vbus_console < 1000) && (adc.vbus_network > 4800)) {
+            if (wbec_ctx.power_src != POWER_SRC_USB_NETWORK) {
+                wbec_ctx.power_src = POWER_SRC_USB_NETWORK;
+                power_from_usb_network();
+            }
+        } else {
+            if (wbec_ctx.power_src != POWER_SRC_BOTH_USB) {
+                wbec_ctx.power_src = POWER_SRC_BOTH_USB;
+                power_from_vin();
+            }
+        }
+    }
 
     switch (wbec_ctx.state) {
     case WBEC_STATE_WAIT_STARTUP:
