@@ -12,6 +12,7 @@
 #include "wbmcu_system.h"
 #include "array_size.h"
 #include "rtc-alarm-subsystem.h"
+#include "rtc.h"
 
 #define WBEC_STARTUP_TIMEOUT_MS                     20
 
@@ -114,6 +115,8 @@ static inline void power_from_usb_network(void)
 
 static inline void goto_standby(void)
 {
+    rtc_disable_pc13_1hz_clkout();
+
     // Подтяжка вниз в режиме standby для GPIO управления питанием линукса
     // Таким образом, в standby линукс будет выключен
     PWR->PDCRD |= (1 << gpio_linux_power.pin);
