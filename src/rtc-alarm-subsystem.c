@@ -95,7 +95,7 @@ void rtc_alarm_do_periodic_work(void)
 
     if (regmap_is_region_changed(REGMAP_REGION_RTC_CFG)) {
         struct REGMAP_RTC_CFG cfg;
-        regmap_get_region_data(REGMAP_REGION_RTC_ALARM, &cfg, sizeof(cfg));
+        regmap_get_region_data(REGMAP_REGION_RTC_CFG, &cfg, sizeof(cfg));
 
         rtc_set_offset(cfg.offset);
 
