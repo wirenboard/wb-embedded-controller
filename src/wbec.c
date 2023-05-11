@@ -247,8 +247,8 @@ void wbec_do_periodic_work(void)
 
     enum linux_powerctrl_req linux_powerctrl_req = get_linux_powerctrl_req();
 
-    // Управлять питанием USB нужно всегда, кроме самого первого состояния,
-    // когда ждем измерения напряжений
+    // Некоторые вещи нужно делать всегда, независимо от состояния
+    // Например, управлять питанием USB и реагировать на долгое нажатие
     if (wbec_ctx.state != WBEC_STATE_WAIT_STARTUP) {
         // Питание от портов USB выполнено через диоды, которые могут быть зашунтированы ключами
         // для снижения падения напряжений.
@@ -277,6 +277,13 @@ void wbec_do_periodic_work(void)
                 wbec_ctx.power_src = POWER_SRC_BOTH_USB;
                 power_from_vin();
             }
+        }
+
+        // Если было долгое нажатие - выключаемся сразу, независимо от состояния
+        if (pwrkey_handle_long_press()) {
+            linux_power_off();
+            usart_tx_str_blocking("\n\rPower key long press detected, power off without delay.\r\n\n");
+            goto_standby();
         }
     }
 
@@ -370,13 +377,6 @@ void wbec_do_periodic_work(void)
             wbec_ctx.timestamp = systick_get_system_time_ms();
         }
 
-        // Если было долгое нажатие - выключаемся сразу
-        if (pwrkey_handle_long_press()) {
-            linux_power_off();
-            usart_tx_str_blocking("\n\rPower key long press detected, power off without delay.\r\n\n");
-            goto_standby();
-        }
-
         if (linux_powerctrl_req == LINUX_POWERCTRL_OFF) {
             // Если прилетел запрос из линукса на выключение
             // Это была выполнена команда `poweroff` или `rtcwake -m off`
@@ -431,10 +431,6 @@ void wbec_do_periodic_work(void)
             // Аварийное выключение (можно как-то дополнительно обработать)
             linux_power_off();
             usart_tx_str_blocking("\r\nNo power off request from Linux after power key pressed. Power is forced off.\r\n\n");
-            goto_standby();
-        } else if (pwrkey_handle_long_press()) {
-            linux_power_off();
-            usart_tx_str_blocking("\n\rPower key long press detected, power off without delay.\r\n\n");
             goto_standby();
         }
 
