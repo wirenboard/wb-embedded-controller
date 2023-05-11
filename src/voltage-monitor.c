@@ -32,7 +32,7 @@ static inline void check_voltage(const struct vmon_ch_cfg * cfg, bool * status)
         }
     } else {
         // If current status FAIL, check OK limits
-        if ((mv >= cfg->ok_min) || (mv <= cfg->ok_max)) {
+        if ((mv >= cfg->ok_min) && (mv <= cfg->ok_max)) {
             *status = 1;
         }
     }
