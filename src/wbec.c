@@ -13,8 +13,7 @@
 #include "array_size.h"
 #include "rtc-alarm-subsystem.h"
 #include "rtc.h"
-
-#define WBEC_STARTUP_TIMEOUT_MS                     20
+#include "voltage-monitor.h"
 
 static const char fwver_chars[] = { MODBUS_DEVICE_FW_VERSION_STRING };
 static const gpio_pin_t gpio_linux_power = { EC_GPIO_LINUX_POWER };
@@ -257,18 +256,18 @@ void wbec_do_periodic_work(void)
         // и при подключении обоих USB нельзя понять, когда один из них отключится
         // и выбрать нужный USB для питания
         // Поэтому, если напряжение есть на обоих USB, то ключи закрываем и работаем через диоды
-        if (adc.v_in > 9000) {
+        if (vmon_get_ch_status(VMON_CHANNEL_V_IN)) {
             // Если есть входное напряжение - работает от него, ключи на USB закрыты
             if (wbec_ctx.power_src != POWER_SRC_V_IN) {
                 wbec_ctx.power_src = POWER_SRC_V_IN;
                 power_from_vin();
             }
-        } else if ((adc.vbus_console > 4800) && (adc.vbus_network < 1000)) {
+        } else if (vmon_get_ch_status(VMON_CHANNEL_VBUS_DEBUG) && !vmon_get_ch_status(VMON_CHANNEL_VBUS_NETWORK)) {
             if (wbec_ctx.power_src != POWER_SRC_USB_CONSOLE) {
                 wbec_ctx.power_src = POWER_SRC_USB_CONSOLE;
                 power_from_usb_console();
             }
-        } else if ((adc.vbus_console < 1000) && (adc.vbus_network > 4800)) {
+        } else if (!vmon_get_ch_status(VMON_CHANNEL_VBUS_DEBUG) && vmon_get_ch_status(VMON_CHANNEL_VBUS_NETWORK)) {
             if (wbec_ctx.power_src != POWER_SRC_USB_NETWORK) {
                 wbec_ctx.power_src = POWER_SRC_USB_NETWORK;
                 power_from_usb_network();
@@ -289,10 +288,11 @@ void wbec_do_periodic_work(void)
         // примерно хххх мс после включения питания
         // При пробужении из спящего режима RC-цепочка так же работает и держит линукс выключенным
         // после пробуждения МК
-        if (systick_get_time_since_timestamp(wbec_ctx.timestamp) > WBEC_STARTUP_TIMEOUT_MS) {
-            // Проверим, что кнопка действительно нажата (прошла антидребезг)
-            // чтобы не включаться от всяких помех и при отпускании кнопки
+        if (vmon_ready()) {
             if (wbec_info.poweron_reason == REASON_POWER_KEY) {
+                // Если включились от кнопки,
+                // проверим, что кнопка действительно нажата (прошла антидребезг)
+                // чтобы не включаться от всяких помех и при отпускании кнопки
                 if (pwrkey_ready()) {
                     if (pwrkey_pressed()) {
                         wbec_ctx.state = WBEC_STATE_VOLTAGE_CHECK;
@@ -301,6 +301,7 @@ void wbec_do_periodic_work(void)
                     }
                 }
             } else {
+                // Если включились не от кнопки - сразу переходим дальше
                 wbec_ctx.state = WBEC_STATE_VOLTAGE_CHECK;
             }
         }
@@ -311,9 +312,9 @@ void wbec_do_periodic_work(void)
         // Тут нужно проверить напряжения и температуру (в будущем)
         // Также возможна ситуация, когда при обновлении прошивки МК перезагружается,
         // а линукс в это время работает. Тогда его не надо перезагружать.
-        // Факт работы линукса определяется по наличию +5В
-        if ((wbec_info.poweron_reason == REASON_POWER_ON) && (adc.v_5_0 > 4500)) {
-            // Если после включени МК +5В есть - значить линукс уже работает
+        // Факт работы линукса определяется по наличию +3.3В
+        if ((wbec_info.poweron_reason == REASON_POWER_ON) && (vmon_get_ch_status(VMON_CHANNEL_V33))) {
+            // Если после включения МК +3.3В есть - значить линукс уже работает
             // Не нужно выводить информацию в уарт
             // Тут ничего не нужно делать
         } else {
