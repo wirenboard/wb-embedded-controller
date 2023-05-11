@@ -290,7 +290,19 @@ void wbec_do_periodic_work(void)
         // При пробужении из спящего режима RC-цепочка так же работает и держит линукс выключенным
         // после пробуждения МК
         if (systick_get_time_since_timestamp(wbec_ctx.timestamp) > WBEC_STARTUP_TIMEOUT_MS) {
-            wbec_ctx.state = WBEC_STATE_VOLTAGE_CHECK;
+            // Проверим, что кнопка действительно нажата (прошла антидребезг)
+            // чтобы не включаться от всяких помех и при отпускании кнопки
+            if (wbec_info.poweron_reason == REASON_POWER_KEY) {
+                if (pwrkey_ready()) {
+                    if (pwrkey_pressed()) {
+                        wbec_ctx.state = WBEC_STATE_VOLTAGE_CHECK;
+                    } else {
+                        goto_standby();
+                    }
+                }
+            } else {
+                wbec_ctx.state = WBEC_STATE_VOLTAGE_CHECK;
+            }
         }
         break;
 
