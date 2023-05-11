@@ -89,11 +89,11 @@
 #define VOLTAGE_MONITOR_START_DELAY_MS      20
 
 #define VOLTAGE_MONITOR_DESC(m) \
-    /*Monitor CH            ADC CH              OK min  max         FAIL min max */ \
-    m(MON_V_IN,             ADC_V_IN,           10000,  48000,      9000,   49000) \
-    m(MON_V_OUT,            ADC_V_IN,           10000,  28000,      9000,   29000) \
-    m(MON_3V3,              ADC_3V3,            3200,   3400,       3100,   3500) \
-    m(MON_5V,               ADC_5V,             4800,   5200,       4600,   5700) \
-    m(MON_VBUS_DEBUG,       ADC_VBUS_DEBUG,     4800,   5200,       4600,   5700) \
-    m(MON_VBUS_NETWORK,     ADC_VBUS_NETWORK,   4800,   5200,       4600,   5700) \
+    /*Monitor CH        ADC CH              OK min  max         FAIL min max */ \
+    m(V_IN,             ADC_V_IN,           10000,  48000,      9000,   49000) \
+    m(V_OUT,            ADC_V_IN,           10000,  28000,      9000,   29000) \
+    m(V33,              ADC_3V3,            3200,   3400,       3100,   3500) \
+    m(V50,              ADC_5V,             4800,   5200,       4600,   5700) \
+    m(VBUS_DEBUG,       ADC_VBUS_DEBUG,     4800,   5200,       4600,   5700) \
+    m(VBUS_NETWORK,     ADC_VBUS_NETWORK,   4800,   5200,       4600,   5700) \
 
