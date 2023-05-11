@@ -431,6 +431,10 @@ void wbec_do_periodic_work(void)
             linux_power_off();
             usart_tx_str_blocking("\r\nNo power off request from Linux after power key pressed. Power is forced off.\r\n\n");
             goto_standby();
+        } else if (pwrkey_handle_long_press()) {
+            linux_power_off();
+            usart_tx_str_blocking("\n\rPower key long press detected, power off without delay.\r\n\n");
+            goto_standby();
         }
 
         break;
