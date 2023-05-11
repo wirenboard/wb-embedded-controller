@@ -12,6 +12,7 @@
 #include "wdt.h"
 #include "gpio-subsystem.h"
 #include "usart_tx.h"
+#include "voltage-monitor.h"
 
 
 static inline void rcc_set_hsi_pll_64mhz_clock(void)
@@ -60,6 +61,7 @@ int main(void)
 
     // Init subsystems
     irq_init();
+    vmon_init();
 
     // Init WBEC
     wbec_init();
@@ -77,6 +79,7 @@ int main(void)
         // Sybsystems
         rtc_alarm_do_periodic_work();
         irq_do_periodic_work();
+        vmon_do_periodic_work();
 
         // Main algorithm
         wbec_do_periodic_work();
