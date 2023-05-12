@@ -49,6 +49,8 @@
 
 // Управляет питанием Linux
 #define EC_GPIO_LINUX_POWER             GPIOD, 1
+#define EC_GPIO_LINUX_PMIC_PWRON        GPIOB, 14
+#define EC_GPIO_LINUX_PMIC_RESET_PWROK  GPIOB, 13
 
 // Управление ключами питания с USB портов
 #define EC_GPIO_USB_CONSOLE_PWR_EN      GPIOA, 10
