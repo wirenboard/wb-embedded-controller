@@ -7,6 +7,8 @@
 static const gpio_pin_t gpio_linux_power = { EC_GPIO_LINUX_POWER };
 static const gpio_pin_t gpio_pmic_pwron = { EC_GPIO_LINUX_PMIC_PWRON };
 static const gpio_pin_t gpio_pmic_reset_pwrok = { EC_GPIO_LINUX_PMIC_RESET_PWROK };
+static const gpio_pin_t gpio_usb_console = { EC_GPIO_USB_CONSOLE_PWR_EN };
+static const gpio_pin_t gpio_usb_network = { EC_GPIO_USB_NETWORK_PWR_EN };
 
 enum pwr_state {
     PS_OFF_COMPLETE,
@@ -20,8 +22,16 @@ enum pwr_state {
     PS_RESET_5V_WAIT,
 };
 
+enum power_source {
+    POWER_SRC_V_IN,
+    POWER_SRC_USB_CONSOLE,
+    POWER_SRC_USB_NETWORK,
+    POWER_SRC_BOTH_USB,
+};
+
 struct pwr_ctx {
     enum pwr_state state;
+    enum power_source power_src;
     systime_t timestamp;
     unsigned attempt;
     bool do_reset;
@@ -29,6 +39,7 @@ struct pwr_ctx {
 
 static struct pwr_ctx pwr_ctx = {
     .state = PS_OFF_COMPLETE,
+    .power_src = POWER_SRC_V_IN,
 };
 
 static inline void linux_pwr_gpio_on(void)       { GPIO_S_SET(gpio_linux_power); }
@@ -37,6 +48,10 @@ static inline void pmic_pwron_gpio_on(void)      { GPIO_S_SET(gpio_pmic_pwron); 
 static inline void pmic_pwron_gpio_off(void)     { GPIO_S_RESET(gpio_pmic_pwron); }
 static inline void pmic_reset_gpio_on(void)      { GPIO_S_SET(gpio_pmic_reset_pwrok); }
 static inline void pmic_reset_gpio_off(void)     { GPIO_S_RESET(gpio_pmic_reset_pwrok); }
+static inline void usb_console_gpio_on(void)     { GPIO_S_SET(gpio_usb_console); }
+static inline void usb_console_gpio_off(void)    { GPIO_S_RESET(gpio_usb_console); }
+static inline void usb_network_gpio_on(void)     { GPIO_S_SET(gpio_usb_network); }
+static inline void usb_network_gpio_off(void)    { GPIO_S_RESET(gpio_usb_network); }
 
 static inline void new_state(enum pwr_state s)
 {
@@ -49,6 +64,42 @@ static inline systime_t in_state_time(void)
     return systick_get_time_since_timestamp(pwr_ctx.timestamp);
 }
 
+static inline void usb_power_control(void)
+{
+    // Питание от портов USB выполнено через диоды, которые могут быть зашунтированы ключами
+    // для снижения падения напряжений.
+    // Проблема при таком решении в том, что открый ключ пропускает ток в обе стороны
+    // и при подключении обоих USB нельзя понять, когда один из них отключится
+    // и выбрать нужный USB для питания
+    // Поэтому, если напряжение есть на обоих USB, то ключи закрываем и работаем через диоды
+    if (vmon_get_ch_status(VMON_CHANNEL_V_IN)) {
+        // Если есть входное напряжение - работает от него, ключи на USB закрыты
+        if (pwr_ctx.power_src != POWER_SRC_V_IN) {
+            pwr_ctx.power_src = POWER_SRC_V_IN;
+            usb_console_gpio_off();
+            usb_network_gpio_off();
+        }
+    } else if (vmon_get_ch_status(VMON_CHANNEL_VBUS_DEBUG) && !vmon_get_ch_status(VMON_CHANNEL_VBUS_NETWORK)) {
+        if (pwr_ctx.power_src != POWER_SRC_USB_CONSOLE) {
+            pwr_ctx.power_src = POWER_SRC_USB_CONSOLE;
+            usb_console_gpio_on();
+            usb_network_gpio_off();
+        }
+    } else if (!vmon_get_ch_status(VMON_CHANNEL_VBUS_DEBUG) && vmon_get_ch_status(VMON_CHANNEL_VBUS_NETWORK)) {
+        if (pwr_ctx.power_src != POWER_SRC_USB_NETWORK) {
+            pwr_ctx.power_src = POWER_SRC_USB_NETWORK;
+            usb_console_gpio_off();
+            usb_network_gpio_on();
+        }
+    } else {
+        if (pwr_ctx.power_src != POWER_SRC_BOTH_USB) {
+            pwr_ctx.power_src = POWER_SRC_BOTH_USB;
+            usb_console_gpio_off();
+            usb_network_gpio_off();
+        }
+    }
+}
+
 /**
  * @brief Инициализирует GPIO управления питанием как выходы.
  * При включении питания WB питание на процессор не подается, пока не зарядится RC-цепочка
@@ -58,7 +109,7 @@ static inline systime_t in_state_time(void)
  *
  * @param on Начальное состояние питания (вкл/выкл)
  */
-void linux_pwr_init_on(bool on)
+void linux_pwr_init(bool on)
 {
     if (on) {
         linux_pwr_gpio_on();
@@ -73,6 +124,11 @@ void linux_pwr_init_on(bool on)
     pmic_reset_gpio_off();
     GPIO_S_SET_OUTPUT(gpio_pmic_reset_pwrok);
     GPIO_S_SET_OUTPUT(gpio_pmic_pwron);
+
+    usb_console_gpio_off();
+    usb_network_gpio_off();
+    GPIO_S_SET_OUTPUT(gpio_usb_console);
+    GPIO_S_SET_OUTPUT(gpio_usb_network);
 }
 
 /**
@@ -135,6 +191,12 @@ bool linux_pwr_is_busy(void)
 
 void linux_pwr_do_periodic_work(void)
 {
+    if (!vmon_ready()) {
+        return;
+    }
+
+    usb_power_control();
+
     switch (pwr_ctx.state) {
     // Если алгоритм завершился (включил или выключил питание)
     // ничего не делаем

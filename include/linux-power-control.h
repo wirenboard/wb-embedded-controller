@@ -1,7 +1,7 @@
 #pragma once
 #include <stdbool.h>
 
-void linux_pwr_init_on(bool on);
+void linux_pwr_init(bool on);
 void linux_pwr_off(void);
 void linux_pwr_reset(void);
 void linux_pwr_hard_reset(void);
