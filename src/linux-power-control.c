@@ -100,6 +100,15 @@ static inline void usb_power_control(void)
     }
 }
 
+// TODO remove me
+void linux_power_usb_init(void)
+{
+    usb_console_gpio_off();
+    usb_network_gpio_off();
+    GPIO_S_SET_OUTPUT(gpio_usb_console);
+    GPIO_S_SET_OUTPUT(gpio_usb_network);
+}
+
 /**
  * @brief Инициализирует GPIO управления питанием как выходы.
  * При включении питания WB питание на процессор не подается, пока не зарядится RC-цепочка
