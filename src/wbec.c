@@ -17,16 +17,6 @@
 
 static const char fwver_chars[] = { MODBUS_DEVICE_FW_VERSION_STRING };
 static const gpio_pin_t gpio_linux_power = { EC_GPIO_LINUX_POWER };
-static const gpio_pin_t gpio_usb_console = { EC_GPIO_USB_CONSOLE_PWR_EN };
-static const gpio_pin_t gpio_usb_network = { EC_GPIO_USB_NETWORK_PWR_EN };
-
-
-enum power_source {
-    POWER_SRC_V_IN,
-    POWER_SRC_USB_CONSOLE,
-    POWER_SRC_USB_NETWORK,
-    POWER_SRC_BOTH_USB,
-};
 
 // Причина включения питания Linux
 enum poweron_reason {
@@ -67,7 +57,6 @@ enum wbec_state {
 
 struct wbec_ctx {
     enum wbec_state state;
-    enum power_source power_src;
     systime_t timestamp;
 };
 
@@ -92,24 +81,6 @@ static inline void linux_power_gpio_init(void)
 {
     GPIO_S_SET_PUSHPULL(gpio_linux_power);
     GPIO_S_SET_OUTPUT(gpio_linux_power);
-}
-
-static inline void power_from_vin(void)
-{
-    GPIO_S_RESET(gpio_usb_console);
-    GPIO_S_RESET(gpio_usb_network);
-}
-
-static inline void power_from_usb_console(void)
-{
-    GPIO_S_SET(gpio_usb_console);
-    GPIO_S_RESET(gpio_usb_network);
-}
-
-static inline void power_from_usb_network(void)
-{
-    GPIO_S_RESET(gpio_usb_console);
-    GPIO_S_SET(gpio_usb_network);
 }
 
 static inline void goto_standby(void)
@@ -214,10 +185,6 @@ static inline enum linux_powerctrl_req get_linux_powerctrl_req(void)
 
 void wbec_init(void)
 {
-    power_from_vin();
-    GPIO_S_SET_OUTPUT(gpio_usb_console);
-    GPIO_S_SET_OUTPUT(gpio_usb_network);
-
     // Здесь нельзя инициализировать GPIO управления питанием
     // т.к. исходно оно можут быть включено (если это была перепрошивка EC)
     // или выключено (в остальных случаях)
@@ -234,7 +201,6 @@ void wbec_init(void)
 
     wdt_set_timeout(WDEC_WATCHDOG_INITIAL_TIMEOUT_S);
 
-    wbec_ctx.power_src = POWER_SRC_V_IN;
     wbec_ctx.state = WBEC_STATE_WAIT_STARTUP;
     wbec_ctx.timestamp = 0;
 }
@@ -248,37 +214,8 @@ void wbec_do_periodic_work(void)
     enum linux_powerctrl_req linux_powerctrl_req = get_linux_powerctrl_req();
 
     // Некоторые вещи нужно делать всегда, независимо от состояния
-    // Например, управлять питанием USB и реагировать на долгое нажатие
+    // Например, реагировать на долгое нажатие
     if (wbec_ctx.state != WBEC_STATE_WAIT_STARTUP) {
-        // Питание от портов USB выполнено через диоды, которые могут быть зашунтированы ключами
-        // для снижения падения напряжений.
-        // Проблема при таком решении в том, что открый ключ пропускает ток в обе стороны
-        // и при подключении обоих USB нельзя понять, когда один из них отключится
-        // и выбрать нужный USB для питания
-        // Поэтому, если напряжение есть на обоих USB, то ключи закрываем и работаем через диоды
-        if (vmon_get_ch_status(VMON_CHANNEL_V_IN)) {
-            // Если есть входное напряжение - работает от него, ключи на USB закрыты
-            if (wbec_ctx.power_src != POWER_SRC_V_IN) {
-                wbec_ctx.power_src = POWER_SRC_V_IN;
-                power_from_vin();
-            }
-        } else if (vmon_get_ch_status(VMON_CHANNEL_VBUS_DEBUG) && !vmon_get_ch_status(VMON_CHANNEL_VBUS_NETWORK)) {
-            if (wbec_ctx.power_src != POWER_SRC_USB_CONSOLE) {
-                wbec_ctx.power_src = POWER_SRC_USB_CONSOLE;
-                power_from_usb_console();
-            }
-        } else if (!vmon_get_ch_status(VMON_CHANNEL_VBUS_DEBUG) && vmon_get_ch_status(VMON_CHANNEL_VBUS_NETWORK)) {
-            if (wbec_ctx.power_src != POWER_SRC_USB_NETWORK) {
-                wbec_ctx.power_src = POWER_SRC_USB_NETWORK;
-                power_from_usb_network();
-            }
-        } else {
-            if (wbec_ctx.power_src != POWER_SRC_BOTH_USB) {
-                wbec_ctx.power_src = POWER_SRC_BOTH_USB;
-                power_from_vin();
-            }
-        }
-
         // Если было долгое нажатие - выключаемся сразу, независимо от состояния
         if (pwrkey_handle_long_press()) {
             linux_power_off();
