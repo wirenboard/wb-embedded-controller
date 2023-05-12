@@ -13,6 +13,7 @@
 #include "gpio-subsystem.h"
 #include "usart_tx.h"
 #include "voltage-monitor.h"
+#include "linux-power-control.h"
 
 
 static inline void rcc_set_hsi_pll_64mhz_clock(void)
@@ -75,6 +76,7 @@ int main(void)
         pwrkey_do_periodic_work();
         wdt_do_periodic_work();
         gpio_do_periodic_work();
+        linux_pwr_do_periodic_work();
 
         // Sybsystems
         rtc_alarm_do_periodic_work();
