@@ -1,0 +1,221 @@
+#include "linux-power-control.h"
+#include "config.h"
+#include "gpio.h"
+#include "systick.h"
+#include "voltage-monitor.h"
+
+static const gpio_pin_t gpio_linux_power = { EC_GPIO_LINUX_POWER };
+static const gpio_pin_t gpio_pmic_pwron = { EC_GPIO_LINUX_PMIC_PWRON };
+static const gpio_pin_t gpio_pmic_reset_pwrok = { EC_GPIO_LINUX_PMIC_RESET_PWROK };
+
+enum pwr_state {
+    PS_OFF_COMPLETE,
+    PS_OFF_STEP1_PMIC_PWRON,
+
+    PS_ON_COMPLETE,
+    PS_ON_STEP1_WAIT_3V3,
+    PS_ON_STEP2_PMIC_PWRON,
+    PS_ON_STEP3_PMIC_PWRON_WAIT,
+
+    PS_RESET_5V_WAIT,
+};
+
+struct pwr_ctx {
+    enum pwr_state state;
+    systime_t timestamp;
+    unsigned attempt;
+    bool do_reset;
+};
+
+static struct pwr_ctx pwr_ctx = {
+    .state = PS_OFF_COMPLETE,
+};
+
+static inline void linux_pwr_gpio_on(void)       { GPIO_S_SET(gpio_linux_power); }
+static inline void linux_pwr_gpio_off(void)      { GPIO_S_RESET(gpio_linux_power); }
+static inline void pmic_pwron_gpio_on(void)      { GPIO_S_SET(gpio_pmic_pwron); }
+static inline void pmic_pwron_gpio_off(void)     { GPIO_S_RESET(gpio_pmic_pwron); }
+static inline void pmic_reset_gpio_on(void)      { GPIO_S_SET(gpio_pmic_reset_pwrok); }
+static inline void pmic_reset_gpio_off(void)     { GPIO_S_RESET(gpio_pmic_reset_pwrok); }
+
+static inline void new_state(enum pwr_state s)
+{
+    pwr_ctx.state = s;
+    pwr_ctx.timestamp = systick_get_system_time_ms();
+}
+
+static inline systime_t in_state_time(void)
+{
+    return systick_get_time_since_timestamp(pwr_ctx.timestamp);
+}
+
+/**
+ * @brief Инициализирует GPIO управления питанием как выходы.
+ * При включении питания WB питание на процессор не подается, пока не зарядится RC-цепочка
+ * на ключе питания.
+ * Функция может как подхватить выключенное состояние и продлить его,
+ * так и сразу подать питание на процессорный модуль
+ *
+ * @param on Начальное состояние питания (вкл/выкл)
+ */
+void linux_pwr_init_on(bool on)
+{
+    if (on) {
+        linux_pwr_gpio_on();
+        new_state(PS_ON_STEP1_WAIT_3V3);
+    } else {
+        linux_pwr_gpio_off();
+        new_state(PS_OFF_COMPLETE);
+    }
+    GPIO_S_SET_OUTPUT(gpio_linux_power);
+
+    pmic_pwron_gpio_off();
+    pmic_reset_gpio_off();
+    GPIO_S_SET_OUTPUT(gpio_pmic_reset_pwrok);
+    GPIO_S_SET_OUTPUT(gpio_pmic_pwron);
+}
+
+/**
+ * @brief Выключает питание линукс штатным способом:
+ * Активируется сигнал PWRON на PMIC, ждём выключения PMIC, потом выключаем 5В
+ */
+void linux_pwr_off(void)
+{
+    pmic_pwron_gpio_on();
+    new_state(PS_OFF_STEP1_PMIC_PWRON);
+    pwr_ctx.do_reset = 0;
+}
+
+/**
+ * @brief Сбрасывает питание линукс штатным способом через PMIC.
+ * Сначала активируем PWRON, ждём выключения PMIC, потом сбрасываем 5В
+ * и включаем питание заново
+ */
+void linux_pwr_reset(void)
+{
+    pmic_pwron_gpio_on();
+    new_state(PS_OFF_STEP1_PMIC_PWRON);
+    pwr_ctx.do_reset = 1;
+}
+
+/**
+ * @brief Сбрасывает питание через отключение 5В сразу, без участия PMIC.
+ * Нужно, чтобы сбросить питание, например, при выходе реек питания за пределы.
+ * В этот момент PMIC уже может не функционировать нормально.
+ */
+void linux_pwr_hard_reset(void)
+{
+    linux_pwr_gpio_off();
+    new_state(PS_RESET_5V_WAIT);
+}
+
+/**
+ * @brief Выключение питания путём отключения 5В сразу, без PMIC.
+ * Нужно для отключения по долгому нажатию
+ */
+void linux_pwr_hard_off(void)
+{
+    linux_pwr_gpio_off();
+    new_state(PS_OFF_COMPLETE);
+}
+
+/**
+ * @brief Статус работы алгоритма управления питанием
+ *
+ * @return true Питание включено или выключено, алгоритм завершён
+ * @return false Алгоритм что-то делает, питанием в неопределенном состоянии
+ */
+bool linux_pwr_is_busy(void)
+{
+    return (
+        (pwr_ctx.state != PS_OFF_COMPLETE) &&
+        (pwr_ctx.state != PS_ON_COMPLETE)
+    );
+}
+
+void linux_pwr_do_periodic_work(void)
+{
+    switch (pwr_ctx.state) {
+    // Если алгоритм завершился (включил или выключил питание)
+    // ничего не делаем
+    case PS_OFF_COMPLETE:
+    case PS_ON_COMPLETE:
+        break;
+
+    // Первый шаг включения питания: проверка, что 3.3В появилось, после того как подали 5В
+    case PS_ON_STEP1_WAIT_3V3:
+        if (vmon_get_ch_status(VMON_CHANNEL_V33)) {
+            // Если 3.3В появилось, то считаем что питание включено
+            new_state(PS_ON_COMPLETE);
+        }
+        if (in_state_time() > 500) {
+            // Если 3.3В не появилось, то попробуем включить PMIC через PWRON
+            pmic_pwron_gpio_on();
+            pwr_ctx.attempt = 0;
+            new_state(PS_ON_STEP2_PMIC_PWRON);
+        }
+        break;
+
+    // Второй шаг включения питания: активирован PWRON, ждем появления 3.3В
+    // или выходим по таймауту
+    // Это не штатный режим и сюда попадать по идее не должны
+    // PMIC должен включаться сам после подачи 5В
+    case PS_ON_STEP2_PMIC_PWRON:
+        if (vmon_get_ch_status(VMON_CHANNEL_V33)) {
+            // Если 3.3В
+            pmic_pwron_gpio_off();
+            new_state(PS_ON_COMPLETE);
+        }
+        if (in_state_time() > 1500) {
+            pwr_ctx.attempt++;
+            pmic_pwron_gpio_off();
+            if (pwr_ctx.attempt <= 3) {
+                // Если попытки не исчерпаны - отключаем PWRON и пробуем ещё
+                new_state(PS_ON_STEP3_PMIC_PWRON_WAIT);
+            } else {
+                // Если попытки кончились - сбрасываем 5В и начинаем заново
+                linux_pwr_gpio_off();
+                new_state(PS_RESET_5V_WAIT);
+            }
+        }
+        break;
+
+    // Третий шаг включения - отпускаем PWRON, ждём, пробуем ещё раз
+    case PS_ON_STEP3_PMIC_PWRON_WAIT:
+        if (in_state_time() > 500) {
+            pmic_pwron_gpio_on();
+            new_state(PS_ON_STEP2_PMIC_PWRON);
+        }
+        break;
+
+    // Сброс питания 5В
+    case PS_RESET_5V_WAIT:
+        if (in_state_time() > 1000) {
+            linux_pwr_gpio_on();
+            new_state(PS_ON_STEP1_WAIT_3V3);
+        }
+        break;
+
+    // Выключение питания штатным путём через PWRON
+    // В этом состоянии PWRON активирован
+    case PS_OFF_STEP1_PMIC_PWRON:
+        if ((!vmon_get_ch_status(VMON_CHANNEL_V33)) ||
+            (in_state_time() > 7000))
+        {
+            // Если пропало 3.3В (или не пропало и случился таймаут)
+            // выключаем 5В
+            pmic_pwron_gpio_off();
+            linux_pwr_off();
+            // И переходим либо в выключенное состояние, либо в ресет
+            if (pwr_ctx.do_reset) {
+                new_state(PS_RESET_5V_WAIT);
+            } else {
+                new_state(PS_OFF_COMPLETE);
+            }
+        }
+        break;
+
+    default:
+        break;
+    }
+}
