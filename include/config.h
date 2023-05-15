@@ -66,6 +66,12 @@
 #define EC_DEBUG_USART_GPIO_AF          1
 
 
+
+/* ====== Параметры RTC ====== */
+// 0 - low, 1 - medium low, 2 - medium high, 3 - high
+// Расчеты тут: https://docs.google.com/spreadsheets/d/1k51XYnHdV_j1-fccqVz4aFkKqSe-bGuWVDhoNqGtZ8E/edit#gid=1096674256
+#define RTC_LSE_DRIVE_CAPABILITY        2
+
 // Конфигурация АЦП
 #define ADC_VREF_EXT_MV                 2500
 #define ADC_VREF_EXT_EN_GPIO            GPIOD, 3

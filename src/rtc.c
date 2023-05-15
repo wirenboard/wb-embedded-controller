@@ -1,6 +1,8 @@
 #include "rtc.h"
 #include "wbmcu_system.h"
 #include "gpio.h"
+#include "config.h"
+#include <assert.h>
 
 /**
  * Модуль предоставляет доступ к RTC через функции записи-чтения
@@ -9,6 +11,7 @@
  * Данные отдаются в BCD формате
  */
 
+static_assert((RTC_LSE_DRIVE_CAPABILITY >= 0) && (RTC_LSE_DRIVE_CAPABILITY <= 3), "Select proper LSE drive capability");
 
 // Время, которое будет установлено, если RTC на момент включения питания не работает
 static const struct rtc_time init_time = {
@@ -110,6 +113,22 @@ void rtc_init(void)
 {
     RCC->APBENR1 |= RCC_APBENR1_PWREN | RCC_APBENR1_RTCAPBEN;
 	PWR->CR1 |= PWR_CR1_DBP;
+
+    // Check LSE drive capability
+    if ((RCC->BDCR & RCC_BDCR_LSEDRV_Msk) != (RTC_LSE_DRIVE_CAPABILITY << RCC_BDCR_LSEDRV_Pos)) {
+        // Настройка не сбрасывается при ресете МК
+        // И может быть обновлена в новой прошивке
+        // Поэтому нужно проверить и при необходимости обновить настройку
+        // Изменять её можно только при остановленном LSE
+
+        // Disable LSE to change settings
+        RCC->BDCR &= ~RCC_BDCR_LSEON;
+        // Wait until disabled
+        while (RCC->BDCR & RCC_BDCR_LSERDY) {};
+        // Set new settings
+        RCC->BDCR &= ~RCC_BDCR_LSEDRV_Msk;
+        RCC->BDCR |= RTC_LSE_DRIVE_CAPABILITY << RCC_BDCR_LSEDRV_Pos;
+    }
 
 	RCC->BDCR |= RCC_BDCR_RTCEN;
 	RCC->BDCR |= RCC_BDCR_RTCSEL_0;
