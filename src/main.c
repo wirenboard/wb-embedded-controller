@@ -59,7 +59,6 @@ int main(void)
     rtc_init();
     rtc_enable_pc13_1hz_clkout();
     usart_init();
-    linux_power_usb_init();
 
     // Init subsystems
     irq_init();

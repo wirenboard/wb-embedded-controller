@@ -52,10 +52,6 @@
 #define EC_GPIO_LINUX_PMIC_PWRON        GPIOB, 14
 #define EC_GPIO_LINUX_PMIC_RESET_PWROK  GPIOB, 13
 
-// Управление ключами питания с USB портов
-#define EC_GPIO_USB_CONSOLE_PWR_EN      GPIOA, 12
-#define EC_GPIO_USB_NETWORK_PWR_EN      GPIOA, 10
-
 
 // USART TX - передача сообщений в Debug Console
 // Выводит сообщения в ту же консоль, что и Linux
