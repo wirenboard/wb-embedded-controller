@@ -1,5 +1,4 @@
 #include "config.h"
-#include "gpio.h"
 #include "regmap-int.h"
 #include "pwrkey.h"
 #include "irq-subsystem.h"
@@ -14,9 +13,9 @@
 #include "rtc-alarm-subsystem.h"
 #include "rtc.h"
 #include "voltage-monitor.h"
+#include "linux-power-control.h"
 
 static const char fwver_chars[] = { MODBUS_DEVICE_FW_VERSION_STRING };
-static const gpio_pin_t gpio_linux_power = { EC_GPIO_LINUX_POWER };
 
 // Причина включения питания Linux
 enum poweron_reason {
@@ -50,7 +49,10 @@ static const char * power_reason_strings[] = {
 enum wbec_state {
     WBEC_STATE_WAIT_STARTUP,
     WBEC_STATE_VOLTAGE_CHECK,
+    WBEC_STATE_WAIT_POWER_ON,
     WBEC_STATE_WORKING,
+    WBEC_STATE_WAIT_POWER_OFF,
+
     WBEC_STATE_WAIT_LINUX_POWER_OFF,
     WBEC_STATE_WAIT_POWER_RESET,
 };
@@ -67,29 +69,31 @@ static struct REGMAP_INFO wbec_info = {
 
 static struct wbec_ctx wbec_ctx;
 
-static inline void linux_power_off(void)
+static void new_state(enum wbec_state s)
 {
-    GPIO_S_RESET(gpio_linux_power);
+    wbec_ctx.state = s;
+    wbec_ctx.timestamp = systick_get_system_time_ms();
+
+    switch (wbec_ctx.state) {
+    case WBEC_STATE_WAIT_STARTUP:           system_led_blink(5,   100);     break;
+    case WBEC_STATE_VOLTAGE_CHECK:          system_led_blink(5,   100);     break;
+    case WBEC_STATE_WAIT_POWER_ON:          system_led_blink(50,  50);      break;
+    case WBEC_STATE_WORKING:                system_led_blink(500, 1000);    break;
+    case WBEC_STATE_WAIT_POWER_OFF:         system_led_blink(50,  50);      break;
+    case WBEC_STATE_WAIT_LINUX_POWER_OFF:   system_led_blink(250, 250);     break;
+    case WBEC_STATE_WAIT_POWER_RESET:       system_led_blink(50,  50);      break;
+    default:                                system_led_enable();            break;
+    }
 }
 
-static inline void linux_power_on(void)
+static inline systime_t in_state_time(void)
 {
-    GPIO_S_SET(gpio_linux_power);
-}
-
-static inline void linux_power_gpio_init(void)
-{
-    GPIO_S_SET_PUSHPULL(gpio_linux_power);
-    GPIO_S_SET_OUTPUT(gpio_linux_power);
+    return systick_get_time_since_timestamp(wbec_ctx.timestamp);
 }
 
 static inline void goto_standby(void)
 {
     rtc_disable_pc13_1hz_clkout();
-
-    // Подтяжка вниз в режиме standby для GPIO управления питанием линукса
-    // Таким образом, в standby линукс будет выключен
-    PWR->PDCRD |= (1 << gpio_linux_power.pin);
 
     // Apply pull-up and pull-down configuration
     PWR->CR3 |= PWR_CR3_APC;
@@ -201,8 +205,7 @@ void wbec_init(void)
 
     wdt_set_timeout(WDEC_WATCHDOG_INITIAL_TIMEOUT_S);
 
-    wbec_ctx.state = WBEC_STATE_WAIT_STARTUP;
-    wbec_ctx.timestamp = 0;
+    new_state(WBEC_STATE_WAIT_STARTUP);
 }
 
 void wbec_do_periodic_work(void)
@@ -218,9 +221,9 @@ void wbec_do_periodic_work(void)
     if (wbec_ctx.state != WBEC_STATE_WAIT_STARTUP) {
         // Если было долгое нажатие - выключаемся сразу, независимо от состояния
         if (pwrkey_handle_long_press()) {
-            linux_power_off();
+            linux_pwr_hard_off();
             usart_tx_str_blocking("\n\rPower key long press detected, power off without delay.\r\n\n");
-            goto_standby();
+            new_state(WBEC_STATE_WAIT_POWER_OFF);
         }
     }
 
@@ -246,7 +249,7 @@ void wbec_do_periodic_work(void)
                 }
             } else {
                 // Если включились не от кнопки - сразу переходим дальше
-                wbec_ctx.state = WBEC_STATE_VOLTAGE_CHECK;
+                new_state(WBEC_STATE_VOLTAGE_CHECK);
             }
         }
         break;
@@ -261,11 +264,12 @@ void wbec_do_periodic_work(void)
             // Если после включения МК +3.3В есть - значить линукс уже работает
             // Не нужно выводить информацию в уарт
             // Тут ничего не нужно делать
+            // Инициализируем GPIO управления питанием сразу во включенном состоянии
+            linux_pwr_init(1);
         } else {
             // В ином случае перехватываем питание (выключаем)
             // И отправляем информацию в уарт
-            linux_power_off();
-            linux_power_gpio_init();
+            linux_pwr_init(0);
 
             // Блокирующая отправка здесь - не страшно,
             // т.к. устройство в этом состоянии больше ничего не делает
@@ -284,6 +288,9 @@ void wbec_do_periodic_work(void)
             // TODO Display voltages and temp
 
             usart_tx_str_blocking("Power on now...\r\n\n");
+
+            // После отправки данных включаем линукс
+            linux_pwr_on();
         }
 
         // Перед включеним питания сбросим события с кнопки
@@ -294,10 +301,15 @@ void wbec_do_periodic_work(void)
         // TODO: uncomment
         // wdt_start_reset();
 
-        linux_power_on();
-        linux_power_gpio_init();
-        system_led_blink(500, 1000);
-        wbec_ctx.state = WBEC_STATE_WORKING;
+        new_state(WBEC_STATE_WAIT_POWER_ON);
+        break;
+
+    case WBEC_STATE_WAIT_POWER_ON:
+        // В этом состоянии ждём, пока логика включения питания его включит
+        if (!linux_pwr_is_busy()) {
+            // Как только питание включилось - переходим в рабочий режим
+            new_state(WBEC_STATE_WORKING);
+        }
         break;
 
     case WBEC_STATE_WORKING:
@@ -309,7 +321,6 @@ void wbec_do_periodic_work(void)
         if (pwrkey_handle_short_press()) {
             wdt_stop();
             irq_set_flag(IRQ_PWR_OFF_REQ);
-            system_led_blink(250, 250);
             wbec_ctx.state = WBEC_STATE_WAIT_LINUX_POWER_OFF;
             wbec_ctx.timestamp = systick_get_system_time_ms();
         }
@@ -321,36 +332,43 @@ void wbec_do_periodic_work(void)
             // нужно было ехать нажимать кнопку чтобы его включить обратно
             // Поэтому здесь нужно проверить наличие будильника и если он есть - выключиться
             // иначе - перезагрузиться
-            linux_power_off();
             usart_tx_str_blocking("\n\rPower off request from Linux.\r\n\n");
             if (rtc_alarm_is_alarm_enabled()) {
                 usart_tx_str_blocking("\r\nAlarm is set, power is off.\r\n\n");
-                goto_standby();
+                linux_pwr_off();
+                new_state(WBEC_STATE_WAIT_POWER_OFF);
             } else {
                 usart_tx_str_blocking("\r\nAlarm not set, reboot system instead of power off.\r\n\n");
                 wbec_info.poweron_reason = REASON_REBOOT_NO_ALARM;
-                wbec_ctx.state = WBEC_STATE_WAIT_POWER_RESET;
-                wbec_ctx.timestamp = systick_get_system_time_ms();
+                linux_pwr_off();
+                new_state(WBEC_STATE_WAIT_POWER_RESET);
             }
         } else if (linux_powerctrl_req == LINUX_POWERCTRL_REBOOT) {
             // Если запрос на перезагрузку - перезагружается
             wbec_info.poweron_reason = REASON_REBOOT;
-            wbec_ctx.state = WBEC_STATE_WAIT_POWER_RESET;
-            wbec_ctx.timestamp = systick_get_system_time_ms();
-            linux_power_off();
             usart_tx_str_blocking("\r\nReboot request, reset power.\r\n\n");
+            linux_pwr_off();
+            new_state(WBEC_STATE_WAIT_POWER_RESET);
         }
 
         // Если сработал WDT - перезагружаемся по питанию
         if (wdt_handle_timed_out()) {
-            system_led_blink(50, 50);
             wbec_info.poweron_reason = REASON_WATCHDOG;
-            wbec_ctx.state = WBEC_STATE_WAIT_POWER_RESET;
-            wbec_ctx.timestamp = systick_get_system_time_ms();
-            linux_power_off();
             usart_tx_str_blocking("\r\nWatchdog is timed out, reset power.\r\n\n");
+            linux_pwr_off();
+            new_state(WBEC_STATE_WAIT_POWER_RESET);
         }
 
+        break;
+
+    case WBEC_STATE_WAIT_POWER_OFF:
+        // В этом состоянии ждем, пока логика управления питанием его выключит
+        // Это занимает довольно много времени, т.к. выключение происходит через
+        // сигнал PWRON, который надо активировать примерно на 6с
+        if (!linux_pwr_is_busy()) {
+            // После того как питание выключилось - засыпаем
+            goto_standby();
+        }
         break;
 
     case WBEC_STATE_WAIT_LINUX_POWER_OFF:
@@ -361,25 +379,28 @@ void wbec_do_periodic_work(void)
 
         if (linux_powerctrl_req == LINUX_POWERCTRL_OFF) {
             // Штатное выключение (запрос на выключение был с кнопки)
-            linux_power_off();
             usart_tx_str_blocking("\r\nPower off request from Linux after power key pressed. Power is off.\r\n\n");
-            goto_standby();
-        } else if (systick_get_time_since_timestamp(wbec_ctx.timestamp) >= WBEC_LINUX_POWER_OFF_DELAY_MS) {
+            linux_pwr_off();
+            new_state(WBEC_STATE_WAIT_POWER_OFF);
+        } else if (in_state_time() >= WBEC_LINUX_POWER_OFF_DELAY_MS) {
             // Аварийное выключение (можно как-то дополнительно обработать)
-            linux_power_off();
             usart_tx_str_blocking("\r\nNo power off request from Linux after power key pressed. Power is forced off.\r\n\n");
-            goto_standby();
+            linux_pwr_off();
+            new_state(WBEC_STATE_WAIT_POWER_OFF);
         }
 
         break;
 
     case WBEC_STATE_WAIT_POWER_RESET:
         // В это состояние попадаем, когда нужно дернуть питание для перезагрузки
-        // Питание линукса в этом состоянии выключено
-        // Тут нужно подождать, пока разрядятся конденсаторы и перейти в INIT
-        // Где всё заново включится
+        // Ждем, пока отработает логика управления питанием (питание отключится),
+        // затем ещё ждем время и переходим в начальное состояние
 
-        if (systick_get_time_since_timestamp(wbec_ctx.timestamp) >= WBEC_POWER_RESET_TIME_MS) {
+        if (linux_pwr_is_busy()) {
+            wbec_ctx.timestamp = systick_get_system_time_ms();
+        }
+
+        if (in_state_time() >= WBEC_POWER_RESET_TIME_MS) {
             wbec_ctx.state = WBEC_STATE_VOLTAGE_CHECK;
         }
 
