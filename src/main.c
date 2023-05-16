@@ -52,7 +52,6 @@ int main(void)
     systick_init();
     gpio_init();
     system_led_init();
-    pwrkey_init();
     adc_init();
     spi_slave_init();
     regmap_init();
@@ -66,6 +65,12 @@ int main(void)
 
     // Init WBEC
     wbec_init();
+
+    // Кнопка питания инициализируется последней, т.к.
+    // при настройке её как источника пробуждения может быть
+    // установлен флаг WKUP, а он проверяется в wbec_init()
+    // Errata 2.2.2
+    pwrkey_init();
 
     system_led_blink(500, 1000);
 
