@@ -32,7 +32,6 @@ struct pwr_ctx {
     enum power_source power_src;
     systime_t timestamp;
     unsigned attempt;
-    bool do_reset;
 };
 
 static struct pwr_ctx pwr_ctx = {
@@ -82,6 +81,29 @@ void linux_pwr_init(bool on)
     pmic_reset_gpio_off();
     GPIO_S_SET_OUTPUT(gpio_pmic_reset_pwrok);
     GPIO_S_SET_OUTPUT(gpio_pmic_pwron);
+
+    // Подтяжка вниз в режиме standby для GPIO управления питанием линукса
+    // Таким образом, в standby линукс будет выключен
+    PWR->PDCRD |= (1 << gpio_linux_power.pin);
+}
+
+/**
+ * @brief Включает питание линукс штатным способом:
+ * Включается 5В, затем контролируется появление 3.3В.
+ * Если 3.3В не появляется, выполняется 3 попытки включить PMIC через PWRON
+ */
+void linux_pwr_on(void)
+{
+    if ((pwr_ctx.state == PS_ON_COMPLETE) ||
+        (pwr_ctx.state == PS_ON_STEP1_WAIT_3V3) ||
+        (pwr_ctx.state == PS_ON_STEP2_PMIC_PWRON) ||
+        (pwr_ctx.state == PS_ON_STEP3_PMIC_PWRON_WAIT))
+    {
+        return;
+    }
+
+    linux_pwr_gpio_on();
+    new_state(PS_ON_STEP1_WAIT_3V3);
 }
 
 /**
@@ -90,32 +112,14 @@ void linux_pwr_init(bool on)
  */
 void linux_pwr_off(void)
 {
+    if ((pwr_ctx.state == PS_OFF_COMPLETE) ||
+        (pwr_ctx.state == PS_OFF_STEP1_PMIC_PWRON))
+    {
+        return;
+    }
+
     pmic_pwron_gpio_on();
     new_state(PS_OFF_STEP1_PMIC_PWRON);
-    pwr_ctx.do_reset = 0;
-}
-
-/**
- * @brief Сбрасывает питание линукс штатным способом через PMIC.
- * Сначала активируем PWRON, ждём выключения PMIC, потом сбрасываем 5В
- * и включаем питание заново
- */
-void linux_pwr_reset(void)
-{
-    pmic_pwron_gpio_on();
-    new_state(PS_OFF_STEP1_PMIC_PWRON);
-    pwr_ctx.do_reset = 1;
-}
-
-/**
- * @brief Сбрасывает питание через отключение 5В сразу, без участия PMIC.
- * Нужно, чтобы сбросить питание, например, при выходе реек питания за пределы.
- * В этот момент PMIC уже может не функционировать нормально.
- */
-void linux_pwr_hard_reset(void)
-{
-    linux_pwr_gpio_off();
-    new_state(PS_RESET_5V_WAIT);
 }
 
 /**
@@ -125,6 +129,7 @@ void linux_pwr_hard_reset(void)
 void linux_pwr_hard_off(void)
 {
     linux_pwr_gpio_off();
+    pmic_pwron_gpio_off();
     new_state(PS_OFF_COMPLETE);
 }
 
@@ -132,7 +137,7 @@ void linux_pwr_hard_off(void)
  * @brief Статус работы алгоритма управления питанием
  *
  * @return true Питание включено или выключено, алгоритм завершён
- * @return false Алгоритм что-то делает, питанием в неопределенном состоянии
+ * @return false Алгоритм что-то делает, питание в неопределенном состоянии
  */
 bool linux_pwr_is_busy(void)
 {
@@ -203,7 +208,7 @@ void linux_pwr_do_periodic_work(void)
 
     // Сброс питания 5В
     case PS_RESET_5V_WAIT:
-        if (in_state_time() > 1000) {
+        if (in_state_time() > WBEC_POWER_RESET_TIME_MS) {
             linux_pwr_gpio_on();
             new_state(PS_ON_STEP1_WAIT_3V3);
         }
@@ -219,12 +224,8 @@ void linux_pwr_do_periodic_work(void)
             // выключаем 5В
             pmic_pwron_gpio_off();
             linux_pwr_off();
-            // И переходим либо в выключенное состояние, либо в ресет
-            if (pwr_ctx.do_reset) {
-                new_state(PS_RESET_5V_WAIT);
-            } else {
-                new_state(PS_OFF_COMPLETE);
-            }
+            // И переходим либо в выключенное состояние
+            new_state(PS_OFF_COMPLETE);
         }
         break;
 
