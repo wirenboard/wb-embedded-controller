@@ -25,7 +25,7 @@ enum poweron_reason {
     REASON_RTC_ALARM,       // Будильник
     REASON_REBOOT,          // Перезагрузка
     REASON_REBOOT_NO_ALARM, // Перезагрузка вместо выключения, т.к. нет будильника
-    REASON_WATHDOG,         // Сработал watchdog
+    REASON_WATCHDOG,        // Сработал watchdog
     REASON_UNKNOWN,         // Неизветсно что (на всякий случай)
 };
 
@@ -344,7 +344,7 @@ void wbec_do_periodic_work(void)
         // Если сработал WDT - перезагружаемся по питанию
         if (wdt_handle_timed_out()) {
             system_led_blink(50, 50);
-            wbec_info.poweron_reason = REASON_WATHDOG;
+            wbec_info.poweron_reason = REASON_WATCHDOG;
             wbec_ctx.state = WBEC_STATE_WAIT_POWER_RESET;
             wbec_ctx.timestamp = systick_get_system_time_ms();
             linux_power_off();
