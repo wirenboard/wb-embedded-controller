@@ -87,6 +87,12 @@ void adc_init(void)
         GPIO_S_SET_PUSHPULL(vref_en_gpio);
         GPIO_S_SET_OUTPUT(vref_en_gpio);
         GPIO_S_SET(vref_en_gpio);
+
+        // Нужно подождать, пока VREF стабилизируется после включения
+        // Текущая RC - 220R * 10u = 2.2 ms
+        // Экспериментально установленное время выхода на рабочий режим - 5 мс
+        systime_t t_vref = systick_get_system_time_ms();
+        while (systick_get_time_since_timestamp(t_vref) <= 5) {};
     #endif
 
     // init DMA
@@ -109,7 +115,6 @@ void adc_init(void)
     // Init ADC
     RCC->APBENR2 |= RCC_APBENR2_ADCEN;
 
-
     // RM0454: 14.3.2
     // The ADC has a specific internal voltage regulator which must be enabled and stable before using the ADC
     // The software must wait for the ADC voltage regulator startup time
@@ -119,7 +124,7 @@ void adc_init(void)
     ADC1->CR |= ADC_CR_ADVREGEN;
     // Wait 1-2 ms - two lsb of system time
     systime_t t = systick_get_system_time_ms();
-    while (systick_get_time_since_timestamp(t) < 1) {};
+    while (systick_get_time_since_timestamp(t) < 2) {};
 
     ADC1->CR |= ADC_CR_ADCAL;
     while (ADC1->CR & ADC_CR_ADCAL) {};
@@ -155,6 +160,7 @@ void adc_init(void)
         adc_set_lowpass_rc(i, adc_cfg[i].rc_factor);
     }
 
+    while ((ADC1->ISR & ADC_ISR_ADRDY) == 0) {};
     ADC1->CR |= ADC_CR_ADSTART;
 }
 
