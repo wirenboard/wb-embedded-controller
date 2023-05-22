@@ -69,7 +69,7 @@
 #define RTC_LSE_DRIVE_CAPABILITY        2
 
 // Конфигурация АЦП
-#define ADC_VREF_EXT_MV                 2500
+#define ADC_VREF_EXT_MV                 3000
 #define ADC_VREF_EXT_EN_GPIO            GPIOD, 3
 #define NTC_RES_KOHM                    10
 #define NTC_PULLUP_RES_KOHM             33
