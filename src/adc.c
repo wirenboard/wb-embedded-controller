@@ -32,6 +32,9 @@
 
 #define ADC_FILTRATION_PERIOD_MS        5
 #define ADC_NO_GPIO_PIN                 0
+#define ADC_RESOLUTION_BIT              12
+
+#define ADC_CH_FULL_SCALE_MV(k)         (ADC_VREF_EXT_MV * (k)) // max measure voltage
 
 struct adc_ctx {
     bool initialized;
@@ -43,7 +46,9 @@ struct adc_ctx {
 
 struct adc_ctx adc_ctx = {};
 
-#define ADC_CHANNEL_DATA(alias, ch_num, port, pin, rc_factor, k)    {ADC_CHSELR_CHSEL##ch_num, port, pin, rc_factor, F16(ADC_VREF_EXT_MV * k / 4096.0)},
+#define ADC_CHANNEL_DATA(alias, ch_num, port, pin, rc_factor, k, offset_mv) \
+    { ADC_CHSELR_CHSEL##ch_num, port, pin, rc_factor, ADC_CH_FULL_SCALE_MV(k), offset_mv },
+
 /* This buffer contain order number in dma read sequence adc channels for each record in struct adc_channel adc_ch. It is set in runtime in adc_init() */
 static uint8_t chan_index_in_dma_buff[ADC_CHANNEL_COUNT] = {};
 #define ADC_CHANNEL_INDEX(ch)                                   (chan_index_in_dma_buff[ch])
@@ -53,7 +58,8 @@ struct adc_config_record {
     GPIO_TypeDef *port;
     uint8_t pin;
     uint32_t rc_factor;
-    fix16_t k;
+    uint32_t full_scale_mv;
+    int16_t offset_mv;
 };
 
 struct adc_config_record adc_cfg[ADC_CHANNEL_COUNT] = {
@@ -169,14 +175,14 @@ fix16_t adc_get_ch_adc_raw(enum adc_channel channel)
     return adc_ctx.lowpass_values[ch_index_in_dma_buff];
 }
 
-// Возвращает милливольты с учётом делителя (K) после lowpass фильтра
-uint16_t adc_get_ch_mv(enum adc_channel channel)
+// Возвращает милливольты с учётом делителя (K) и оффсета после lowpass фильтра
+uint32_t adc_get_ch_mv(enum adc_channel channel)
 {
     uint8_t ch_index_in_dma_buff = ADC_CHANNEL_INDEX(channel);
+    uint32_t adc_raw = fix16_to_int(adc_ctx.lowpass_values[ch_index_in_dma_buff]);
 
-    fix16_t res = fix16_mul(adc_ctx.lowpass_values[ch_index_in_dma_buff], adc_cfg[channel].k);
-
-    return fix16_to_int(res);
+    uint32_t mv = (adc_raw * adc_cfg[channel].full_scale_mv) >> ADC_RESOLUTION_BIT;
+    return mv + adc_cfg[channel].offset_mv;
 }
 
 void adc_do_periodic_work(void)
