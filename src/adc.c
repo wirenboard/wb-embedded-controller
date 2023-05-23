@@ -129,8 +129,6 @@ void adc_init(void)
     ADC1->CR |= ADC_CR_ADCAL;
     while (ADC1->CR & ADC_CR_ADCAL) {};
 
-    ADC->CCR |= ADC_CCR_VREFEN | ADC_CCR_TSEN;
-
     ADC1->CFGR1 |= ADC_CFGR1_DMACFG | ADC_CFGR1_DMAEN;          // DMA enable, DMA circular mode
     ADC1->CFGR1 |= ADC_CFGR1_CONT;                              // Continuous conversion mode
 
