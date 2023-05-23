@@ -3,6 +3,7 @@
 #include "gpio.h"
 #include "systick.h"
 #include "voltage-monitor.h"
+#include "usart_tx.h"
 
 static const gpio_pin_t gpio_linux_power = { EC_GPIO_LINUX_POWER };
 static const gpio_pin_t gpio_pmic_pwron = { EC_GPIO_LINUX_PMIC_PWRON };
@@ -168,6 +169,7 @@ void linux_pwr_do_periodic_work(void)
         }
         if (in_state_time() > 500) {
             // Если 3.3В не появилось, то попробуем включить PMIC через PWRON
+            usart_tx_str_blocking("No voltage on 3.3V line, try to switch on PMIC throught PWRON\n");
             pmic_pwron_gpio_on();
             pwr_ctx.attempt = 0;
             new_state(PS_ON_STEP2_PMIC_PWRON);
@@ -192,6 +194,7 @@ void linux_pwr_do_periodic_work(void)
                 new_state(PS_ON_STEP3_PMIC_PWRON_WAIT);
             } else {
                 // Если попытки кончились - сбрасываем 5В и начинаем заново
+                usart_tx_str_blocking("Still no voltage on 3.3V line, reset 5V line and try to switch on again\n");
                 linux_pwr_gpio_off();
                 new_state(PS_RESET_5V_WAIT);
             }
@@ -201,6 +204,7 @@ void linux_pwr_do_periodic_work(void)
     // Третий шаг включения - отпускаем PWRON, ждём, пробуем ещё раз
     case PS_ON_STEP3_PMIC_PWRON_WAIT:
         if (in_state_time() > 500) {
+            usart_tx_str_blocking("One more attempt to switch on PMIC throught PWRON\n");
             pmic_pwron_gpio_on();
             new_state(PS_ON_STEP2_PMIC_PWRON);
         }
@@ -217,14 +221,18 @@ void linux_pwr_do_periodic_work(void)
     // Выключение питания штатным путём через PWRON
     // В этом состоянии PWRON активирован
     case PS_OFF_STEP1_PMIC_PWRON:
-        if ((!vmon_get_ch_status(VMON_CHANNEL_V33)) ||
-            (in_state_time() > 7000))
-        {
-            // Если пропало 3.3В (или не пропало и случился таймаут)
-            // выключаем 5В
+        // Если пропало 3.3В (или не пропало и случился таймаут)
+        // выключаем 5В
+        // И переходим либо в выключенное состояние
+        if (!vmon_get_ch_status(VMON_CHANNEL_V33)) {
+            usart_tx_str_blocking("PMIC switched off throught PWRON, disabling 5V line now\n");
             pmic_pwron_gpio_off();
             linux_pwr_off();
-            // И переходим либо в выключенное состояние
+            new_state(PS_OFF_COMPLETE);
+        } else if (in_state_time() > 7000) {
+            usart_tx_str_blocking("Warning: PMIC not switched off throught PWRON after 7s, disabling 5V line now\n");
+            pmic_pwron_gpio_off();
+            linux_pwr_off();
             new_state(PS_OFF_COMPLETE);
         }
         break;
