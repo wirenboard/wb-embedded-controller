@@ -115,6 +115,9 @@ void adc_init(void)
     // Init ADC
     RCC->APBENR2 |= RCC_APBENR2_ADCEN;
 
+    // Set ADC frequency to 1 MHz
+    ADC->CCR |= 0b1001 << ADC_CCR_PRESC_Pos;
+
     // RM0454: 14.3.2
     // The ADC has a specific internal voltage regulator which must be enabled and stable before using the ADC
     // The software must wait for the ADC voltage regulator startup time
