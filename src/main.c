@@ -72,8 +72,6 @@ int main(void)
     // Errata 2.2.2
     pwrkey_init();
 
-    system_led_blink(500, 1000);
-
     while (1) {
         // Drivers
         adc_do_periodic_work();
