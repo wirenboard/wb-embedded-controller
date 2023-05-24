@@ -80,6 +80,20 @@ static inline fix16_t calculate_rc_factor(uint32_t tau_ms)
     );
 }
 
+static void dma_end_transfer_irq(void)
+{
+    // Disable IRQ - it needed only for first measurement
+    DMA1->IFCR = DMA_IFCR_CGIF1;
+    DMA1_Channel1->CCR &= ~DMA_CCR_TCIE;
+    NVIC_DisableIRQ(DMA1_Channel1_IRQn);
+
+    for (uint8_t i = 0; i < ADC_CHANNEL_COUNT; i++) {
+        adc_ctx.lowpass_values[i] = fix16_from_int(adc_ctx.raw_values[i]);
+    }
+    adc_ctx.initialized = 1;
+    adc_ctx.timestamp = systick_get_system_time_ms();
+}
+
 void adc_init(void)
 {
     #ifdef ADC_VREF_EXT_EN_GPIO
@@ -109,6 +123,11 @@ void adc_init(void)
     DMA1_Channel1->CMAR = (uint32_t)adc_ctx.raw_values;         // memory address
 
     DMA1_Channel1->CNDTR = ADC_CHANNEL_COUNT;
+
+    // Прерывание по DMA нужно, чтобы инициализировать lowpass фильтр первым измерением
+    DMA1_Channel1->CCR |= DMA_CCR_TCIE;
+    NVIC_SetHandler(DMA1_Channel1_IRQn, dma_end_transfer_irq);
+    NVIC_EnableIRQ(DMA1_Channel1_IRQn);
 
     DMA1_Channel1->CCR |= DMA_CCR_EN;
 
@@ -195,11 +214,6 @@ uint32_t adc_get_ch_mv(enum adc_channel channel)
 void adc_do_periodic_work(void)
 {
     if (!adc_ctx.initialized) {
-        for (uint8_t i = 0; i < ADC_CHANNEL_COUNT; i++) {
-            adc_ctx.lowpass_values[i] = fix16_from_int(adc_ctx.raw_values[i]);
-        }
-        adc_ctx.initialized = 1;
-        adc_ctx.timestamp = systick_get_system_time_ms();
         return;
     }
 
