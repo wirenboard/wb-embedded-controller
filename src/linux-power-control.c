@@ -238,6 +238,7 @@ void linux_pwr_do_periodic_work(void)
             pmic_pwron_gpio_off();
             new_state(PS_ON_STEP1_WAIT_3V3);
         }
+        break;
 
     // Выключение питания штатным путём через PWRON
     // В этом состоянии PWRON активирован
