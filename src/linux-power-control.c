@@ -270,10 +270,13 @@ void linux_pwr_do_periodic_work(void)
         }
         break;
 
+    // В это состояние переходим после детектирования долгого нажатия
+    // PMIC_PWRON активирован
     case PS_LONG_PRESS_HANDLE:
         if ((!vmon_get_ch_status(VMON_CHANNEL_V33)) ||
             (in_state_time() > 10000))
         {
+            // Если пропало 3.3В или вышел таймаут - выключаем 5В и засыпаем
             pmic_pwron_gpio_off();
             pmic_reset_gpio_off();
             linux_pwr_gpio_off();
@@ -281,6 +284,7 @@ void linux_pwr_do_periodic_work(void)
             usart_tx_str_blocking("\n\rPower off after power key long press detected.\r\n\n");
             wbec_goto_standby();
         } else if (!pwrkey_pressed()) {
+            // Если кнопку отпустили - отпускаем PMIC_PWRON
             pmic_pwron_gpio_off();
             new_state(PS_ON_STEP1_WAIT_3V3);
         }
