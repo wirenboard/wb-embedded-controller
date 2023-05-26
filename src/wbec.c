@@ -15,17 +15,26 @@
 #include "voltage-monitor.h"
 #include "linux-power-control.h"
 
+#define LINUX_POWERON_REASON(m) \
+    m(REASON_POWER_ON,        "Wiren Board supply on"        ) \
+    m(REASON_POWER_KEY,       "Power key pressed"            ) \
+    m(REASON_RTC_ALARM,       "RTC alarm"                    ) \
+    m(REASON_REBOOT,          "Reboot"                       ) \
+    m(REASON_REBOOT_NO_ALARM, "Reboot instead of poweroff"   ) \
+    m(REASON_WATCHDOG,        "Watchdog"                     ) \
+    m(REASON_UNKNOWN,         "Unknown"                      ) \
+
+#define __LINUX_POWERON_REASON_NAME(name, string)           name,
+#define __LINUX_POWERON_REASON_STRING(name, string)         string,
+
 static const char fwver_chars[] = { MODBUS_DEVICE_FW_VERSION_STRING };
 
 // Причина включения питания Linux
 enum poweron_reason {
-    REASON_POWER_ON,        // Подано питание на WB
-    REASON_POWER_KEY,       // Нажата кнопка питания (до этого было выключено)
-    REASON_RTC_ALARM,       // Будильник
-    REASON_REBOOT,          // Перезагрузка
-    REASON_REBOOT_NO_ALARM, // Перезагрузка вместо выключения, т.к. нет будильника
-    REASON_WATCHDOG,        // Сработал watchdog
-    REASON_UNKNOWN,         // Неизветсно что (на всякий случай)
+    LINUX_POWERON_REASON(__LINUX_POWERON_REASON_NAME)
+};
+static const char * power_reason_strings[] = {
+    LINUX_POWERON_REASON(__LINUX_POWERON_REASON_STRING)
 };
 
 // Запрос из Linux на управление питанием
@@ -34,16 +43,6 @@ enum linux_powerctrl_req {
     LINUX_POWERCTRL_OFF,
     LINUX_POWERCTRL_REBOOT,
     LINUX_POWERCTRL_PMIC_RESET,
-};
-
-static const char * power_reason_strings[] = {
-    "Wiren Board supply on",
-    "Power key pressed",
-    "RTC alarm",
-    "Reboot",
-    "Reboot instead of poweroff",
-    "Watchdog",
-    "Unknown",
 };
 
 // Состояние алгоритма EC
