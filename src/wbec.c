@@ -92,26 +92,6 @@ static inline systime_t in_state_time(void)
     return systick_get_time_since_timestamp(wbec_ctx.timestamp);
 }
 
-static inline void goto_standby(void)
-{
-    rtc_disable_pc13_1hz_clkout();
-
-    // Apply pull-up and pull-down configuration
-    PWR->CR3 |= PWR_CR3_APC;
-
-    // Clear WKUP flags
-    PWR->SCR = PWR_SCR_CWUF;
-
-    // SLEEPDEEP
-    SCB->SCR |= SCB_SCR_SLEEPDEEP_Msk;
-
-    // 011: Standby mode
-    PWR->CR1 |= PWR_CR1_LPMS_0 | PWR_CR1_LPMS_1;
-
-    __WFI();
-    while (1) {};
-}
-
 static inline enum poweron_reason get_poweron_reason(void)
 {
     enum poweron_reason reason;
@@ -211,6 +191,26 @@ void wbec_init(void)
     new_state(WBEC_STATE_WAIT_STARTUP);
 }
 
+void wbec_goto_standby(void)
+{
+    rtc_disable_pc13_1hz_clkout();
+
+    // Apply pull-up and pull-down configuration
+    PWR->CR3 |= PWR_CR3_APC;
+
+    // Clear WKUP flags
+    PWR->SCR = PWR_SCR_CWUF;
+
+    // SLEEPDEEP
+    SCB->SCR |= SCB_SCR_SLEEPDEEP_Msk;
+
+    // 011: Standby mode
+    PWR->CR1 |= PWR_CR1_LPMS_0 | PWR_CR1_LPMS_1;
+
+    __WFI();
+    while (1) {};
+}
+
 void wbec_do_periodic_work(void)
 {
     struct REGMAP_ADC_DATA adc;
@@ -218,17 +218,6 @@ void wbec_do_periodic_work(void)
     regmap_set_region_data(REGMAP_REGION_ADC_DATA, &adc, sizeof(adc));
 
     enum linux_powerctrl_req linux_powerctrl_req = get_linux_powerctrl_req();
-
-    // Некоторые вещи нужно делать всегда, независимо от состояния
-    // Например, реагировать на долгое нажатие
-    if (wbec_ctx.state != WBEC_STATE_WAIT_STARTUP) {
-        // Если было долгое нажатие - выключаемся сразу, независимо от состояния
-        if (pwrkey_handle_long_press()) {
-            linux_pwr_hard_off();
-            usart_tx_str_blocking("\n\rPower key long press detected, power off without delay.\r\n\n");
-            new_state(WBEC_STATE_WAIT_POWER_OFF);
-        }
-    }
 
     switch (wbec_ctx.state) {
     case WBEC_STATE_WAIT_STARTUP:
@@ -247,7 +236,7 @@ void wbec_do_periodic_work(void)
                     if (pwrkey_pressed()) {
                         wbec_ctx.state = WBEC_STATE_VOLTAGE_CHECK;
                     } else {
-                        goto_standby();
+                        wbec_goto_standby();
                     }
                 }
             } else {
@@ -375,7 +364,7 @@ void wbec_do_periodic_work(void)
         // сигнал PWRON, который надо активировать примерно на 6с
         if (!linux_pwr_is_busy()) {
             // После того как питание выключилось - засыпаем
-            goto_standby();
+            wbec_goto_standby();
         }
         break;
 

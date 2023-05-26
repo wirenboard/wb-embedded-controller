@@ -4,6 +4,8 @@
 #include "systick.h"
 #include "voltage-monitor.h"
 #include "usart_tx.h"
+#include "pwrkey.h"
+#include "wbec.h"
 
 static const gpio_pin_t gpio_linux_power = { EC_GPIO_LINUX_POWER };
 static const gpio_pin_t gpio_pmic_pwron = { EC_GPIO_LINUX_PMIC_PWRON };
@@ -20,6 +22,8 @@ enum pwr_state {
 
     PS_RESET_5V_WAIT,
     PS_RESET_PMIC_WAIT,
+
+    PS_LONG_PRESS_HANDLE,
 };
 
 enum power_source {
@@ -166,6 +170,13 @@ void linux_pwr_do_periodic_work(void)
         return;
     }
 
+    if (pwrkey_handle_long_press()) {
+        if (vmon_get_ch_status(VMON_CHANNEL_V33)) {
+            pmic_pwron_gpio_on();
+            new_state(PS_LONG_PRESS_HANDLE);
+        }
+    }
+
     switch (pwr_ctx.state) {
     // Если алгоритм завершился (включил или выключил питание)
     // ничего не делаем
@@ -256,6 +267,22 @@ void linux_pwr_do_periodic_work(void)
             pmic_pwron_gpio_off();
             linux_pwr_off();
             new_state(PS_OFF_COMPLETE);
+        }
+        break;
+
+    case PS_LONG_PRESS_HANDLE:
+        if ((!vmon_get_ch_status(VMON_CHANNEL_V33)) ||
+            (in_state_time() > 10000))
+        {
+            pmic_pwron_gpio_off();
+            pmic_reset_gpio_off();
+            linux_pwr_gpio_off();
+            new_state(PS_OFF_COMPLETE);
+            usart_tx_str_blocking("\n\rPower off after power key long press detected.\r\n\n");
+            wbec_goto_standby();
+        } else if (!pwrkey_pressed()) {
+            pmic_pwron_gpio_off();
+            new_state(PS_ON_STEP1_WAIT_3V3);
         }
         break;
 
