@@ -33,6 +33,7 @@ enum linux_powerctrl_req {
     LINUX_POWERCTRL_NO_ACTION,
     LINUX_POWERCTRL_OFF,
     LINUX_POWERCTRL_REBOOT,
+    LINUX_POWERCTRL_PMIC_RESET,
 };
 
 static const char * power_reason_strings[] = {
@@ -174,10 +175,12 @@ static inline enum linux_powerctrl_req get_linux_powerctrl_req(void)
         if (p.off) {
             p.off = 0;
             ret = LINUX_POWERCTRL_OFF;
-        }
-        if (p.reboot) {
+        } else if (p.reboot) {
             p.reboot = 0;
             ret = LINUX_POWERCTRL_REBOOT;
+        } else if (p.reset_pmic) {
+            p.reset_pmic = 0;
+            ret = LINUX_POWERCTRL_PMIC_RESET;
         }
 
         regmap_clear_changed(REGMAP_REGION_POWER_CTRL);
@@ -349,6 +352,11 @@ void wbec_do_periodic_work(void)
             usart_tx_str_blocking("\r\nReboot request, reset power.\r\n\n");
             linux_pwr_off();
             new_state(WBEC_STATE_WAIT_POWER_RESET);
+        } else if (linux_powerctrl_req == LINUX_POWERCTRL_PMIC_RESET) {
+            wbec_info.poweron_reason = REASON_REBOOT;
+            usart_tx_str_blocking("\r\nPMIC reset request, activate PMIC RESET line now\r\n\n");
+            linux_pwr_reset_pmic();
+            new_state(WBEC_STATE_WAIT_POWER_ON);
         }
 
         // Если сработал WDT - перезагружаемся по питанию

@@ -19,6 +19,7 @@ enum pwr_state {
     PS_ON_STEP3_PMIC_PWRON_WAIT,
 
     PS_RESET_5V_WAIT,
+    PS_RESET_PMIC_WAIT,
 };
 
 enum power_source {
@@ -135,6 +136,17 @@ void linux_pwr_hard_off(void)
 }
 
 /**
+ * @brief Сброс PMIC через линию RESET.
+ * В нормальной работе не используется, нужен для проверки схемотехники и монтажа.
+ * Возможно как-то понадобится в последствии.
+ */
+void linux_pwr_reset_pmic(void)
+{
+    pmic_reset_gpio_on();
+    new_state(PS_RESET_PMIC_WAIT);
+}
+
+/**
  * @brief Статус работы алгоритма управления питанием
  *
  * @return true Питание включено или выключено, алгоритм завершён
@@ -217,6 +229,15 @@ void linux_pwr_do_periodic_work(void)
             new_state(PS_ON_STEP1_WAIT_3V3);
         }
         break;
+
+    // Сброс PMIC через RESET самого PMIC
+    case PS_RESET_PMIC_WAIT:
+        if ((!vmon_get_ch_status(VMON_CHANNEL_V33)) || (in_state_time() > 2000)) {
+            usart_tx_str_blocking("PMIC was reset throught RESET line\n");
+            pmic_reset_gpio_off();
+            pmic_pwron_gpio_off();
+            new_state(PS_ON_STEP1_WAIT_3V3);
+        }
 
     // Выключение питания штатным путём через PWRON
     // В этом состоянии PWRON активирован
