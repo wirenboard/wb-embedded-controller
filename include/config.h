@@ -41,9 +41,13 @@
 // Включение V_OUT
 #define EC_GPIO_VOUT_EN                 GPIOA, 15
 
-// Состояние модуля WBMZ
+// Модуль WBMZ
 // WBMZ тянет вход вниз, если работает step-up на WBMZ
-#define EC_GPIO_STATUS_BAT              GPIOB, 5
+#define EC_GPIO_WBMZ_STATUS_BAT         GPIOB, 5
+// В модуле WBMZ сигнал называется OFF и когда нужно отключить WBMZ, его нужно прижать вниз
+// В WB 7.4.1 он подтянут вниз резистором 2к, т.е. по дефолту выключен
+// Чтобы включить WBMZ, нужно выдать 1 на этот пин
+#define EC_GPIO_WBMZ_ON                 GPIOB, 15
 
 // Управляет питанием Linux
 #define EC_GPIO_LINUX_POWER             GPIOD, 1
