@@ -22,8 +22,8 @@ enum led_mode {
 };
 
 enum led_time_settings {
-    LED_TIME_ON,
     LED_TIME_OFF,
+    LED_TIME_ON,
 
     LED_TIME_COUNT,
 };
