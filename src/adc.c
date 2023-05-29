@@ -4,6 +4,8 @@
 #include "config.h"
 #include <stdbool.h>
 #include "systick.h"
+#include "rcc.h"
+#include <assert.h>
 
 /**
  * Модуль занимается опросом каналов АЦП и фильтрацией данных
@@ -36,8 +38,14 @@
 
 #define ADC_CH_FULL_SCALE_MV(k)         (ADC_VREF_EXT_MV * (k)) // max measure voltage
 
+#define ADC_INT_VREF_FACTORY_CAL_MV     3300
+#define ADC_INT_VREF_CAL_VALUE          (*((uint16_t*)0x1FFF75AA))
+
+static_assert(ADC_INT_VREF_FACTORY_CAL_MV == ADC_VREF_EXT_MV, "Only ADC_INT_VREF_FACTORY_CAL_MV != ADC_VREF_EXT_MV supported now");
+
 struct adc_ctx {
     bool initialized;
+    enum adc_vref vref;
     systime_t timestamp;
     uint16_t raw_values[ADC_CHANNEL_COUNT];
     fix16_t  lowpass_values[ADC_CHANNEL_COUNT];
@@ -80,6 +88,16 @@ static inline fix16_t calculate_rc_factor(uint32_t tau_ms)
     );
 }
 
+// Not precise!
+// With 20 us, gives about 40 us on 64 MHz and 150 us on 1 MHz
+static inline void delay_blocking_us(uint32_t us)
+{
+    uint32_t cycles = us * (SystemCoreClock / 1000000) / 3;
+    while (cycles--) {
+        __NOP();
+    }
+}
+
 static void dma_end_transfer_irq(void)
 {
     // Disable IRQ - it needed only for first measurement
@@ -94,24 +112,22 @@ static void dma_end_transfer_irq(void)
     adc_ctx.timestamp = systick_get_system_time_ms();
 }
 
-void adc_init(void)
+void adc_init(enum adc_clock clock_divider, enum adc_vref vref)
 {
-    #ifdef ADC_VREF_EXT_EN_GPIO
-        const gpio_pin_t vref_en_gpio = { ADC_VREF_EXT_EN_GPIO };
-        GPIO_S_SET_PUSHPULL(vref_en_gpio);
-        GPIO_S_SET_OUTPUT(vref_en_gpio);
-        GPIO_S_SET(vref_en_gpio);
+    adc_ctx.initialized = 0;
+    adc_ctx.vref = vref;
 
-        // Нужно подождать, пока VREF стабилизируется после включения
-        // Текущая RC - 220R * 10u = 2.2 ms
-        // Экспериментально установленное время выхода на рабочий режим - 5 мс
-        systime_t t_vref = systick_get_system_time_ms();
-        while (systick_get_time_since_timestamp(t_vref) <= 5) {};
-    #endif
-
-    // init DMA
+    // Enable clock
+    RCC->APBENR2 |= RCC_APBENR2_ADCEN;
     RCC->AHBENR |= RCC_AHBENR_DMA1EN;
 
+    // Reset peripherals
+    RCC->APBRSTR2 |= RCC_APBRSTR2_ADCRST;
+    RCC->APBRSTR2 &= ~RCC_APBRSTR2_ADCRST;
+    RCC->AHBRSTR |= RCC_AHBRSTR_DMA1RST;
+    RCC->AHBRSTR &= ~RCC_AHBRSTR_DMA1RST;
+
+    // init DMA
     DMAMUX1_Channel0->CCR = 5;                                  // ADC source
 
     DMA1_Channel1->CCR |= DMA_CCR_PL;                           // very high priority
@@ -131,11 +147,8 @@ void adc_init(void)
 
     DMA1_Channel1->CCR |= DMA_CCR_EN;
 
-    // Init ADC
-    RCC->APBENR2 |= RCC_APBENR2_ADCEN;
-
-    // Set ADC frequency to 1 MHz
-    ADC->CCR |= 0b1001 << ADC_CCR_PRESC_Pos;
+    // Set ADC prescaler
+    ADC->CCR |= clock_divider << ADC_CCR_PRESC_Pos;
 
     // RM0454: 14.3.2
     // The ADC has a specific internal voltage regulator which must be enabled and stable before using the ADC
@@ -144,9 +157,8 @@ void adc_init(void)
     // managed by software (for details on tADCVREG_SETUP, refer to the device datasheet).
     // tADCVREG_SETUP = 20 us
     ADC1->CR |= ADC_CR_ADVREGEN;
-    // Wait 1-2 ms - two lsb of system time
-    systime_t t = systick_get_system_time_ms();
-    while (systick_get_time_since_timestamp(t) < 2) {};
+    // Wait about 20 us
+    delay_blocking_us(20);
 
     ADC1->CR |= ADC_CR_ADCAL;
     while (ADC1->CR & ADC_CR_ADCAL) {};
@@ -205,10 +217,28 @@ fix16_t adc_get_ch_adc_raw(enum adc_channel channel)
 uint32_t adc_get_ch_mv(enum adc_channel channel)
 {
     uint8_t ch_index_in_dma_buff = ADC_CHANNEL_INDEX(channel);
-    uint32_t adc_raw = fix16_to_int(adc_ctx.lowpass_values[ch_index_in_dma_buff]);
+    fix16_t ch_raw = adc_ctx.lowpass_values[ch_index_in_dma_buff];
 
-    uint32_t mv = (adc_raw * adc_cfg[channel].full_scale_mv) >> ADC_RESOLUTION_BIT;
+    uint32_t raw_value;
+    if (adc_ctx.vref == ADC_VREF_INT) {
+        fix16_t int_vref = adc_ctx.lowpass_values[ADC_CHANNEL_INDEX(ADC_CHANNEL_ADC_INT_VREF)];
+        raw_value = fix16_to_int(
+            fix16_mul(
+                ch_raw,
+                fix16_div(int_vref, fix16_from_int(ADC_INT_VREF_CAL_VALUE))
+            )
+        );
+    } else {
+        raw_value = fix16_to_int(adc_ctx.lowpass_values[ch_index_in_dma_buff]);
+    }
+    // В формуле подразумевается, что ADC_INT_VREF_MV == ADC_EXT_VREF_MV
+    uint32_t mv = (raw_value * adc_cfg[channel].full_scale_mv) >> ADC_RESOLUTION_BIT;
     return mv + adc_cfg[channel].offset_mv;
+}
+
+bool adc_get_ready(void)
+{
+    return adc_ctx.initialized;
 }
 
 void adc_do_periodic_work(void)
