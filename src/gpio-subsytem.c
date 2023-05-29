@@ -2,6 +2,7 @@
 #include "config.h"
 #include "gpio.h"
 #include "regmap-int.h"
+#include "linux-power-control.h"
 
 /**
  * Модуль занимается работой с регионом GPIO в regmap
@@ -11,7 +12,6 @@
  */
 
 static const gpio_pin_t v_out_gpio = { EC_GPIO_VOUT_EN };
-static const gpio_pin_t status_bat_gpio = { EC_GPIO_STATUS_BAT };
 
 static struct REGMAP_GPIO gpio_ctx = {};
 
@@ -24,26 +24,12 @@ static inline void set_v_out_state(bool state)
     }
 }
 
-static inline uint8_t get_status_bat_state(void)
-{
-    if (GPIO_S_TEST(status_bat_gpio)) {
-        return 1;
-    } else {
-        return 0;
-    }
-}
-
-
 void gpio_init(void)
 {
     // V_OUT управляет транистором, нужен выход push-pull
     set_v_out_state(0);
     GPIO_S_SET_PUSHPULL(v_out_gpio);
     GPIO_S_SET_OUTPUT(v_out_gpio);
-
-    // STATUS_BAT это вход, который WBMZ тянет к земле открытым коллектором
-    // Подтянут снаружи к V_EC
-    GPIO_S_SET_INPUT(status_bat_gpio);
 }
 
 void gpio_do_periodic_work(void)
@@ -56,7 +42,7 @@ void gpio_do_periodic_work(void)
     gpio_ctx.a3 = 0;
     gpio_ctx.a4 = 0;
 
-    gpio_ctx.status_bat = get_status_bat_state();
+    gpio_ctx.status_bat = linux_pwr_is_powered_from_wbmz();
 
     // TODO Check UVLO/OVP
     set_v_out_state(gpio_ctx.v_out);
