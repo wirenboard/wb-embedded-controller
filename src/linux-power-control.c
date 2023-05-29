@@ -5,11 +5,14 @@
 #include "voltage-monitor.h"
 #include "usart_tx.h"
 #include "pwrkey.h"
-#include "wbec.h"
+#include "mcu-pwr.h"
+#include "adc.h"
 
 static const gpio_pin_t gpio_linux_power = { EC_GPIO_LINUX_POWER };
 static const gpio_pin_t gpio_pmic_pwron = { EC_GPIO_LINUX_PMIC_PWRON };
 static const gpio_pin_t gpio_pmic_reset_pwrok = { EC_GPIO_LINUX_PMIC_RESET_PWROK };
+static const gpio_pin_t gpio_wbmz_status_bat = { EC_GPIO_WBMZ_STATUS_BAT };
+static const gpio_pin_t gpio_wbmz_on = { EC_GPIO_WBMZ_ON };
 
 enum pwr_state {
     PS_OFF_COMPLETE,
@@ -38,6 +41,7 @@ struct pwr_ctx {
     enum power_source power_src;
     systime_t timestamp;
     unsigned attempt;
+    bool wbmz_enabled;
 };
 
 static struct pwr_ctx pwr_ctx = {
@@ -51,6 +55,9 @@ static inline void pmic_pwron_gpio_on(void)      { GPIO_S_SET(gpio_pmic_pwron); 
 static inline void pmic_pwron_gpio_off(void)     { GPIO_S_RESET(gpio_pmic_pwron); }
 static inline void pmic_reset_gpio_on(void)      { GPIO_S_SET(gpio_pmic_reset_pwrok); }
 static inline void pmic_reset_gpio_off(void)     { GPIO_S_RESET(gpio_pmic_reset_pwrok); }
+static inline void wbmz_off(void)                { GPIO_S_RESET(gpio_wbmz_on); }
+static inline void wbmz_on(void)                 { GPIO_S_SET(gpio_wbmz_on); }
+static inline bool wbmz_working(void)            { return (!GPIO_S_TEST(gpio_wbmz_status_bat)); }
 
 static inline void new_state(enum pwr_state s)
 {
@@ -91,6 +98,13 @@ void linux_pwr_init(bool on)
     // Подтяжка вниз в режиме standby для GPIO управления питанием линукса
     // Таким образом, в standby линукс будет выключен
     PWR->PDCRD |= (1 << gpio_linux_power.pin);
+
+    // STATUS_BAT это вход, который WBMZ тянет к земле открытым коллектором
+    // Подтянут снаружи к V_EC
+    GPIO_S_SET_INPUT(gpio_wbmz_status_bat);
+    // WBMZ OFF - включение/выключение WBMZ
+    wbmz_off();
+    GPIO_S_SET_OUTPUT(gpio_wbmz_on);
 }
 
 /**
@@ -164,6 +178,17 @@ bool linux_pwr_is_busy(void)
     );
 }
 
+void linux_pwr_enable_wbmz(void)
+{
+    wbmz_on();
+    pwr_ctx.wbmz_enabled = 1;
+}
+
+bool linux_pwr_is_powered_from_wbmz(void)
+{
+    return wbmz_working();
+}
+
 void linux_pwr_do_periodic_work(void)
 {
     if (!vmon_ready()) {
@@ -174,6 +199,24 @@ void linux_pwr_do_periodic_work(void)
         if (vmon_get_ch_status(VMON_CHANNEL_V33)) {
             pmic_pwron_gpio_on();
             new_state(PS_LONG_PRESS_HANDLE);
+        }
+    }
+
+    // Управление питанием WBMZ
+    // Если мы тут находимся, значит хотим линукс включить
+    // И должны включить WBMZ, если:
+    // 1. Vin > 11.5V
+    // 2. WBMZ выключен и Vin стало < 9V
+    // 3. WBMZ выключен и 5В куда-то пропало (работаем от USB и вытащили его)
+    // Выключать WBMZ специально не надо - оно выключится само при переходе в standby
+    // При этом ЕС продолжит работать от BATSENSE
+    uint16_t vin = adc_get_ch_mv(ADC_CHANNEL_ADC_V_IN);
+    if (!pwr_ctx.wbmz_enabled) {
+        if ((vin > 11500) ||
+            (vin < 9000) ||
+            (!vmon_get_ch_status(VMON_CHANNEL_V50)))
+        {
+            linux_pwr_enable_wbmz();
         }
     }
 
@@ -282,7 +325,7 @@ void linux_pwr_do_periodic_work(void)
             linux_pwr_gpio_off();
             new_state(PS_OFF_COMPLETE);
             usart_tx_str_blocking("\n\rPower off after power key long press detected.\r\n\n");
-            wbec_goto_standby();
+            mcu_goto_standby();
         } else if (!pwrkey_pressed()) {
             // Если кнопку отпустили - отпускаем PMIC_PWRON
             pmic_pwron_gpio_off();
