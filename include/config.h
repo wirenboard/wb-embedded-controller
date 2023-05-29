@@ -68,7 +68,6 @@
 
 // Конфигурация АЦП
 #define ADC_VREF_EXT_MV                 3300
-#define ADC_VREF_EXT_EN_GPIO            GPIOD, 3
 #define NTC_RES_KOHM                    10
 #define NTC_PULLUP_RES_KOHM             33
 
