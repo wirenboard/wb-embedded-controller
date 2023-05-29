@@ -88,6 +88,7 @@
         macro(ADC_VBUS_DEBUG,       4,      GPIOA,  4,      50,     22.0 / 10.0,    0           ) \
         macro(ADC_VBUS_NETWORK,     5,      GPIOA,  5,      50,     22.0 / 10.0,    0           ) \
         macro(ADC_HW_VER,           2,      GPIOA,  2,      50,     1,              0           ) \
+        macro(ADC_INT_VREF,         13,     0,      0,      50,     1,              0           ) \
 
 
 // Ожидание после старта прошивки и перед опросом напряжений
