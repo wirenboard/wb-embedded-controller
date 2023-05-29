@@ -36,3 +36,5 @@ void rtc_set_offset(uint16_t offeset);
 void rtc_clear_alarm_flag(void);
 void rtc_enable_pc13_1hz_clkout(void);
 void rtc_disable_pc13_1hz_clkout(void);
+void rtc_set_periodic_wakeup(uint16_t period_s);
+void rtc_disable_periodic_wakeup(void);

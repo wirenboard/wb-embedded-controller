@@ -13,6 +13,8 @@
 
 static_assert((RTC_LSE_DRIVE_CAPABILITY >= 0) && (RTC_LSE_DRIVE_CAPABILITY <= 3), "Select proper LSE drive capability");
 
+#define RTC_WUCKSEL_DIVIDER         0b100   // ck_spre (usually 1 Hz) clock
+
 // Время, которое будет установлено, если RTC на момент включения питания не работает
 static const struct rtc_time init_time = {
     .seconds = 0x00,
@@ -135,7 +137,25 @@ void rtc_init(void)
 	RCC->BDCR |= RCC_BDCR_LSEON;
 
     if (RTC->ICSR & RTC_ICSR_INITS) {
-        // RTC already initialized, exit here
+        // RTC already initialized, check settings
+
+        // Check periodic wakeup clock selection
+        if ((RTC->CR & RTC_CR_WUCKSEL_Msk) != (RTC_WUCKSEL_DIVIDER << RTC_CR_WUCKSEL_Pos)) {
+            // Настройка не сбрасывается при ресете МК
+            // И может быть обновлена в новой прошивке
+            // Поэтому нужно проверить и при необходимости обновить настройку
+
+            // Disable RTC write protection
+            disable_wpr();
+
+            // Set new settings
+            RTC->CR &= ~RTC_CR_WUTE;
+            RTC->CR &= ~RTC_CR_WUCKSEL_Msk;
+            RTC->CR |= RTC_WUCKSEL_DIVIDER << RTC_CR_WUCKSEL_Pos;
+
+            // Enable RTC write protection
+            enable_wpr();
+        }
         return;
     }
 
@@ -274,5 +294,35 @@ void rtc_disable_pc13_1hz_clkout(void)
 
     start_init_disable_wpr();
     RTC->CR &= ~(RTC_CR_COE | RTC_CR_COSEL);
+    end_init_enable_wpr();
+}
+
+void rtc_set_periodic_wakeup(uint16_t period_s)
+{
+    if (period_s < 1) {
+        return;
+    }
+
+    start_init_disable_wpr();
+
+    RTC->CR &= ~RTC_CR_WUTE;
+
+    while ((RTC->ICSR & RTC_ICSR_WUTWF) == 0) {}
+    // When the wakeup timer is enabled (WUTE set to 1), the WUTF flag is set every (WUT[15:0] + 1) ck_wut cycles
+    RTC->WUTR = period_s - 1;
+    RTC->CR |= RTC_CR_WUTIE | RTC_CR_WUTE;
+
+    end_init_enable_wpr();
+
+    // Clear wakeup flag
+    RTC->SCR = RTC_SCR_CWUTF;
+}
+
+void rtc_disable_periodic_wakeup(void)
+{
+    start_init_disable_wpr();
+
+    RTC->CR &= ~(RTC_CR_WUTIE | RTC_CR_WUTE);
+
     end_init_enable_wpr();
 }
