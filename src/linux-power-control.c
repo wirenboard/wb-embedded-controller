@@ -42,6 +42,7 @@ struct pwr_ctx {
     systime_t timestamp;
     unsigned attempt;
     bool wbmz_enabled;
+    bool initialized;
 };
 
 static struct pwr_ctx pwr_ctx = {
@@ -103,8 +104,11 @@ void linux_pwr_init(bool on)
     // Подтянут снаружи к V_EC
     GPIO_S_SET_INPUT(gpio_wbmz_status_bat);
     // WBMZ OFF - включение/выключение WBMZ
+    pwr_ctx.wbmz_enabled = 0;
     wbmz_off();
     GPIO_S_SET_OUTPUT(gpio_wbmz_on);
+
+    pwr_ctx.initialized = true;
 }
 
 /**
@@ -191,7 +195,7 @@ bool linux_pwr_is_powered_from_wbmz(void)
 
 void linux_pwr_do_periodic_work(void)
 {
-    if (!vmon_ready()) {
+    if (!vmon_ready() || !pwr_ctx.initialized) {
         return;
     }
 
@@ -211,11 +215,15 @@ void linux_pwr_do_periodic_work(void)
     // Выключать WBMZ специально не надо - оно выключится само при переходе в standby
     // При этом ЕС продолжит работать от BATSENSE
     uint16_t vin = adc_get_ch_mv(ADC_CHANNEL_ADC_V_IN);
+    bool vbus_present = vmon_get_ch_status(VMON_CHANNEL_VBUS_DEBUG) || vmon_get_ch_status(VMON_CHANNEL_VBUS_NETWORK);
+
     if (!pwr_ctx.wbmz_enabled) {
-        if ((vin > 11500) ||
-            (vin < 9000) ||
-            (!vmon_get_ch_status(VMON_CHANNEL_V50)))
-        {
+        if (vin > 11500) {
+            usart_tx_str_blocking("\r\nVin > 11500; WBMZ ON\r\n");
+            linux_pwr_enable_wbmz();
+        }
+        else if ((vin < 9000) && (!vbus_present)) {
+            usart_tx_str_blocking("\r\nVin < 9000; no Vbus; WBMZ ON\r\n");
             linux_pwr_enable_wbmz();
         }
     }
