@@ -38,10 +38,10 @@
 
 #define ADC_CH_FULL_SCALE_MV(k)         (ADC_VREF_EXT_MV * (k)) // max measure voltage
 
-#define ADC_INT_VREF_FACTORY_CAL_MV     3300
+#define ADC_INT_VREF_FACTORY_CAL_MV     3000
 #define ADC_INT_VREF_CAL_VALUE          (*((uint16_t*)0x1FFF75AA))
 
-static_assert(ADC_INT_VREF_FACTORY_CAL_MV == ADC_VREF_EXT_MV, "Only ADC_INT_VREF_FACTORY_CAL_MV != ADC_VREF_EXT_MV supported now");
+#define ADC_INT_VREF_FACTOR             F16((ADC_INT_VREF_FACTORY_CAL_MV / ADC_INT_VREF_CAL_VALUE)  
 
 struct adc_ctx {
     bool initialized;
@@ -167,7 +167,17 @@ void adc_init(enum adc_clock clock_divider, enum adc_vref vref)
     ADC1->CFGR1 |= ADC_CFGR1_CONT;                              // Continuous conversion mode
 
     ADC1->SMPR |= ADC_SMPR_SMP1;                                // 160.5 ADC clock cycles
+
+    if (vref == ADC_VREF_INT) {
+        ADC->CCR |= ADC_CCR_VREFEN;
+        delay_blocking_us(10);
+    }
+
     ADC1->CR |= ADC_CR_ADEN;
+
+    for (uint8_t j = 0; j < ADC_CHANNEL_COUNT; j++) {
+        chan_index_in_dma_buff[j] = 0;
+    }
 
     for (uint8_t i = 0; i < ADC_CHANNEL_COUNT; i++) {
         // Configure ADC GPIOs
@@ -221,17 +231,25 @@ uint32_t adc_get_ch_mv(enum adc_channel channel)
 
     uint32_t raw_value;
     if (adc_ctx.vref == ADC_VREF_INT) {
-        fix16_t int_vref = adc_ctx.lowpass_values[ADC_CHANNEL_INDEX(ADC_CHANNEL_ADC_INT_VREF)];
+        fix16_t int_vref_raw = adc_ctx.lowpass_values[ADC_CHANNEL_INDEX(ADC_CHANNEL_ADC_INT_VREF)];
+        fix16_t int_vef_cal = fix16_from_int(ADC_INT_VREF_CAL_VALUE);
+        fix16_t k_vref = fix16_div(int_vref_raw, int_vef_cal);
+        fix16_t k_int_ext = F16((float)ADC_INT_VREF_FACTORY_CAL_MV / ADC_VREF_EXT_MV);
+        fix16_t k = fix16_div(k_vref, k_int_ext);
         raw_value = fix16_to_int(
-            fix16_mul(
-                ch_raw,
-                fix16_div(int_vref, fix16_from_int(ADC_INT_VREF_CAL_VALUE))
-            )
+            fix16_mul(ch_raw, k)
         );
+        // raw_value = fix16_to_int(
+        //     fix16_mul(
+        //         ch_raw,
+        //         fix16_div(int_vref, fix16_from_int(ADC_INT_VREF_CAL_VALUE))
+        //     )
+        // );
+        // raw_value = fix16_to_int(ch_raw);
     } else {
-        raw_value = fix16_to_int(adc_ctx.lowpass_values[ch_index_in_dma_buff]);
+        raw_value = fix16_to_int(ch_raw);
     }
-    // В формуле подразумевается, что ADC_INT_VREF_MV == ADC_EXT_VREF_MV
+    // full_scale_mv - коэффициент из расчета, референс АЦП равен ADC_EXT_VREF_MV
     uint32_t mv = (raw_value * adc_cfg[channel].full_scale_mv) >> ADC_RESOLUTION_BIT;
     return mv + adc_cfg[channel].offset_mv;
 }
