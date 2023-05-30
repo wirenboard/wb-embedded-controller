@@ -26,6 +26,8 @@ int main(void)
 
     RCC->APBENR1 |= RCC_APBENR1_PWREN;
 
+    system_led_init();
+
     // Первым инициализируется WBEC, т.к. он в начале проверяет причину включения
     // и может заснуть обратно, если решит.
     // Также в wbec_init() инициализируется АЦП и настраивается клок на 64 МГц
@@ -36,7 +38,6 @@ int main(void)
     // Init drivers
     systick_init();
     gpio_init();
-    system_led_init();
     spi_slave_init();
     regmap_init();
     rtc_init();
@@ -46,9 +47,6 @@ int main(void)
     // Init subsystems
     irq_init();
     vmon_init();
-
-    // Init WBEC
-    wbec_init();
 
     // Кнопка питания инициализируется последней, т.к.
     // при настройке её как источника пробуждения может быть
