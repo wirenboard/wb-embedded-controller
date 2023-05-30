@@ -81,12 +81,12 @@
         macro(ADC_IN2,              11,     GPIOB,  10,     50,     1,              0           ) \
         macro(ADC_IN3,              15,     GPIOB,  11,     50,     1,              0           ) \
         macro(ADC_IN4,              16,     GPIOB,  12,     50,     1,              0           ) \
-        macro(ADC_V_IN,             9,      GPIOB,  1,      50,     210.0 / 10.0,   300         ) \
-        macro(ADC_5V,               8,      GPIOB,  0,      50,     22.0 / 10.0,    0           ) \
-        macro(ADC_3V3,              7,      GPIOA,  7,      50,     32.0 / 22.0,    0           ) \
+        macro(ADC_V_IN,             9,      GPIOB,  1,      5,      210.0 / 10.0,   300         ) \
+        macro(ADC_5V,               8,      GPIOB,  0,      5,      22.0 / 10.0,    0           ) \
+        macro(ADC_3V3,              7,      GPIOA,  7,      5,      32.0 / 22.0,    0           ) \
         macro(ADC_NTC,              6,      GPIOA,  6,      50,     1,              0           ) \
-        macro(ADC_VBUS_DEBUG,       4,      GPIOA,  4,      50,     22.0 / 10.0,    0           ) \
-        macro(ADC_VBUS_NETWORK,     5,      GPIOA,  5,      50,     22.0 / 10.0,    0           ) \
+        macro(ADC_VBUS_DEBUG,       3,      GPIOA,  3,      5,      22.0 / 10.0,    0           ) \
+        macro(ADC_VBUS_NETWORK,     5,      GPIOA,  5,      5,      22.0 / 10.0,    0           ) \
         macro(ADC_HW_VER,           2,      GPIOA,  2,      50,     1,              0           ) \
         macro(ADC_INT_VREF,         13,     0,      0,      50,     1,              0           ) \
 
@@ -99,7 +99,7 @@
     m(V_IN,             ADC_V_IN,           10000,  48000,      9000,   49000) \
     m(V_OUT,            ADC_V_IN,           10000,  28000,      9000,   29000) \
     m(V33,              ADC_3V3,            3200,   3400,       3100,   3500) \
-    m(V50,              ADC_5V,             4800,   5200,       4600,   5700) \
-    m(VBUS_DEBUG,       ADC_VBUS_DEBUG,     4800,   5200,       4600,   5700) \
-    m(VBUS_NETWORK,     ADC_VBUS_NETWORK,   4800,   5200,       4600,   5700) \
+    m(V50,              ADC_5V,             4700,   5200,       4600,   5700) \
+    m(VBUS_DEBUG,       ADC_VBUS_DEBUG,     4600,   5500,       4300,   5800) \
+    m(VBUS_NETWORK,     ADC_VBUS_NETWORK,   4600,   5500,       4300,   5800) \
 
