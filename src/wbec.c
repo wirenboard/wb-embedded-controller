@@ -171,10 +171,10 @@ void wbec_init(void)
 
     // Независимо от причины включения нужно измерить напряжение на линии 5В
     // Работаем на частоте 1 МГц для снижения потребления
-    rcc_set_hsi_1mhz_clock();
     system_led_enable();
-    adc_init(ADC_CLOCK_DIV_64, ADC_VREF_INT);
+    rcc_set_hsi_1mhz_clock();
     system_led_disable();
+    adc_init(ADC_CLOCK_DIV_64, ADC_VREF_INT);
     while (!adc_get_ready()) {};
     uint16_t vcc_5v = adc_get_ch_mv(ADC_CHANNEL_ADC_5V);
     bool vcc_5v_ok = (vcc_5v > 4700) && (vcc_5v < 5500);
@@ -193,6 +193,7 @@ void wbec_init(void)
         } else {
             // Питание не появилось - засыпаем и ждём дальше
             // Здесь активен RTC periodic wakeup
+            rtc_set_periodic_wakeup(2);
             mcu_goto_standby();
         }
     } else {
