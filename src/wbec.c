@@ -63,6 +63,7 @@ struct wbec_ctx {
     enum mcu_poweron_reason mcu_poweron_reason;
     enum wbec_state state;
     systime_t timestamp;
+    bool powered_from_wbmz;
 };
 
 static struct REGMAP_INFO wbec_info = {
@@ -172,11 +173,11 @@ void wbec_init(void)
     // Работаем на частоте 1 МГц для снижения потребления
     rcc_set_hsi_1mhz_clock();
     system_led_enable();
-    adc_init(ADC_CLOCK_NO_DIV, ADC_VREF_INT);
+    adc_init(ADC_CLOCK_DIV_64, ADC_VREF_INT);
     system_led_disable();
     while (!adc_get_ready()) {};
     uint16_t vcc_5v = adc_get_ch_mv(ADC_CHANNEL_ADC_5V);
-    bool vcc_5v_ok = (vcc_5v > 4800) && (vcc_5v < 5500);
+    bool vcc_5v_ok = (vcc_5v > 4700) && (vcc_5v < 5500);
 
 
     if (wbec_ctx.mcu_poweron_reason == MCU_POWERON_REASON_RTC_PERIODIC_WAKEUP) {
@@ -211,7 +212,7 @@ void wbec_init(void)
     // Если дошли до этого места, надо включиться в обычном режиме
     rcc_set_hsi_pll_64mhz_clock();
     adc_init(ADC_CLOCK_DIV_64, ADC_VREF_EXT);
-
+    rtc_disable_periodic_wakeup();
     new_state(WBEC_STATE_WAIT_STARTUP);
 }
 
@@ -363,8 +364,8 @@ void wbec_do_periodic_work(void)
                 // Если выключаемся при работающем WBMZ - дополнительно заводим RC periodic wakeup
                 // чтобы просыпаться и следить за появлением входного напряжения
                 if (wbmz) {
-                    usart_tx_str_blocking("\r\nPowered from WBMZ, set RTC periodic wakeup timer");
-                    rtc_set_periodic_wakeup(2);
+                    usart_tx_str_blocking("\r\nPowered from WBMZ, power off and set RTC periodic wakeup timer");
+                    wbec_ctx.powered_from_wbmz = true;
                 }
                 linux_pwr_off();
                 new_state(WBEC_STATE_WAIT_POWER_OFF);
@@ -403,6 +404,11 @@ void wbec_do_periodic_work(void)
         // сигнал PWRON, который надо активировать примерно на 6с
         if (!linux_pwr_is_busy()) {
             // После того как питание выключилось - засыпаем
+            // Если работали от WBMZ - заводим RTC periodic wakeup
+            if (wbec_ctx.powered_from_wbmz) {
+                usart_tx_str_blocking("\r\nPower off now, wake up to check voltages after 2 seconds\r\n");
+                rtc_set_periodic_wakeup(10);
+            }
             mcu_goto_standby();
         }
         break;
