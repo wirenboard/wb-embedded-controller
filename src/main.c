@@ -26,6 +26,7 @@ int main(void)
 
     RCC->APBENR1 |= RCC_APBENR1_PWREN;
 
+    rtc_init();
     system_led_init();
 
     // Первым инициализируется WBEC, т.к. он в начале проверяет причину включения
@@ -40,7 +41,6 @@ int main(void)
     gpio_init();
     spi_slave_init();
     regmap_init();
-    rtc_init();
     // rtc_enable_pc13_1hz_clkout();
     usart_init();
 
