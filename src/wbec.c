@@ -310,7 +310,7 @@ void wbec_do_periodic_work(void)
         rtc_disable_periodic_wakeup();
 
         // Заполним стуктуру INFO данными
-        wbec_info.board_rev = adc_get_ch_adc_raw(ADC_CHANNEL_ADC_HW_VER);
+        wbec_info.board_rev = fix16_to_int(adc_get_ch_adc_raw(ADC_CHANNEL_ADC_HW_VER));
         regmap_set_region_data(REGMAP_REGION_INFO, &wbec_info, sizeof(wbec_info));
 
         new_state(WBEC_STATE_WAIT_POWER_ON);
