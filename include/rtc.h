@@ -38,3 +38,5 @@ void rtc_enable_pc13_1hz_clkout(void);
 void rtc_disable_pc13_1hz_clkout(void);
 void rtc_set_periodic_wakeup(uint16_t period_s);
 void rtc_disable_periodic_wakeup(void);
+void rtc_save_to_tamper_reg(uint8_t index, uint32_t data);
+uint32_t rtc_get_tamper_reg(uint8_t index);

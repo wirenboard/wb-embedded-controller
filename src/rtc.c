@@ -326,3 +326,21 @@ void rtc_disable_periodic_wakeup(void)
 
     end_init_enable_wpr();
 }
+
+void rtc_save_to_tamper_reg(uint8_t index, uint32_t data)
+{
+    if (index > 4) {
+        return;
+    }
+
+    (&(TAMP->BKP0R))[index] = data;
+}
+
+uint32_t rtc_get_tamper_reg(uint8_t index)
+{
+    if (index > 4) {
+        return 0;
+    }
+
+    return (&(TAMP->BKP0R))[index];
+}
