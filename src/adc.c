@@ -32,7 +32,7 @@
  * Если используются внутренние каналы, то вместо PORT и PIN указать ADC_NO_GPIO_PIN
 */
 
-#define ADC_FILTRATION_PERIOD_MS        5
+#define ADC_FILTRATION_PERIOD_MS        1
 #define ADC_NO_GPIO_PIN                 0
 #define ADC_RESOLUTION_BIT              12
 
