@@ -171,48 +171,94 @@ void wbec_init(void)
 
     // Независимо от причины включения нужно измерить напряжение на линии 5В
     // Работаем на частоте 1 МГц для снижения потребления
-    system_led_enable();
-    rcc_set_hsi_1mhz_clock();
-    system_led_disable();
-    adc_init(ADC_CLOCK_DIV_64, ADC_VREF_INT);
     while (!adc_get_ready()) {};
     uint16_t vcc_5v = adc_get_ch_mv(ADC_CHANNEL_ADC_5V);
     bool vcc_5v_ok = (vcc_5v > 4700) && (vcc_5v < 5500);
+    enum mcu_vcc_5v_state vcc_5v_last_state = mcu_get_vcc_5v_last_state();
 
+    /**
+     * Тут возможны варианты:
+     * 1) включились от POWER ON - первый раз появилось питание на ЕС или перепрошились
+     *    - нужно включаться в обычном режиме
+     * 2) включились от кнопки
+     *    - нужно проверить на антидребезг и включиться в обычном режиме
+     * 3) включились от будильника
+     *    - нужно включиться в обычном режиме
+     * 4) включились от периодического пробуждения RTC
+     *    - нужно ждать появления питания на линии +5В - измерять её относительно INT VREF
+     *    - если питание появилось - включиться в обычном режиме
+     */
 
-    if (wbec_ctx.mcu_poweron_reason == MCU_POWERON_REASON_RTC_PERIODIC_WAKEUP) {
-        // Если включилить от периодического пробуждения RTC,
-        // значит мы попали сюда, выключившись при работе от WBMZ.
-        // В этом состоянии отсутсвует питание на линии +5В и ЕС питаниется от BATSENSE
-        // Напряжение питания может плавать от 2.7 до 3.3 В
+    switch (wbec_ctx.mcu_poweron_reason) {
+    case MCU_POWERON_REASON_UNKNOWN:
+    case MCU_POWERON_REASON_POWER_ON:
+    default:
+        // Если включились от POWER ON - первый раз появилось питание на ЕС или перепрошились
+        // Нужно включаться в обычном режиме
+        // (просто идём дальше)
+        wbec_info.poweron_reason = REASON_POWER_ON;
+        break;
+
+    case MCU_POWERON_REASON_POWER_KEY:
+        // Если включились от кнопки
+        // Нужно проверить на антидребезг и включиться в обычном режиме
+        // (просто идём дальше)
+        while (!pwrkey_ready()) {
+            pwrkey_do_periodic_work();
+        }
+        if (pwrkey_pressed()) {
+            wbec_info.poweron_reason = REASON_POWER_KEY;
+            new_state(WBEC_STATE_VOLTAGE_CHECK);
+        } else {
+            mcu_goto_standby(WBEC_PERIODIC_WAKEUP_NEXT_TIMEOUT_S);
+        }
+        wbec_info.poweron_reason = REASON_POWER_KEY;
+        break;
+
+    case MCU_POWERON_REASON_RTC_ALARM:
+        // Если включились от будильника
+        // Нужно включиться в обычном режиме
+        // (просто идём дальше)
+        wbec_info.poweron_reason = REASON_RTC_ALARM;
+        break;
+
+    case MCU_POWERON_REASON_RTC_PERIODIC_WAKEUP:
+        // Если включилить от периодического пробуждения RTC, значит:
+        // 1) либо у ЕС есть питание от WBMZ
+        // 2) либо выключились по будильнику при наличии Vin
+        // Логика тут такая: если +5В **появились** - включаемся.
+        // Для этого надо помнить предыдущее состояние +5В - храним его в RTC домене
+        // Напряжение питания ЕС может плавать от 2.7 до 3.3 В
         // Тут нужно ждать появления питания на линии +5В - измерять её относительно INT VREF
 
-        if (vcc_5v_ok) {
+        if ((vcc_5v_ok) && (vcc_5v_last_state == MCU_VCC_5V_STATE_OFF)) {
             // Питание появилось - включаемся в обычном режиме
             // (просто идём дальше)
+            wbec_info.poweron_reason = REASON_POWER_ON;
+        } else if ((!vcc_5v_ok) && (vcc_5v_last_state == MCU_VCC_5V_STATE_ON)) {
+            // Питание было и пропало - сохраняем послденее состояние в RTC домене
+            mcu_save_vcc_5v_last_state(MCU_VCC_5V_STATE_OFF);
+            mcu_goto_standby(WBEC_PERIODIC_WAKEUP_NEXT_TIMEOUT_S);
         } else {
-            // Питание не появилось - засыпаем и ждём дальше
+            // Питание не появилось или не пропадало - засыпаем и ждём дальше
             // Здесь активен RTC periodic wakeup
-            rtc_set_periodic_wakeup(2);
-            mcu_goto_standby();
+            mcu_goto_standby(WBEC_PERIODIC_WAKEUP_NEXT_TIMEOUT_S);
         }
+        break;
+    }
+
+
+    // Проверяем, что питание есть
+    if (vcc_5v_ok) {
+        // Питание есть - включаемся в обычном режиме
+        // (просто идём дальше)
+        // WBMZ включится отдельным алторитмом, если Vin будет более 11.5 В
     } else {
-        // Во всех остальных случаях питание на линии +5В либо должно быть,
-        // либо мы должны включить WBMZ, чтобы оно появилось
-        // Проверяем, что питание есть
-        if (vcc_5v_ok) {
-            // Питание есть - включаемся в обычном режиме
-            // (просто идём дальше)
-            // WBMZ включится отдельным алторитмом, если Vin будет более 11.5 В
-        } else {
-            // Питания нет - включаем WBMZ
-            linux_pwr_enable_wbmz();
-        }
+        // Питания нет - включаем WBMZ
+        linux_pwr_enable_wbmz();
     }
 
     // Если дошли до этого места, надо включиться в обычном режиме
-    rcc_set_hsi_pll_64mhz_clock();
-    adc_init(ADC_CLOCK_DIV_64, ADC_VREF_EXT);
     rtc_disable_periodic_wakeup();
     new_state(WBEC_STATE_WAIT_STARTUP);
 }
@@ -234,27 +280,7 @@ void wbec_do_periodic_work(void)
         // При пробужении из спящего режима RC-цепочка так же работает и держит линукс выключенным
         // после пробуждения МК
         if (vmon_ready()) {
-            if (wbec_ctx.mcu_poweron_reason == MCU_POWERON_REASON_POWER_KEY) {
-                // Если включились от кнопки,
-                // проверим, что кнопка действительно нажата (прошла антидребезг)
-                // чтобы не включаться от всяких помех и при отпускании кнопки
-                if (pwrkey_ready()) {
-                    if (pwrkey_pressed()) {
-                        wbec_info.poweron_reason = REASON_POWER_KEY;
-                        new_state(WBEC_STATE_VOLTAGE_CHECK);
-                    } else {
-                        mcu_goto_standby();
-                    }
-                }
-            } else {
-                // Если включились не от кнопки - сразу переходим дальше
-                if (wbec_ctx.mcu_poweron_reason == MCU_POWERON_REASON_RTC_ALARM) {
-                    wbec_info.poweron_reason = REASON_RTC_ALARM;
-                } else if (wbec_ctx.mcu_poweron_reason == MCU_POWERON_REASON_POWER_ON) {
-                    wbec_info.poweron_reason = REASON_POWER_ON;
-                }
-                new_state(WBEC_STATE_VOLTAGE_CHECK);
-            }
+            new_state(WBEC_STATE_VOLTAGE_CHECK);
         }
         break;
 
@@ -302,8 +328,7 @@ void wbec_do_periodic_work(void)
         pwrkey_handle_long_press();
         // Установим время WDT и запустим его
         wdt_set_timeout(WDEC_WATCHDOG_INITIAL_TIMEOUT_S);
-        // TODO: uncomment
-        // wdt_start_reset();
+        wdt_start_reset();
 
         // Выключим таймер периодического пробуждения, т.к.
         // дальше мы уже 100% включаемся
@@ -405,12 +430,14 @@ void wbec_do_periodic_work(void)
         // сигнал PWRON, который надо активировать примерно на 6с
         if (!linux_pwr_is_busy()) {
             // После того как питание выключилось - засыпаем
-            // Если работали от WBMZ - заводим RTC periodic wakeup
-            if (wbec_ctx.powered_from_wbmz) {
-                usart_tx_str_blocking("\r\nPower off now, wake up to check voltages after 2 seconds\r\n");
-                rtc_set_periodic_wakeup(10);
+            usart_tx_str_blocking("\r\nPower off now, wake up to check voltages after 10 seconds\r\n");
+            // Save VCC_5V state to RTC backup register
+            if (wbec_ctx.powered_from_wbmz)
+                mcu_save_vcc_5v_last_state(MCU_VCC_5V_STATE_OFF);
+            else {
+                mcu_save_vcc_5v_last_state(MCU_VCC_5V_STATE_ON);
             }
-            mcu_goto_standby();
+            mcu_goto_standby(WBEC_PERIODIC_WAKEUP_FIRST_TIMEOUT_S);
         }
         break;
 

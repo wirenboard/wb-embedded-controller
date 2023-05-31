@@ -333,7 +333,16 @@ void linux_pwr_do_periodic_work(void)
             linux_pwr_gpio_off();
             new_state(PS_OFF_COMPLETE);
             usart_tx_str_blocking("\n\rPower off after power key long press detected.\r\n\n");
-            mcu_goto_standby();
+            // Ждём отпускания кнопки
+            while (pwrkey_pressed()) {
+                pwrkey_do_periodic_work();
+            }
+            if (linux_pwr_is_powered_from_wbmz()) {
+                mcu_save_vcc_5v_last_state(MCU_VCC_5V_STATE_OFF);
+            } else {
+                mcu_save_vcc_5v_last_state(MCU_VCC_5V_STATE_ON);
+            }
+            mcu_goto_standby(WBEC_PERIODIC_WAKEUP_FIRST_TIMEOUT_S);
         } else if (!pwrkey_pressed()) {
             // Если кнопку отпустили - отпускаем PMIC_PWRON
             pmic_pwron_gpio_off();

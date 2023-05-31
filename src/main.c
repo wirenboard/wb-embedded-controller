@@ -19,15 +19,22 @@
 
 int main(void)
 {
+    RCC->APBENR1 |= RCC_APBENR1_PWREN;
     RCC->IOPENR |= RCC_IOPENR_GPIOAEN;
     RCC->IOPENR |= RCC_IOPENR_GPIOBEN;
     RCC->IOPENR |= RCC_IOPENR_GPIOCEN;
     RCC->IOPENR |= RCC_IOPENR_GPIODEN;
+    system_led_init();
 
-    RCC->APBENR1 |= RCC_APBENR1_PWREN;
+    // При включении начинаем всегда с low power run
+    // Смотрим причину включения и решаем что делать
+    system_led_enable();
+    rcc_set_hsi_1mhz_low_power_run();
+    systick_init();
+    system_led_disable();
 
     rtc_init();
-    system_led_init();
+    adc_init(ADC_CLOCK_NO_DIV, ADC_VREF_INT);
 
     // Первым инициализируется WBEC, т.к. он в начале проверяет причину включения
     // и может заснуть обратно, если решит.
@@ -35,9 +42,11 @@ int main(void)
     wbec_init();
 
     // Дальше попадаем, только если хотим включаться
+    rcc_set_hsi_pll_64mhz_clock();
+    systick_init();
+    adc_init(ADC_CLOCK_DIV_64, ADC_VREF_EXT);
 
     // Init drivers
-    systick_init();
     gpio_init();
     spi_slave_init();
     regmap_init();
