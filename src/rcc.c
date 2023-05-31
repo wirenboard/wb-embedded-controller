@@ -2,7 +2,7 @@
 
 uint32_t SystemCoreClock = 16000000;        // Default value after reset
 
-void rcc_set_hsi_1mhz_clock(void)
+void rcc_set_hsi_1mhz_low_power_run(void)
 {
     FLASH->ACR &= ~FLASH_ACR_LATENCY_Msk;
     FLASH->ACR |= FLASH_ACR_LATENCY_0;                      // One wait state
@@ -15,11 +15,16 @@ void rcc_set_hsi_1mhz_clock(void)
 
     RCC->CR &= ~RCC_CR_PLLON;                               // Disable PLL
 
+    PWR->CR1 |= PWR_CR1_LPR;                                // Low power run mode
+
     SystemCoreClock = 1000000;
 }
 
 void rcc_set_hsi_pll_64mhz_clock(void)
 {
+    PWR->CR1 &= ~PWR_CR1_LPR;                               // Disable low power run mode
+    while ((PWR->SR2 & PWR_SR2_REGLPF) != 0) {};            // Wait for regulator voltage scaling ready
+
     FLASH->ACR &= ~FLASH_ACR_LATENCY_Msk;
     FLASH->ACR |= FLASH_ACR_LATENCY_1;                      // Two wait states
 
