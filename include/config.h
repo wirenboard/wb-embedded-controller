@@ -18,6 +18,9 @@
 // до принудительного выключения (если линукс не ответил)
 #define WBEC_LINUX_POWER_OFF_DELAY_MS           60000
 
+#define WBEC_PERIODIC_WAKEUP_FIRST_TIMEOUT_S    5
+#define WBEC_PERIODIC_WAKEUP_NEXT_TIMEOUT_S     2
+
 
 /* ====== Подключения EC к Wiren Board ====== */
 
