@@ -210,23 +210,21 @@ void linux_pwr_do_periodic_work(void)
 
     // Управление питанием WBMZ
     // Если мы тут находимся, значит хотим линукс включить
-    // И должны включить WBMZ, если:
-    // 1. Vin > 11.5V
-    // 2. WBMZ выключен и Vin стало < 9V
-    // 3. WBMZ выключен и 5В куда-то пропало (работаем от USB и вытащили его)
+    // И должны включить WBMZ, если Vin > 11.5V
     // Выключать WBMZ специально не надо - оно выключится само при переходе в standby
     // При этом ЕС продолжит работать от BATSENSE
-    uint16_t vin = adc_get_ch_mv(ADC_CHANNEL_ADC_V_IN);
-    bool vbus_present = vmon_get_ch_status(VMON_CHANNEL_VBUS_DEBUG) || vmon_get_ch_status(VMON_CHANNEL_VBUS_NETWORK);
-
+    // При этом если питание на линии 5В куда-то пропало (Vin < 9V или выдернули USB)
+    // Нужно перейти в спящий режим
     if (!pwr_ctx.wbmz_enabled) {
-        if (vin > 11500) {
+        if (adc_get_ch_mv(ADC_CHANNEL_ADC_V_IN) > 11500) {
             usart_tx_str_blocking("\r\nVin > 11500; WBMZ ON\r\n");
             linux_pwr_enable_wbmz();
         }
-        else if ((vin < 9000) && (!vbus_present)) {
-            usart_tx_str_blocking("\r\nVin < 9000; no Vbus; WBMZ ON\r\n");
-            linux_pwr_enable_wbmz();
+        else if (!vmon_get_ch_status(VMON_CHANNEL_V50)) {
+            // Несмотря на то что 5В пропало, EC всё ещё может работать от BATSENSE
+            usart_tx_str_blocking("\r\nNo 5V, power off anf go to standby now\r\n");
+            mcu_save_vcc_5v_last_state(MCU_VCC_5V_STATE_OFF);
+            mcu_goto_standby(WBEC_PERIODIC_WAKEUP_FIRST_TIMEOUT_S);
         }
     }
 
