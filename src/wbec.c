@@ -171,7 +171,7 @@ void wbec_init(void)
     // Работаем на частоте 1 МГц для снижения потребления
     while (!adc_get_ready()) {};
     uint16_t vcc_5v = adc_get_ch_mv(ADC_CHANNEL_ADC_5V);
-    bool vcc_5v_ok = (vcc_5v > 4500) && (vcc_5v < 5500);
+    bool vcc_5v_ok = (vcc_5v > 4400) && (vcc_5v < 5500);
     enum mcu_vcc_5v_state vcc_5v_last_state = mcu_get_vcc_5v_last_state();
 
     /**
