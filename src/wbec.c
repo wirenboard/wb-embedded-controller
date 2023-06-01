@@ -56,7 +56,6 @@ enum wbec_state {
     WBEC_STATE_WAIT_POWER_OFF,
 
     WBEC_STATE_WAIT_LINUX_POWER_OFF,
-    WBEC_STATE_WAIT_POWER_RESET,
 };
 
 struct wbec_ctx {
@@ -87,7 +86,6 @@ static void new_state(enum wbec_state s)
     case WBEC_STATE_WORKING:                system_led_blink(500, 1000);    break;
     case WBEC_STATE_WAIT_POWER_OFF:         system_led_blink(50,  50);      break;
     case WBEC_STATE_WAIT_LINUX_POWER_OFF:   system_led_blink(250, 250);     break;
-    case WBEC_STATE_WAIT_POWER_RESET:       system_led_blink(50,  50);      break;
     default:                                system_led_enable();            break;
     }
 }
@@ -173,7 +171,7 @@ void wbec_init(void)
     // Работаем на частоте 1 МГц для снижения потребления
     while (!adc_get_ready()) {};
     uint16_t vcc_5v = adc_get_ch_mv(ADC_CHANNEL_ADC_5V);
-    bool vcc_5v_ok = (vcc_5v > 4700) && (vcc_5v < 5500);
+    bool vcc_5v_ok = (vcc_5v > 4500) && (vcc_5v < 5500);
     enum mcu_vcc_5v_state vcc_5v_last_state = mcu_get_vcc_5v_last_state();
 
     /**
@@ -323,17 +321,6 @@ void wbec_do_periodic_work(void)
             linux_pwr_on();
         }
 
-        // Перед включеним питания сбросим события с кнопки
-        pwrkey_handle_short_press();
-        pwrkey_handle_long_press();
-        // Установим время WDT и запустим его
-        wdt_set_timeout(WDEC_WATCHDOG_INITIAL_TIMEOUT_S);
-        wdt_start_reset();
-
-        // Выключим таймер периодического пробуждения, т.к.
-        // дальше мы уже 100% включаемся
-        rtc_disable_periodic_wakeup();
-
         // Заполним стуктуру INFO данными
         wbec_info.board_rev = fix16_to_int(adc_get_ch_adc_raw(ADC_CHANNEL_ADC_HW_VER));
         regmap_set_region_data(REGMAP_REGION_INFO, &wbec_info, sizeof(wbec_info));
@@ -344,6 +331,12 @@ void wbec_do_periodic_work(void)
     case WBEC_STATE_WAIT_POWER_ON:
         // В этом состоянии ждём, пока логика включения питания его включит
         if (!linux_pwr_is_busy()) {
+            // Сбросим события с кнопки
+            pwrkey_handle_short_press();
+            pwrkey_handle_long_press();
+            // Установим время WDT и запустим его
+            wdt_set_timeout(WDEC_WATCHDOG_INITIAL_TIMEOUT_S);
+            wdt_start_reset();
             // Как только питание включилось - переходим в рабочий режим
             new_state(WBEC_STATE_WORKING);
         }
@@ -358,8 +351,7 @@ void wbec_do_periodic_work(void)
         if (pwrkey_handle_short_press()) {
             wdt_stop();
             irq_set_flag(IRQ_PWR_OFF_REQ);
-            wbec_ctx.state = WBEC_STATE_WAIT_LINUX_POWER_OFF;
-            wbec_ctx.timestamp = systick_get_system_time_ms();
+            new_state(WBEC_STATE_WAIT_LINUX_POWER_OFF);
         }
 
         if (linux_powerctrl_req == LINUX_POWERCTRL_OFF) {
@@ -398,15 +390,15 @@ void wbec_do_periodic_work(void)
             } else {
                 usart_tx_str_blocking("\r\nAlarm not set, reboot system instead of power off.\r\n\n");
                 wbec_info.poweron_reason = REASON_REBOOT_NO_ALARM;
-                linux_pwr_off();
-                new_state(WBEC_STATE_WAIT_POWER_RESET);
+                linux_pwr_reset();
+                new_state(WBEC_STATE_WAIT_POWER_ON);
             }
         } else if (linux_powerctrl_req == LINUX_POWERCTRL_REBOOT) {
             // Если запрос на перезагрузку - перезагружается
             wbec_info.poweron_reason = REASON_REBOOT;
             usart_tx_str_blocking("\r\nReboot request, reset power.\r\n\n");
-            linux_pwr_off();
-            new_state(WBEC_STATE_WAIT_POWER_RESET);
+            linux_pwr_reset();
+            new_state(WBEC_STATE_WAIT_POWER_ON);
         } else if (linux_powerctrl_req == LINUX_POWERCTRL_PMIC_RESET) {
             wbec_info.poweron_reason = REASON_REBOOT;
             usart_tx_str_blocking("\r\nPMIC reset request, activate PMIC RESET line now\r\n\n");
@@ -418,8 +410,8 @@ void wbec_do_periodic_work(void)
         if (wdt_handle_timed_out()) {
             wbec_info.poweron_reason = REASON_WATCHDOG;
             usart_tx_str_blocking("\r\nWatchdog is timed out, reset power.\r\n\n");
-            linux_pwr_off();
-            new_state(WBEC_STATE_WAIT_POWER_RESET);
+            linux_pwr_reset();
+            new_state(WBEC_STATE_WAIT_POWER_ON);
         }
 
         break;
@@ -457,21 +449,6 @@ void wbec_do_periodic_work(void)
             usart_tx_str_blocking("\r\nNo power off request from Linux after power key pressed. Power is forced off.\r\n\n");
             linux_pwr_off();
             new_state(WBEC_STATE_WAIT_POWER_OFF);
-        }
-
-        break;
-
-    case WBEC_STATE_WAIT_POWER_RESET:
-        // В это состояние попадаем, когда нужно дернуть питание для перезагрузки
-        // Ждем, пока отработает логика управления питанием (питание отключится),
-        // затем ещё ждем время и переходим в начальное состояние
-
-        if (linux_pwr_is_busy()) {
-            wbec_ctx.timestamp = systick_get_system_time_ms();
-        }
-
-        if (in_state_time() >= WBEC_POWER_RESET_TIME_MS) {
-            wbec_ctx.state = WBEC_STATE_VOLTAGE_CHECK;
         }
 
         break;

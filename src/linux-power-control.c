@@ -7,6 +7,7 @@
 #include "pwrkey.h"
 #include "mcu-pwr.h"
 #include "adc.h"
+#include "system-led.h"
 
 static const gpio_pin_t gpio_linux_power = { EC_GPIO_LINUX_POWER };
 static const gpio_pin_t gpio_pmic_pwron = { EC_GPIO_LINUX_PMIC_PWRON };
@@ -29,25 +30,17 @@ enum pwr_state {
     PS_LONG_PRESS_HANDLE,
 };
 
-enum power_source {
-    POWER_SRC_V_IN,
-    POWER_SRC_USB_CONSOLE,
-    POWER_SRC_USB_NETWORK,
-    POWER_SRC_BOTH_USB,
-};
-
 struct pwr_ctx {
     enum pwr_state state;
-    enum power_source power_src;
     systime_t timestamp;
     unsigned attempt;
     bool wbmz_enabled;
     bool initialized;
+    bool reset_flag;
 };
 
 static struct pwr_ctx pwr_ctx = {
     .state = PS_OFF_COMPLETE,
-    .power_src = POWER_SRC_V_IN,
 };
 
 static inline void linux_pwr_gpio_on(void)       { GPIO_S_SET(gpio_linux_power); }
@@ -144,6 +137,7 @@ void linux_pwr_off(void)
 
     pmic_pwron_gpio_on();
     new_state(PS_OFF_STEP1_PMIC_PWRON);
+    pwr_ctx.reset_flag = false;
 }
 
 /**
@@ -155,6 +149,16 @@ void linux_pwr_hard_off(void)
     linux_pwr_gpio_off();
     pmic_pwron_gpio_off();
     new_state(PS_OFF_COMPLETE);
+}
+
+/**
+ * @brief Сброс питания (выключение и через 1с включение)
+ * Через PMIC PWRON (как штатное выключение-включение)
+ */
+void linux_pwr_reset()
+{
+    linux_pwr_off();
+    pwr_ctx.reset_flag = true;
 }
 
 /**
@@ -200,10 +204,8 @@ void linux_pwr_do_periodic_work(void)
     }
 
     if (pwrkey_handle_long_press()) {
-        if (vmon_get_ch_status(VMON_CHANNEL_V33)) {
-            pmic_pwron_gpio_on();
-            new_state(PS_LONG_PRESS_HANDLE);
-        }
+        pmic_pwron_gpio_on();
+        new_state(PS_LONG_PRESS_HANDLE);
     }
 
     // Управление питанием WBMZ
@@ -311,13 +313,21 @@ void linux_pwr_do_periodic_work(void)
         if (!vmon_get_ch_status(VMON_CHANNEL_V33)) {
             usart_tx_str_blocking("PMIC switched off throught PWRON, disabling 5V line now\n");
             pmic_pwron_gpio_off();
-            linux_pwr_off();
-            new_state(PS_OFF_COMPLETE);
-        } else if (in_state_time() > 7000) {
-            usart_tx_str_blocking("Warning: PMIC not switched off throught PWRON after 7s, disabling 5V line now\n");
+            linux_pwr_gpio_off();
+            if (pwr_ctx.reset_flag) {
+                new_state(PS_RESET_5V_WAIT);
+            } else {
+                new_state(PS_OFF_COMPLETE);
+            }
+        } else if (in_state_time() > 8000) {
+            usart_tx_str_blocking("Warning: PMIC not switched off throught PWRON after 8s, disabling 5V line now\n");
             pmic_pwron_gpio_off();
-            linux_pwr_off();
-            new_state(PS_OFF_COMPLETE);
+            linux_pwr_gpio_off();
+            if (pwr_ctx.reset_flag) {
+                new_state(PS_RESET_5V_WAIT);
+            } else {
+                new_state(PS_OFF_COMPLETE);
+            }
         }
         break;
 
@@ -333,6 +343,7 @@ void linux_pwr_do_periodic_work(void)
             linux_pwr_gpio_off();
             new_state(PS_OFF_COMPLETE);
             usart_tx_str_blocking("\n\rPower off after power key long press detected.\r\n\n");
+            system_led_disable();
             // Ждём отпускания кнопки
             while (pwrkey_pressed()) {
                 pwrkey_do_periodic_work();
