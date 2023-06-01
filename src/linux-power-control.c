@@ -96,10 +96,6 @@ void linux_pwr_init(bool on)
     // STATUS_BAT это вход, который WBMZ тянет к земле открытым коллектором
     // Подтянут снаружи к V_EC
     GPIO_S_SET_INPUT(gpio_wbmz_status_bat);
-    // WBMZ OFF - включение/выключение WBMZ
-    pwr_ctx.wbmz_enabled = 0;
-    wbmz_off();
-    GPIO_S_SET_OUTPUT(gpio_wbmz_on);
 
     pwr_ctx.initialized = true;
 }
@@ -189,6 +185,7 @@ bool linux_pwr_is_busy(void)
 void linux_pwr_enable_wbmz(void)
 {
     wbmz_on();
+    GPIO_S_SET_OUTPUT(gpio_wbmz_on);
     pwr_ctx.wbmz_enabled = 1;
 }
 
