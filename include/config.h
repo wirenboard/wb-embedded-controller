@@ -21,6 +21,9 @@
 #define WBEC_PERIODIC_WAKEUP_FIRST_TIMEOUT_S    5
 #define WBEC_PERIODIC_WAKEUP_NEXT_TIMEOUT_S     2
 
+// Температура, ниже которой EC не будет включаться
+#define WBEC_MINIMUM_WORKING_TEMPERATURE_C_X100 -4000
+
 
 /* ====== Подключения EC к Wiren Board ====== */
 

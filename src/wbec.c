@@ -51,6 +51,7 @@ enum linux_powerctrl_req {
 enum wbec_state {
     WBEC_STATE_WAIT_STARTUP,
     WBEC_STATE_VOLTAGE_CHECK,
+    WBEC_STATE_TEMP_CHECK_LOOP,
     WBEC_STATE_WAIT_POWER_ON,
     WBEC_STATE_WORKING,
     WBEC_STATE_WAIT_POWER_OFF,
@@ -82,6 +83,7 @@ static void new_state(enum wbec_state s)
     switch (wbec_ctx.state) {
     case WBEC_STATE_WAIT_STARTUP:           system_led_blink(5,   100);     break;
     case WBEC_STATE_VOLTAGE_CHECK:          system_led_blink(5,   100);     break;
+    case WBEC_STATE_TEMP_CHECK_LOOP:        system_led_blink(5,   100);     break;
     case WBEC_STATE_WAIT_POWER_ON:          system_led_blink(50,  50);      break;
     case WBEC_STATE_WORKING:                system_led_blink(500, 1000);    break;
     case WBEC_STATE_WAIT_POWER_OFF:         system_led_blink(50,  50);      break;
@@ -206,7 +208,7 @@ void wbec_init(void)
         }
         if (pwrkey_pressed()) {
             wbec_info.poweron_reason = REASON_POWER_KEY;
-            new_state(WBEC_STATE_VOLTAGE_CHECK);
+            new_state(WBEC_STATE_WAIT_STARTUP);
         } else {
             mcu_goto_standby(WBEC_PERIODIC_WAKEUP_NEXT_TIMEOUT_S);
         }
@@ -245,7 +247,6 @@ void wbec_init(void)
         break;
     }
 
-
     // Проверяем, что питание есть
     if (vcc_5v_ok) {
         // Питание есть - включаемся в обычном режиме
@@ -283,6 +284,8 @@ void wbec_do_periodic_work(void)
         break;
 
     case WBEC_STATE_VOLTAGE_CHECK:
+        // Сюда попадаем только один раз при включении
+        // В дальнейшем при перезагрузках сюда уже не попадаем
         // В этом состоянии линукс всё ещё выключен
         // Тут нужно проверить напряжения и температуру (в будущем)
         // Также возможна ситуация, когда при обновлении прошивки МК перезагружается,
@@ -294,6 +297,7 @@ void wbec_do_periodic_work(void)
             // Тут ничего не нужно делать
             // Инициализируем GPIO управления питанием сразу во включенном состоянии
             linux_pwr_init(1);
+            new_state(WBEC_STATE_WAIT_POWER_ON);
         } else {
             // В ином случае перехватываем питание (выключаем)
             // И отправляем информацию в уарт
@@ -315,17 +319,36 @@ void wbec_do_periodic_work(void)
 
             // TODO Display voltages and temp
 
-            usart_tx_str_blocking("Power on now...\r\n\n");
-
-            // После отправки данных включаем линукс
-            linux_pwr_on();
+            if (adc.temp < WBEC_MINIMUM_WORKING_TEMPERATURE_C_X100) {
+                usart_tx_str_blocking("\r\nWARNING: Temperature is too low!\r\n\n");
+                new_state(WBEC_STATE_TEMP_CHECK_LOOP);
+            } else {
+                usart_tx_str_blocking("Power on now...\r\n\n");
+                // После отправки данных включаем линукс
+                linux_pwr_on();
+                new_state(WBEC_STATE_WAIT_POWER_ON);
+            }
         }
 
         // Заполним стуктуру INFO данными
         wbec_info.board_rev = fix16_to_int(adc_get_ch_adc_raw(ADC_CHANNEL_ADC_HW_VER));
         regmap_set_region_data(REGMAP_REGION_INFO, &wbec_info, sizeof(wbec_info));
+        break;
 
-        new_state(WBEC_STATE_WAIT_POWER_ON);
+    case WBEC_STATE_TEMP_CHECK_LOOP:
+        // В этом состоянии линукс выключен, проверяем температуру
+        // Сидим тут до тех пор, пока температура не станет выше -40
+        if (in_state_time() > 5000) {
+            if (adc.temp < WBEC_MINIMUM_WORKING_TEMPERATURE_C_X100) {
+                usart_tx_str_blocking("\r\nTemperature is still too low! Check again after 5 second\r\n\n");
+                new_state(WBEC_STATE_TEMP_CHECK_LOOP);
+            } else {
+                usart_tx_str_blocking("\r\nTemperature is OK!\r\n\n");
+                usart_tx_str_blocking("Power on now...\r\n\n");
+                linux_pwr_on();
+                new_state(WBEC_STATE_WAIT_POWER_ON);
+            }
+        }
         break;
 
     case WBEC_STATE_WAIT_POWER_ON:
