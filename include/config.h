@@ -87,12 +87,12 @@
         macro(ADC_IN2,              11,     GPIOB,  10,     50,     1,              0           ) \
         macro(ADC_IN3,              15,     GPIOB,  11,     50,     1,              0           ) \
         macro(ADC_IN4,              16,     GPIOB,  12,     50,     1,              0           ) \
-        macro(ADC_V_IN,             9,      GPIOB,  1,      10,     210.0 / 10.0,   300         ) \
+        macro(ADC_V_IN,             9,      GPIOB,  1,      10,     212.0 / 12.0,   300         ) \
         macro(ADC_5V,               8,      GPIOB,  0,      10,     22.0 / 10.0,    0           ) \
-        macro(ADC_3V3,              7,      GPIOA,  7,      10,      32.0 / 22.0,    0           ) \
+        macro(ADC_3V3,              7,      GPIOA,  7,      10,     32.0 / 22.0,    0           ) \
         macro(ADC_NTC,              6,      GPIOA,  6,      50,     1,              0           ) \
-        macro(ADC_VBUS_DEBUG,       3,      GPIOA,  3,      10,     22.0 / 10.0,    0           ) \
-        macro(ADC_VBUS_NETWORK,     5,      GPIOA,  5,      10,     22.0 / 10.0,    0           ) \
+        macro(ADC_VBUS_DEBUG,       3,      GPIOA,  3,      10,     2.2 / 1.0,      0           ) \
+        macro(ADC_VBUS_NETWORK,     5,      GPIOA,  5,      10,     2.2 / 1.0,      0           ) \
         macro(ADC_HW_VER,           2,      GPIOA,  2,      50,     1,              0           ) \
         macro(ADC_INT_VREF,         13,     0,      0,      50,     1,              0           ) \
 
