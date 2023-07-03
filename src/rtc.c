@@ -284,6 +284,7 @@ void rtc_enable_pc13_1hz_clkout(void)
     GPIO_SET_OUTPUT(GPIOC, 13);
 
     start_init_disable_wpr();
+    RTC->CR &= ~(RTC_CR_COE | RTC_CR_COSEL | RTC_CR_OUT2EN);
     RTC->CR |= RTC_CR_COE | RTC_CR_COSEL;
     end_init_enable_wpr();
 }
@@ -293,7 +294,28 @@ void rtc_disable_pc13_1hz_clkout(void)
     GPIO_SET_INPUT(GPIOC, 13);
 
     start_init_disable_wpr();
-    RTC->CR &= ~(RTC_CR_COE | RTC_CR_COSEL);
+    RTC->CR &= ~(RTC_CR_COE | RTC_CR_COSEL | RTC_CR_OUT2EN);
+    end_init_enable_wpr();
+}
+
+void rtc_enable_pa4_1hz_clkout(void)
+{
+    GPIO_SET_PUSHPULL(GPIOA, 4);
+    GPIO_SET_OUTPUT(GPIOA, 4);
+    GPIO_SET_AF(GPIOA, 4, 7);
+
+    start_init_disable_wpr();
+    RTC->CR &= ~(RTC_CR_COE | RTC_CR_COSEL | RTC_CR_OUT2EN);
+    RTC->CR |= RTC_CR_COE | RTC_CR_OUT2EN | RTC_CR_COSEL;
+    end_init_enable_wpr();
+}
+
+void rtc_disable_pa4_1hz_clkout(void)
+{
+    GPIO_SET_INPUT(GPIOA, 4);
+
+    start_init_disable_wpr();
+    RTC->CR &= ~(RTC_CR_COE | RTC_CR_COSEL | RTC_CR_OUT2EN);
     end_init_enable_wpr();
 }
 
