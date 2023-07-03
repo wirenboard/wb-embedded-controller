@@ -57,7 +57,7 @@ int main(void)
     gpio_init();
     spi_slave_init();
     regmap_init();
-    // rtc_enable_pc13_1hz_clkout();
+    rtc_enable_pa4_1hz_clkout();
     usart_init();
 
     // Init subsystems
