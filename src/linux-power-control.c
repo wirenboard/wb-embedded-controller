@@ -212,7 +212,6 @@ void linux_pwr_do_periodic_work(void)
     // При этом ЕС продолжит работать от BATSENSE
     if (!pwr_ctx.wbmz_enabled) {
         if (adc_get_ch_mv(ADC_CHANNEL_ADC_V_IN) > 11500) {
-            usart_tx_str_blocking("\r\nVin > 11500; WBMZ ON\r\n");
             linux_pwr_enable_wbmz();
         }
     }
