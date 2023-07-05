@@ -98,7 +98,8 @@
 
 
 // Ожидание после старта прошивки и перед опросом напряжений
-#define VOLTAGE_MONITOR_START_DELAY_MS      20
+// Должно быть около 10RC канала ADC_5V
+#define VOLTAGE_MONITOR_START_DELAY_MS      100
 
 #define VOLTAGE_MONITOR_DESC(m) \
     /*Monitor CH        ADC CH              OK min  max         FAIL min max */ \
