@@ -7,10 +7,10 @@ enum mcu_poweron_reason mcu_get_poweron_reason(void)
 {
     if (PWR->SR1 & PWR_SR1_SBF) {
         PWR->SCR = PWR_SCR_CSBF;
-        if (PWR->SR1 & (1 << (EC_GPIO_PWRKEY_WKUP_NUM + PWR_SR1_WUF1_Pos))) {
-            PWR->SCR = (1 << (EC_GPIO_PWRKEY_WKUP_NUM + PWR_SCR_CWUF1));
+        if (PWR->SR1 & (1 << (EC_GPIO_PWRKEY_WKUP_NUM - 1 + PWR_SR1_WUF1_Pos))) {
+            PWR->SCR = (1 << (EC_GPIO_PWRKEY_WKUP_NUM - 1 + PWR_SCR_CWUF1));
             return MCU_POWERON_REASON_POWER_KEY;
-        } else if (PWR_SR1_WUFI) {
+        } else if (PWR->SR1 & PWR_SR1_WUFI) {
             PWR->SCR = PWR_SR1_WUFI;
             if (RTC->SR & RTC_SR_WUTF) {
                 return MCU_POWERON_REASON_RTC_PERIODIC_WAKEUP;
