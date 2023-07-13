@@ -277,8 +277,26 @@ void wbec_do_periodic_work(void)
         // примерно хххх мс после включения питания
         // При пробужении из спящего режима RC-цепочка так же работает и держит линукс выключенным
         // после пробуждения МК
+        // Также возможна ситуация, когда при обновлении прошивки МК перезагружается,
+        // а линукс в это время работает. Тогда его не надо перезагружать.
+        // Факт работы линукса определяется по наличию +3.3В
         if (vmon_ready()) {
-            new_state(WBEC_STATE_VOLTAGE_CHECK);
+            if ((wbec_info.poweron_reason == REASON_POWER_ON) && (vmon_get_ch_status(VMON_CHANNEL_V33))) {
+                // Если после включения МК +3.3В есть - значить линукс уже работает
+                // Не нужно выводить информацию в уарт
+                // Тут ничего не нужно делать
+                // Инициализируем GPIO управления питанием сразу во включенном состоянии
+                linux_pwr_init(1);
+                new_state(WBEC_STATE_WAIT_POWER_ON);
+            } else {
+                // В ином случае перехватываем питание (выключаем)
+                // И отправляем информацию в уарт
+                linux_pwr_init(0);
+                new_state(WBEC_STATE_VOLTAGE_CHECK);
+            }
+            // Заполним стуктуру INFO данными
+            wbec_info.board_rev = fix16_to_int(adc_get_ch_adc_raw(ADC_CHANNEL_ADC_HW_VER));
+            regmap_set_region_data(REGMAP_REGION_INFO, &wbec_info, sizeof(wbec_info));
         }
         break;
 
@@ -287,52 +305,42 @@ void wbec_do_periodic_work(void)
         // В дальнейшем при перезагрузках сюда уже не попадаем
         // В этом состоянии линукс всё ещё выключен
         // Тут нужно проверить напряжения и температуру (в будущем)
-        // Также возможна ситуация, когда при обновлении прошивки МК перезагружается,
-        // а линукс в это время работает. Тогда его не надо перезагружать.
-        // Факт работы линукса определяется по наличию +3.3В
-        if ((wbec_info.poweron_reason == REASON_POWER_ON) && (vmon_get_ch_status(VMON_CHANNEL_V33))) {
-            // Если после включения МК +3.3В есть - значить линукс уже работает
-            // Не нужно выводить информацию в уарт
-            // Тут ничего не нужно делать
-            // Инициализируем GPIO управления питанием сразу во включенном состоянии
-            linux_pwr_init(1);
-            new_state(WBEC_STATE_WAIT_POWER_ON);
-        } else {
-            // В ином случае перехватываем питание (выключаем)
-            // И отправляем информацию в уарт
-            linux_pwr_init(0);
 
-            // Блокирующая отправка здесь - не страшно,
-            // т.к. устройство в этом состоянии больше ничего не делает
-            usart_tx_str_blocking("\r\n\n");
-            usart_tx_str_blocking(WBEC_DEBUG_MSG_PREFIX "Wiren Board Embedded Controller\r\n");
-            usart_tx_str_blocking(WBEC_DEBUG_MSG_PREFIX "Firmware version: ");
-            usart_tx_buf_blocking(fwver_chars, ARRAY_SIZE(fwver_chars));
-            usart_tx_str_blocking("\r\n");
-            usart_tx_str_blocking(WBEC_DEBUG_MSG_PREFIX "Git info: ");
-            usart_tx_str_blocking(MODBUS_DEVICE_GIT_INFO);
-            usart_tx_str_blocking("\r\n");
-
-            usart_tx_str_blocking(WBEC_DEBUG_MSG_PREFIX "Power on reason: ");
-            usart_tx_str_blocking(get_poweron_reason_string(wbec_info.poweron_reason));
-            usart_tx_str_blocking("\r\n");
-
-            // TODO Display voltages and temp
-
-            if (adc.temp < WBEC_MINIMUM_WORKING_TEMPERATURE_C_X100) {
-                usart_tx_str_blocking(WBEC_DEBUG_MSG_PREFIX "WARNING: Temperature is too low!\r\n");
-                new_state(WBEC_STATE_TEMP_CHECK_LOOP);
-            } else {
-                usart_tx_str_blocking(WBEC_DEBUG_MSG_PREFIX "Now the main processor will be powered on. All next debug messages are from processor.\r\n\n\n");
-                // После отправки данных включаем линукс
-                linux_pwr_on();
-                new_state(WBEC_STATE_WAIT_POWER_ON);
+        // Если включились по USB (в общем случае - не по Vin) - нужно
+        // подождать несколько секунд, чтобы не пропадали первые дебаг-сообщения
+        if (!vmon_get_ch_status(VMON_CHANNEL_V_IN)) {
+            if (in_state_time() < WBEC_LINUX_POWER_ON_DELAY_FROM_USB) {
+                break;
             }
         }
 
-        // Заполним стуктуру INFO данными
-        wbec_info.board_rev = fix16_to_int(adc_get_ch_adc_raw(ADC_CHANNEL_ADC_HW_VER));
-        regmap_set_region_data(REGMAP_REGION_INFO, &wbec_info, sizeof(wbec_info));
+        // Блокирующая отправка здесь - не страшно,
+        // т.к. устройство в этом состоянии больше ничего не делает
+        usart_tx_str_blocking("\r\n\n");
+        usart_tx_str_blocking(WBEC_DEBUG_MSG_PREFIX "Wiren Board Embedded Controller\r\n");
+        usart_tx_str_blocking(WBEC_DEBUG_MSG_PREFIX "Firmware version: ");
+        usart_tx_buf_blocking(fwver_chars, ARRAY_SIZE(fwver_chars));
+        usart_tx_str_blocking("\r\n");
+        usart_tx_str_blocking(WBEC_DEBUG_MSG_PREFIX "Git info: ");
+        usart_tx_str_blocking(MODBUS_DEVICE_GIT_INFO);
+        usart_tx_str_blocking("\r\n");
+
+        usart_tx_str_blocking(WBEC_DEBUG_MSG_PREFIX "Power on reason: ");
+        usart_tx_str_blocking(get_poweron_reason_string(wbec_info.poweron_reason));
+        usart_tx_str_blocking("\r\n");
+
+        // TODO Display voltages and temp
+
+        if (adc.temp < WBEC_MINIMUM_WORKING_TEMPERATURE_C_X100) {
+            usart_tx_str_blocking(WBEC_DEBUG_MSG_PREFIX "WARNING: Temperature is too low!\r\n");
+            new_state(WBEC_STATE_TEMP_CHECK_LOOP);
+        } else {
+            usart_tx_str_blocking(WBEC_DEBUG_MSG_PREFIX "Now the main processor will be powered on. All next debug messages are from processor.\r\n\n\n");
+            // После отправки данных включаем линукс
+            linux_pwr_on();
+            new_state(WBEC_STATE_WAIT_POWER_ON);
+        }
+
         break;
 
     case WBEC_STATE_TEMP_CHECK_LOOP:
