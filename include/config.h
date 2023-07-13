@@ -107,7 +107,7 @@
     /*Monitor CH        ADC CH              OK min  max         FAIL min max */ \
     m(V_OUT,            ADC_V_IN,           0,      28000,      0,      29000 ) \
     m(V33,              ADC_3V3,            3200,   3400,       3100,   3500  ) \
-    m(V50,              ADC_5V,             4400,   5500,       4050,   5800  ) \
+    m(V50,              ADC_5V,             4000,   5500,       3600,   5800  ) \
     m(VBUS_DEBUG,       ADC_VBUS_DEBUG,     4600,   5500,       4300,   5800  ) \
     m(VBUS_NETWORK,     ADC_VBUS_NETWORK,   4600,   5500,       4300,   5800  ) \
 
