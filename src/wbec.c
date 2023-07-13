@@ -19,7 +19,7 @@
 
 #define LINUX_POWERON_REASON(m) \
     m(REASON_POWER_ON,        "Wiren Board supply on"        ) \
-    m(REASON_POWER_KEY,       "Power key pressed"            ) \
+    m(REASON_POWER_KEY,       "Power button"                 ) \
     m(REASON_RTC_ALARM,       "RTC alarm"                    ) \
     m(REASON_REBOOT,          "Reboot"                       ) \
     m(REASON_REBOOT_NO_ALARM, "Reboot instead of poweroff"   ) \
@@ -60,7 +60,6 @@ enum wbec_state {
 };
 
 struct wbec_ctx {
-    enum mcu_poweron_reason mcu_poweron_reason;
     enum wbec_state state;
     systime_t timestamp;
     bool powered_from_wbmz;
@@ -167,7 +166,7 @@ void wbec_init(void)
     // Enable internal wakeup line (for RTC)
     PWR->CR3 |= PWR_CR3_EIWUL;
 
-    wbec_ctx.mcu_poweron_reason = mcu_get_poweron_reason();
+    enum mcu_poweron_reason mcu_poweron_reason = mcu_get_poweron_reason();
 
     // Независимо от причины включения нужно измерить напряжение на линии 5В
     // Работаем на частоте 1 МГц для снижения потребления
@@ -189,7 +188,7 @@ void wbec_init(void)
      *    - если питание появилось - включиться в обычном режиме
      */
 
-    switch (wbec_ctx.mcu_poweron_reason) {
+    switch (mcu_poweron_reason) {
     case MCU_POWERON_REASON_UNKNOWN:
     case MCU_POWERON_REASON_POWER_ON:
     default:
@@ -203,6 +202,7 @@ void wbec_init(void)
         // Если включились от кнопки
         // Нужно проверить на антидребезг и включиться в обычном режиме
         // (просто идём дальше)
+        pwrkey_init();
         while (!pwrkey_ready()) {
             pwrkey_do_periodic_work();
         }
@@ -210,9 +210,9 @@ void wbec_init(void)
             wbec_info.poweron_reason = REASON_POWER_KEY;
             new_state(WBEC_STATE_WAIT_STARTUP);
         } else {
+            // Если кнопка не нажата (или нажата коротко и не прошла антидребезг) - засыпаем
             mcu_goto_standby(WBEC_PERIODIC_WAKEUP_NEXT_TIMEOUT_S);
         }
-        wbec_info.poweron_reason = REASON_POWER_KEY;
         break;
 
     case MCU_POWERON_REASON_RTC_ALARM:
@@ -291,7 +291,7 @@ void wbec_do_periodic_work(void)
         // Также возможна ситуация, когда при обновлении прошивки МК перезагружается,
         // а линукс в это время работает. Тогда его не надо перезагружать.
         // Факт работы линукса определяется по наличию +3.3В
-        if ((wbec_ctx.mcu_poweron_reason == MCU_POWERON_REASON_POWER_ON) && (vmon_get_ch_status(VMON_CHANNEL_V33))) {
+        if ((wbec_info.poweron_reason == REASON_POWER_ON) && (vmon_get_ch_status(VMON_CHANNEL_V33))) {
             // Если после включения МК +3.3В есть - значить линукс уже работает
             // Не нужно выводить информацию в уарт
             // Тут ничего не нужно делать
