@@ -36,9 +36,6 @@ static const gpio_pin_t pwrkey_gpio = { EC_GPIO_PWRKEY };
 // Состояние gpio. Используется для подавления дребезга
 struct pwrkey_gpio_ctx {
     systime_t timestamp;
-    // bool prev_gpio_state;
-    // bool logic_state;
-    // bool initializated;
     enum pwrkey_state prev_gpio_state;
     enum pwrkey_state logic_state;
 };
@@ -50,7 +47,6 @@ struct pwrkey_logic_ctx {
     enum press_state press_state;
     bool short_pressed_flag;
     bool long_pressed_flag;
-    // bool long_pressed_detected;
 };
 
 static struct pwrkey_gpio_ctx gpio_ctx;

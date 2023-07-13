@@ -19,7 +19,7 @@
 
 #define LINUX_POWERON_REASON(m) \
     m(REASON_POWER_ON,        "Wiren Board supply on"        ) \
-    m(REASON_POWER_KEY,       "Power key pressed"            ) \
+    m(REASON_POWER_KEY,       "Power button"                 ) \
     m(REASON_RTC_ALARM,       "RTC alarm"                    ) \
     m(REASON_REBOOT,          "Reboot"                       ) \
     m(REASON_REBOOT_NO_ALARM, "Reboot instead of poweroff"   ) \
@@ -60,7 +60,6 @@ enum wbec_state {
 };
 
 struct wbec_ctx {
-    enum mcu_poweron_reason mcu_poweron_reason;
     enum wbec_state state;
     systime_t timestamp;
     bool powered_from_wbmz;
@@ -167,13 +166,12 @@ void wbec_init(void)
     // Enable internal wakeup line (for RTC)
     PWR->CR3 |= PWR_CR3_EIWUL;
 
-    wbec_ctx.mcu_poweron_reason = mcu_get_poweron_reason();
+    enum mcu_poweron_reason mcu_poweron_reason = mcu_get_poweron_reason();
 
     // Независимо от причины включения нужно измерить напряжение на линии 5В
     // Работаем на частоте 1 МГц для снижения потребления
     while (!adc_get_ready()) {};
-    uint16_t vcc_5v = adc_get_ch_mv(ADC_CHANNEL_ADC_5V);
-    bool vcc_5v_ok = (vcc_5v > 4400) && (vcc_5v < 5500);
+    bool vcc_5v_ok = vmon_check_ch_once(VMON_CHANNEL_V50);
     enum mcu_vcc_5v_state vcc_5v_last_state = mcu_get_vcc_5v_last_state();
 
     /**
@@ -189,7 +187,7 @@ void wbec_init(void)
      *    - если питание появилось - включиться в обычном режиме
      */
 
-    switch (wbec_ctx.mcu_poweron_reason) {
+    switch (mcu_poweron_reason) {
     case MCU_POWERON_REASON_UNKNOWN:
     case MCU_POWERON_REASON_POWER_ON:
     default:
@@ -203,6 +201,7 @@ void wbec_init(void)
         // Если включились от кнопки
         // Нужно проверить на антидребезг и включиться в обычном режиме
         // (просто идём дальше)
+        pwrkey_init();
         while (!pwrkey_ready()) {
             pwrkey_do_periodic_work();
         }
@@ -210,9 +209,9 @@ void wbec_init(void)
             wbec_info.poweron_reason = REASON_POWER_KEY;
             new_state(WBEC_STATE_WAIT_STARTUP);
         } else {
+            // Если кнопка не нажата (или нажата коротко и не прошла антидребезг) - засыпаем
             mcu_goto_standby(WBEC_PERIODIC_WAKEUP_NEXT_TIMEOUT_S);
         }
-        wbec_info.poweron_reason = REASON_POWER_KEY;
         break;
 
     case MCU_POWERON_REASON_RTC_ALARM:
@@ -278,8 +277,26 @@ void wbec_do_periodic_work(void)
         // примерно хххх мс после включения питания
         // При пробужении из спящего режима RC-цепочка так же работает и держит линукс выключенным
         // после пробуждения МК
+        // Также возможна ситуация, когда при обновлении прошивки МК перезагружается,
+        // а линукс в это время работает. Тогда его не надо перезагружать.
+        // Факт работы линукса определяется по наличию +3.3В
         if (vmon_ready()) {
-            new_state(WBEC_STATE_VOLTAGE_CHECK);
+            if ((wbec_info.poweron_reason == REASON_POWER_ON) && (vmon_get_ch_status(VMON_CHANNEL_V33))) {
+                // Если после включения МК +3.3В есть - значить линукс уже работает
+                // Не нужно выводить информацию в уарт
+                // Тут ничего не нужно делать
+                // Инициализируем GPIO управления питанием сразу во включенном состоянии
+                linux_pwr_init(1);
+                new_state(WBEC_STATE_WAIT_POWER_ON);
+            } else {
+                // В ином случае перехватываем питание (выключаем)
+                // И отправляем информацию в уарт
+                linux_pwr_init(0);
+                new_state(WBEC_STATE_VOLTAGE_CHECK);
+            }
+            // Заполним стуктуру INFO данными
+            wbec_info.board_rev = fix16_to_int(adc_get_ch_adc_raw(ADC_CHANNEL_ADC_HW_VER));
+            regmap_set_region_data(REGMAP_REGION_INFO, &wbec_info, sizeof(wbec_info));
         }
         break;
 
@@ -288,51 +305,42 @@ void wbec_do_periodic_work(void)
         // В дальнейшем при перезагрузках сюда уже не попадаем
         // В этом состоянии линукс всё ещё выключен
         // Тут нужно проверить напряжения и температуру (в будущем)
-        // Также возможна ситуация, когда при обновлении прошивки МК перезагружается,
-        // а линукс в это время работает. Тогда его не надо перезагружать.
-        // Факт работы линукса определяется по наличию +3.3В
-        if ((wbec_ctx.mcu_poweron_reason == MCU_POWERON_REASON_POWER_ON) && (vmon_get_ch_status(VMON_CHANNEL_V33))) {
-            // Если после включения МК +3.3В есть - значить линукс уже работает
-            // Не нужно выводить информацию в уарт
-            // Тут ничего не нужно делать
-            // Инициализируем GPIO управления питанием сразу во включенном состоянии
-            linux_pwr_init(1);
-            new_state(WBEC_STATE_WAIT_POWER_ON);
-        } else {
-            // В ином случае перехватываем питание (выключаем)
-            // И отправляем информацию в уарт
-            linux_pwr_init(0);
 
-            // Блокирующая отправка здесь - не страшно,
-            // т.к. устройство в этом состоянии больше ничего не делает
-            usart_tx_str_blocking("Wirenboard Embedded Controller\r\n");
-            usart_tx_str_blocking("Version: ");
-            usart_tx_buf_blocking(fwver_chars, ARRAY_SIZE(fwver_chars));
-            usart_tx_str_blocking("\r\n");
-            usart_tx_str_blocking("Git info: ");
-            usart_tx_str_blocking(MODBUS_DEVICE_GIT_INFO);
-            usart_tx_str_blocking("\r\n\n");
-
-            usart_tx_str_blocking("Power on reason: ");
-            usart_tx_str_blocking(get_poweron_reason_string(wbec_info.poweron_reason));
-            usart_tx_str_blocking("\r\n\n");
-
-            // TODO Display voltages and temp
-
-            if (adc.temp < WBEC_MINIMUM_WORKING_TEMPERATURE_C_X100) {
-                usart_tx_str_blocking("\r\nWARNING: Temperature is too low!\r\n\n");
-                new_state(WBEC_STATE_TEMP_CHECK_LOOP);
-            } else {
-                usart_tx_str_blocking("Power on now...\r\n\n");
-                // После отправки данных включаем линукс
-                linux_pwr_on();
-                new_state(WBEC_STATE_WAIT_POWER_ON);
+        // Если включились по USB (в общем случае - не по Vin) - нужно
+        // подождать несколько секунд, чтобы не пропадали первые дебаг-сообщения
+        if (!vmon_get_ch_status(VMON_CHANNEL_V_IN)) {
+            if (in_state_time() < WBEC_LINUX_POWER_ON_DELAY_FROM_USB) {
+                break;
             }
         }
 
-        // Заполним стуктуру INFO данными
-        wbec_info.board_rev = fix16_to_int(adc_get_ch_adc_raw(ADC_CHANNEL_ADC_HW_VER));
-        regmap_set_region_data(REGMAP_REGION_INFO, &wbec_info, sizeof(wbec_info));
+        // Блокирующая отправка здесь - не страшно,
+        // т.к. устройство в этом состоянии больше ничего не делает
+        usart_tx_str_blocking("\r\n\n");
+        usart_tx_str_blocking(WBEC_DEBUG_MSG_PREFIX "Wiren Board Embedded Controller\r\n");
+        usart_tx_str_blocking(WBEC_DEBUG_MSG_PREFIX "Firmware version: ");
+        usart_tx_buf_blocking(fwver_chars, ARRAY_SIZE(fwver_chars));
+        usart_tx_str_blocking("\r\n");
+        usart_tx_str_blocking(WBEC_DEBUG_MSG_PREFIX "Git info: ");
+        usart_tx_str_blocking(MODBUS_DEVICE_GIT_INFO);
+        usart_tx_str_blocking("\r\n");
+
+        usart_tx_str_blocking(WBEC_DEBUG_MSG_PREFIX "Power on reason: ");
+        usart_tx_str_blocking(get_poweron_reason_string(wbec_info.poweron_reason));
+        usart_tx_str_blocking("\r\n");
+
+        // TODO Display voltages and temp
+
+        if (adc.temp < WBEC_MINIMUM_WORKING_TEMPERATURE_C_X100) {
+            usart_tx_str_blocking(WBEC_DEBUG_MSG_PREFIX "WARNING: Temperature is too low!\r\n");
+            new_state(WBEC_STATE_TEMP_CHECK_LOOP);
+        } else {
+            usart_tx_str_blocking(WBEC_DEBUG_MSG_PREFIX "Now the main processor will be powered on. All next debug messages are from processor.\r\n\n\n");
+            // После отправки данных включаем линукс
+            linux_pwr_on();
+            new_state(WBEC_STATE_WAIT_POWER_ON);
+        }
+
         break;
 
     case WBEC_STATE_TEMP_CHECK_LOOP:
@@ -340,11 +348,11 @@ void wbec_do_periodic_work(void)
         // Сидим тут до тех пор, пока температура не станет выше -40
         if (in_state_time() > 5000) {
             if (adc.temp < WBEC_MINIMUM_WORKING_TEMPERATURE_C_X100) {
-                usart_tx_str_blocking("\r\nTemperature is still too low! Check again after 5 second\r\n\n");
+                usart_tx_str_blocking(WBEC_DEBUG_MSG_PREFIX "Temperature is still too low! Check again after 5 second\r\n");
                 new_state(WBEC_STATE_TEMP_CHECK_LOOP);
             } else {
-                usart_tx_str_blocking("\r\nTemperature is OK!\r\n\n");
-                usart_tx_str_blocking("Power on now...\r\n\n");
+                usart_tx_str_blocking(WBEC_DEBUG_MSG_PREFIX "Temperature is OK!\r\n");
+                usart_tx_str_blocking(WBEC_DEBUG_MSG_PREFIX "Now the main processor will be powered on. All next debug messages are from processor.\r\n\n\n");
                 linux_pwr_on();
                 new_state(WBEC_STATE_WAIT_POWER_ON);
             }
@@ -358,7 +366,7 @@ void wbec_do_periodic_work(void)
             pwrkey_handle_short_press();
             pwrkey_handle_long_press();
             // Установим время WDT и запустим его
-            wdt_set_timeout(WDEC_WATCHDOG_INITIAL_TIMEOUT_S);
+            wdt_set_timeout(WBEC_WATCHDOG_INITIAL_TIMEOUT_S);
             wdt_start_reset();
             // Как только питание включилось - переходим в рабочий режим
             new_state(WBEC_STATE_WORKING);
@@ -384,16 +392,17 @@ void wbec_do_periodic_work(void)
             // нужно было ехать нажимать кнопку чтобы его включить обратно
             // Поэтому здесь нужно проверить наличие будильника и если он есть - выключиться
             // иначе - перезагрузиться
-            usart_tx_str_blocking("\n\rPower off request from Linux.\r\n");
+            usart_tx_str_blocking("\r\n\n");
+            usart_tx_str_blocking(WBEC_DEBUG_MSG_PREFIX "Power off request from Linux.\r\n");
             bool wbmz = linux_pwr_is_powered_from_wbmz();
             bool alarm = rtc_alarm_is_alarm_enabled();
-            usart_tx_str_blocking("Alarm status: ");
+            usart_tx_str_blocking(WBEC_DEBUG_MSG_PREFIX "Alarm status: ");
             if (alarm) {
                 usart_tx_str_blocking("set\r\n");
             } else {
                 usart_tx_str_blocking("not set\r\n");
             }
-            usart_tx_str_blocking("Power status: ");
+            usart_tx_str_blocking(WBEC_DEBUG_MSG_PREFIX "Power status: ");
             if (wbmz) {
                 usart_tx_str_blocking("powered from WBMZ\r\n");
             } else {
@@ -405,13 +414,12 @@ void wbec_do_periodic_work(void)
                 // Если выключаемся при работающем WBMZ - дополнительно заводим RC periodic wakeup
                 // чтобы просыпаться и следить за появлением входного напряжения
                 if (wbmz) {
-                    usart_tx_str_blocking("\r\nPowered from WBMZ, power off and set RTC periodic wakeup timer");
                     wbec_ctx.powered_from_wbmz = true;
                 }
                 linux_pwr_off();
                 new_state(WBEC_STATE_WAIT_POWER_OFF);
             } else {
-                usart_tx_str_blocking("\r\nAlarm not set, reboot system instead of power off.\r\n\n");
+                usart_tx_str_blocking(WBEC_DEBUG_MSG_PREFIX "Alarm not set, reboot system instead of power off.\r\n\n");
                 wbec_info.poweron_reason = REASON_REBOOT_NO_ALARM;
                 linux_pwr_reset();
                 new_state(WBEC_STATE_WAIT_POWER_ON);
@@ -419,12 +427,14 @@ void wbec_do_periodic_work(void)
         } else if (linux_powerctrl_req == LINUX_POWERCTRL_REBOOT) {
             // Если запрос на перезагрузку - перезагружается
             wbec_info.poweron_reason = REASON_REBOOT;
-            usart_tx_str_blocking("\r\nReboot request, reset power.\r\n\n");
+            usart_tx_str_blocking("\r\n\n");
+            usart_tx_str_blocking(WBEC_DEBUG_MSG_PREFIX "Reboot request, reset power.\r\n\n");
             linux_pwr_reset();
             new_state(WBEC_STATE_WAIT_POWER_ON);
         } else if (linux_powerctrl_req == LINUX_POWERCTRL_PMIC_RESET) {
             wbec_info.poweron_reason = REASON_REBOOT;
-            usart_tx_str_blocking("\r\nPMIC reset request, activate PMIC RESET line now\r\n\n");
+            usart_tx_str_blocking("\r\n\n");
+            usart_tx_str_blocking(WBEC_DEBUG_MSG_PREFIX "PMIC reset request, activate PMIC RESET line now\r\n\n");
             linux_pwr_reset_pmic();
             new_state(WBEC_STATE_WAIT_POWER_ON);
         }
@@ -432,7 +442,8 @@ void wbec_do_periodic_work(void)
         // Если сработал WDT - перезагружаемся по питанию
         if (wdt_handle_timed_out()) {
             wbec_info.poweron_reason = REASON_WATCHDOG;
-            usart_tx_str_blocking("\r\nWatchdog is timed out, reset power.\r\n\n");
+            usart_tx_str_blocking("\r\n\n");
+            usart_tx_str_blocking(WBEC_DEBUG_MSG_PREFIX "Watchdog is timed out, reset power.\r\n\n");
             linux_pwr_reset();
             new_state(WBEC_STATE_WAIT_POWER_ON);
         }
@@ -445,7 +456,6 @@ void wbec_do_periodic_work(void)
         // сигнал PWRON, который надо активировать примерно на 6с
         if (!linux_pwr_is_busy()) {
             // После того как питание выключилось - засыпаем
-            usart_tx_str_blocking("\r\nPower off now, wake up to check voltages after 10 seconds\r\n");
             // Save VCC_5V state to RTC backup register
             if (wbec_ctx.powered_from_wbmz)
                 mcu_save_vcc_5v_last_state(MCU_VCC_5V_STATE_OFF);
@@ -464,12 +474,14 @@ void wbec_do_periodic_work(void)
 
         if (linux_powerctrl_req == LINUX_POWERCTRL_OFF) {
             // Штатное выключение (запрос на выключение был с кнопки)
-            usart_tx_str_blocking("\r\nPower off request from Linux after power key pressed. Power is off.\r\n\n");
+            usart_tx_str_blocking("\r\n\n");
+            usart_tx_str_blocking(WBEC_DEBUG_MSG_PREFIX "Power off request from Linux after power key pressed. Powering off...\r\n");
             linux_pwr_off();
             new_state(WBEC_STATE_WAIT_POWER_OFF);
         } else if (in_state_time() >= WBEC_LINUX_POWER_OFF_DELAY_MS) {
             // Аварийное выключение (можно как-то дополнительно обработать)
-            usart_tx_str_blocking("\r\nNo power off request from Linux after power key pressed. Power is forced off.\r\n\n");
+            usart_tx_str_blocking("\r\n\n");
+            usart_tx_str_blocking(WBEC_DEBUG_MSG_PREFIX "No power off request from Linux after power key pressed. Power is forced off.\r\n\n");
             linux_pwr_off();
             new_state(WBEC_STATE_WAIT_POWER_OFF);
         }

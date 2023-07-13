@@ -14,4 +14,5 @@ enum vmon_channel {
 void vmon_init(void);
 bool vmon_ready(void);
 bool vmon_get_ch_status(enum vmon_channel ch);
+bool vmon_check_ch_once(enum vmon_channel ch);
 void vmon_do_periodic_work(void);

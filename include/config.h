@@ -3,11 +3,13 @@
 
 /* ====== Параметры работы EC ====== */
 
+#define WBEC_DEBUG_MSG_PREFIX                   "[EC]: "
+
 // Таймаут, который устанавливается после включения питания
 // Должен быть больше, чем время загрузки Linux
-#define WDEC_WATCHDOG_INITIAL_TIMEOUT_S         120
+#define WBEC_WATCHDOG_INITIAL_TIMEOUT_S         120
 // Максимальный таймаут
-#define WDEC_WATCHDOG_MAX_TIMEOUT_S             600
+#define WBEC_WATCHDOG_MAX_TIMEOUT_S             600
 
 // ID, лежит в карте регистров как константа
 #define WBEC_ID                                 0x3CD2
@@ -17,6 +19,8 @@
 // Время от короткого нажатия кнопки (запрос в линукс)
 // до принудительного выключения (если линукс не ответил)
 #define WBEC_LINUX_POWER_OFF_DELAY_MS           60000
+// Время задержки включения при работе от USB
+#define WBEC_LINUX_POWER_ON_DELAY_FROM_USB      5000
 
 #define WBEC_PERIODIC_WAKEUP_FIRST_TIMEOUT_S    5
 #define WBEC_PERIODIC_WAKEUP_NEXT_TIMEOUT_S     2
@@ -103,9 +107,8 @@
 
 #define VOLTAGE_MONITOR_DESC(m) \
     /*Monitor CH        ADC CH              OK min  max         FAIL min max */ \
+    m(V_IN,             ADC_V_IN,           8000,   49000,      7000,   50000 ) \
     m(V_OUT,            ADC_V_IN,           0,      28000,      0,      29000 ) \
     m(V33,              ADC_3V3,            3200,   3400,       3100,   3500  ) \
-    m(V50,              ADC_5V,             4400,   5500,       4050,   5800  ) \
-    m(VBUS_DEBUG,       ADC_VBUS_DEBUG,     4600,   5500,       4300,   5800  ) \
-    m(VBUS_NETWORK,     ADC_VBUS_NETWORK,   4600,   5500,       4300,   5800  ) \
+    m(V50,              ADC_5V,             4000,   5500,       3600,   5800  ) \
 
