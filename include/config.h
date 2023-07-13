@@ -3,6 +3,8 @@
 
 /* ====== Параметры работы EC ====== */
 
+#define WBEC_DEBUG_MSG_PREFIX                   "[EC]: "
+
 // Таймаут, который устанавливается после включения питания
 // Должен быть больше, чем время загрузки Linux
 #define WBEC_WATCHDOG_INITIAL_TIMEOUT_S         120
