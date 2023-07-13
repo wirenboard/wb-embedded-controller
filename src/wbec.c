@@ -171,8 +171,7 @@ void wbec_init(void)
     // Независимо от причины включения нужно измерить напряжение на линии 5В
     // Работаем на частоте 1 МГц для снижения потребления
     while (!adc_get_ready()) {};
-    uint16_t vcc_5v = adc_get_ch_mv(ADC_CHANNEL_ADC_5V);
-    bool vcc_5v_ok = (vcc_5v > 4400) && (vcc_5v < 5500);
+    bool vcc_5v_ok = vmon_check_ch_once(VMON_CHANNEL_V50);
     enum mcu_vcc_5v_state vcc_5v_last_state = mcu_get_vcc_5v_last_state();
 
     /**
@@ -306,7 +305,7 @@ void wbec_do_periodic_work(void)
             // Блокирующая отправка здесь - не страшно,
             // т.к. устройство в этом состоянии больше ничего не делает
             usart_tx_str_blocking("\r\n\n");
-            usart_tx_str_blocking(WBEC_DEBUG_MSG_PREFIX "Wirenboard Embedded Controller\r\n");
+            usart_tx_str_blocking(WBEC_DEBUG_MSG_PREFIX "Wiren Board Embedded Controller\r\n");
             usart_tx_str_blocking(WBEC_DEBUG_MSG_PREFIX "Firmware version: ");
             usart_tx_buf_blocking(fwver_chars, ARRAY_SIZE(fwver_chars));
             usart_tx_str_blocking("\r\n");

@@ -227,10 +227,20 @@ void linux_pwr_do_periodic_work(void)
     }
 
     switch (pwr_ctx.state) {
-    // Если алгоритм завершился (включил или выключил питание)
-    // ничего не делаем
+    // Если алгоритм завершился (выключил питание) - ничего не делаем
     case PS_OFF_COMPLETE:
+        break;
+
+    // Если алгоритм завершился (выключил питание)
+    // Мониторим линию 3.3В на предмет неожиданного выключения PMIC
     case PS_ON_COMPLETE:
+        if (!vmon_get_ch_status(VMON_CHANNEL_V33)) {
+            // Если питание 3.3В пропало - это означает что PMIC выключился по каким-то причинам
+            // Нужно попробовать перезапустить всё по питанию
+            linux_pwr_gpio_off();
+            usart_tx_str_blocking(WBEC_DEBUG_MSG_PREFIX "3.3V is lost, try to reset power\r\n");
+            new_state(PS_RESET_5V_WAIT);
+        }
         break;
 
     // Первый шаг включения питания: проверка, что 3.3В появилось, после того как подали 5В

@@ -21,7 +21,7 @@ static bool vmon_ch_status[VMON_CHANNEL_COUNT] = {};
 static bool vmon_initialized = 0;
 static systime_t start_timestamp;
 
-static inline void check_voltage(const struct vmon_ch_cfg * cfg, bool * status)
+static void check_voltage(const struct vmon_ch_cfg * cfg, bool * status)
 {
     uint16_t mv = adc_get_ch_mv(cfg->adc_ch);
 
@@ -50,6 +50,12 @@ bool vmon_ready(void)
 
 bool vmon_get_ch_status(enum vmon_channel ch)
 {
+    return vmon_ch_status[ch];
+}
+
+bool vmon_check_ch_once(enum vmon_channel ch)
+{
+    check_voltage(&vmon_ch_cfg[ch], &vmon_ch_status[ch]);
     return vmon_ch_status[ch];
 }
 
