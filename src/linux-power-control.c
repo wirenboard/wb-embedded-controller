@@ -239,7 +239,7 @@ void linux_pwr_do_periodic_work(void)
             // Если 3.3В появилось, то считаем что питание включено
             new_state(PS_ON_COMPLETE);
         }
-        if (in_state_time() > 500) {
+        if (in_state_time() > 1000) {
             // Если 3.3В не появилось, то попробуем включить PMIC через PWRON
             usart_tx_str_blocking("No voltage on 3.3V line, try to switch on PMIC throught PWRON\n");
             pmic_pwron_gpio_on();
