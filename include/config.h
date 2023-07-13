@@ -5,9 +5,9 @@
 
 // Таймаут, который устанавливается после включения питания
 // Должен быть больше, чем время загрузки Linux
-#define WDEC_WATCHDOG_INITIAL_TIMEOUT_S         120
+#define WBEC_WATCHDOG_INITIAL_TIMEOUT_S         120
 // Максимальный таймаут
-#define WDEC_WATCHDOG_MAX_TIMEOUT_S             600
+#define WBEC_WATCHDOG_MAX_TIMEOUT_S             600
 
 // ID, лежит в карте регистров как константа
 #define WBEC_ID                                 0x3CD2

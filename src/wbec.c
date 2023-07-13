@@ -358,7 +358,7 @@ void wbec_do_periodic_work(void)
             pwrkey_handle_short_press();
             pwrkey_handle_long_press();
             // Установим время WDT и запустим его
-            wdt_set_timeout(WDEC_WATCHDOG_INITIAL_TIMEOUT_S);
+            wdt_set_timeout(WBEC_WATCHDOG_INITIAL_TIMEOUT_S);
             wdt_start_reset();
             // Как только питание включилось - переходим в рабочий режим
             new_state(WBEC_STATE_WORKING);
