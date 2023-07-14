@@ -2,8 +2,7 @@
 # MODEL defines list
 #######################################
 
-MODEL_LIST = \
-MODEL_WB74
+MODEL_LIST = MODEL_WB74
 
 #######################################
 # variabes
@@ -26,4 +25,14 @@ HSE_VALUE = 8000000
 
 STACK_SIZE = 512
 
+# need to clear this or Debian builder will accumulate all the flags
+# from the previous steps (make clean, for example) and it will be full of crap
+CFLAGS=
+LDFLAGS=
+
 include libwbmcu-system/build_common.mk
+
+INSTALL_DIR=/usr/lib/wb-ec-firmware
+
+install: $(TARGET_DIR)/$(TARGET).bin
+	/usr/bin/install -Dm0644 $(TARGET_DIR)/$(TARGET).bin $(INSTALL_DIR)/firmware.bin

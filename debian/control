@@ -1,0 +1,14 @@
+Source: wb-ec-firmware
+Section: misc
+Priority: optional
+Maintainer: Wiren Board Team <info@wirenboard.com>
+Build-Depends: debhelper-compat (= 13), make, gcc-arm-none-eabi, libnewlib-arm-none-eabi, gcc
+Standards-Version: 4.5.1
+Rules-Requires-Root: no
+
+Package: wb-ec-firmware
+Architecture: all
+Multi-Arch: foreign
+Depends: ${misc:Depends}, ${shlibs:Depends}, stm32flash, gpiod
+Description: Wiren Board Embedded Controller firmware and installer
+ This package contains firmware for Wiren Board Embedded Controller.
