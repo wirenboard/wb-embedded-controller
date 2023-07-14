@@ -27,7 +27,8 @@ STACK_SIZE = 512
 
 # need to clear this or Debian builder will accumulate all the flags
 # from the previous steps (make clean, for example) and it will be full of crap
-LDFLAGS=-fno-stack-protector
+CFLAGS=
+LDFLAGS=
 
 include libwbmcu-system/build_common.mk
 
