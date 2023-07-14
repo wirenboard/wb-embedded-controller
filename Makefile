@@ -24,7 +24,10 @@ CPU = STM32G030
 HSE_VALUE = 8000000
 
 STACK_SIZE = 512
-LDFLAGS=
+
+# need to clear this or Debian builder will accumulate all the flags
+# from the previous steps (make clean, for example) and it will be full of crap
+LDFLAGS=-fno-stack-protector
 
 include libwbmcu-system/build_common.mk
 
