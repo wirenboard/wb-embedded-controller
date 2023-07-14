@@ -1,0 +1,2 @@
+build/WB74/WB74.bin /usr/lib/wb-ec-firmware
+tools/wb-ec-firmware-update /usr/bin
