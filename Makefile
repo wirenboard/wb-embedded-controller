@@ -2,8 +2,7 @@
 # MODEL defines list
 #######################################
 
-MODEL_LIST = \
-MODEL_WB74
+MODEL_LIST = MODEL_WB74
 
 #######################################
 # variabes
