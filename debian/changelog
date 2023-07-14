@@ -1,0 +1,5 @@
+wb-ec-firmware (1.0.0-rc4) stable; urgency=low
+
+  * Initial release.
+
+ -- Nikita Maslov <nikita.maslov@wirenboard.ru>  Fri, 14 Jul 2023 17:44:53 +0600
