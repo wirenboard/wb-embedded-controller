@@ -24,6 +24,7 @@ CPU = STM32G030
 HSE_VALUE = 8000000
 
 STACK_SIZE = 512
+LDFLAGS=
 
 include libwbmcu-system/build_common.mk
 
