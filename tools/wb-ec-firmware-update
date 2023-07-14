@@ -1,6 +1,6 @@
 #!/bin/bash
 
-FIRMWARE=$1
+FIRMWARE=${1:-/usr/lib/wb-ec-firmware/WB74.bin}
 
 GPIO_RESET="EC RESET"
 GPIO_BOOT0="EC SWCLK/BOOT0"
