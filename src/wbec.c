@@ -292,6 +292,7 @@ void wbec_do_periodic_work(void)
                 // В ином случае перехватываем питание (выключаем)
                 // И отправляем информацию в уарт
                 linux_pwr_init(0);
+                usart_tx_str_blocking(WBEC_DEBUG_MSG_PREFIX "Starting up...\r\n");
                 new_state(WBEC_STATE_VOLTAGE_CHECK);
             }
             // Заполним стуктуру INFO данными
@@ -332,10 +333,10 @@ void wbec_do_periodic_work(void)
         // TODO Display voltages and temp
 
         if (adc.temp < WBEC_MINIMUM_WORKING_TEMPERATURE_C_X100) {
-            usart_tx_str_blocking(WBEC_DEBUG_MSG_PREFIX "WARNING: Temperature is too low!\r\n");
+            usart_tx_str_blocking(WBEC_DEBUG_MSG_PREFIX "WARNING: Board temperature is too low!\r\n");
             new_state(WBEC_STATE_TEMP_CHECK_LOOP);
         } else {
-            usart_tx_str_blocking(WBEC_DEBUG_MSG_PREFIX "Now the main processor will be powered on. All next debug messages are from processor.\r\n\n\n");
+            usart_tx_str_blocking(WBEC_DEBUG_MSG_PREFIX "Turning on the main CPU; all future debug messages will originate from the CPU.\r\n\n\n");
             // После отправки данных включаем линукс
             linux_pwr_on();
             new_state(WBEC_STATE_WAIT_POWER_ON);
@@ -348,11 +349,11 @@ void wbec_do_periodic_work(void)
         // Сидим тут до тех пор, пока температура не станет выше -40
         if (in_state_time() > 5000) {
             if (adc.temp < WBEC_MINIMUM_WORKING_TEMPERATURE_C_X100) {
-                usart_tx_str_blocking(WBEC_DEBUG_MSG_PREFIX "Temperature is still too low! Check again after 5 second\r\n");
+                usart_tx_str_blocking(WBEC_DEBUG_MSG_PREFIX "Board temperature is below -40°C! Rechecking in 5 seconds\r\n");
                 new_state(WBEC_STATE_TEMP_CHECK_LOOP);
             } else {
                 usart_tx_str_blocking(WBEC_DEBUG_MSG_PREFIX "Temperature is OK!\r\n");
-                usart_tx_str_blocking(WBEC_DEBUG_MSG_PREFIX "Now the main processor will be powered on. All next debug messages are from processor.\r\n\n\n");
+                usart_tx_str_blocking(WBEC_DEBUG_MSG_PREFIX "Turning on the main CPU; all future debug messages will originate from the CPU\r\n\n\n");
                 linux_pwr_on();
                 new_state(WBEC_STATE_WAIT_POWER_ON);
             }
@@ -415,7 +416,8 @@ void wbec_do_periodic_work(void)
                 // чтобы просыпаться и следить за появлением входного напряжения
                 if (wbmz) {
                     wbec_ctx.powered_from_wbmz = true;
-                }
+                
+                usart_tx_str_blocking(WBEC_DEBUG_MSG_PREFIX "Powering off\r\n");}
                 linux_pwr_off();
                 new_state(WBEC_STATE_WAIT_POWER_OFF);
             } else {
@@ -428,7 +430,7 @@ void wbec_do_periodic_work(void)
             // Если запрос на перезагрузку - перезагружается
             wbec_info.poweron_reason = REASON_REBOOT;
             usart_tx_str_blocking("\r\n\n");
-            usart_tx_str_blocking(WBEC_DEBUG_MSG_PREFIX "Reboot request, reset power.\r\n\n");
+            usart_tx_str_blocking(WBEC_DEBUG_MSG_PREFIX "Reboot request, reset power.\r\n");
             linux_pwr_reset();
             new_state(WBEC_STATE_WAIT_POWER_ON);
         } else if (linux_powerctrl_req == LINUX_POWERCTRL_PMIC_RESET) {
@@ -443,7 +445,7 @@ void wbec_do_periodic_work(void)
         if (wdt_handle_timed_out()) {
             wbec_info.poweron_reason = REASON_WATCHDOG;
             usart_tx_str_blocking("\r\n\n");
-            usart_tx_str_blocking(WBEC_DEBUG_MSG_PREFIX "Watchdog is timed out, reset power.\r\n\n");
+            usart_tx_str_blocking(WBEC_DEBUG_MSG_PREFIX "Watchdog is timed out, reset power.\r\n");
             linux_pwr_reset();
             new_state(WBEC_STATE_WAIT_POWER_ON);
         }
@@ -481,7 +483,7 @@ void wbec_do_periodic_work(void)
         } else if (in_state_time() >= WBEC_LINUX_POWER_OFF_DELAY_MS) {
             // Аварийное выключение (можно как-то дополнительно обработать)
             usart_tx_str_blocking("\r\n\n");
-            usart_tx_str_blocking(WBEC_DEBUG_MSG_PREFIX "No power off request from Linux after power key pressed. Power is forced off.\r\n\n");
+            usart_tx_str_blocking(WBEC_DEBUG_MSG_PREFIX "No power off request from Linux after power key pressed. Power is forced off.\r\n");
             linux_pwr_off();
             new_state(WBEC_STATE_WAIT_POWER_OFF);
         }
