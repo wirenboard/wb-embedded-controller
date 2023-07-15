@@ -341,6 +341,9 @@ void wbec_do_periodic_work(void)
         console_print(get_poweron_reason_string(wbec_info.poweron_reason));
         console_print("\r\n");
 
+        console_print_w_prefix("RTC time: ");
+        console_print_time_now();
+        console_print("\r\n");
 
         // TODO Display voltages and temp
 
