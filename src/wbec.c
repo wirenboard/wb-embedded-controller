@@ -412,12 +412,24 @@ void wbec_do_periodic_work(void)
             console_print_w_prefix("Power off request from Linux.\r\n");
             bool wbmz = linux_pwr_is_powered_from_wbmz();
             bool alarm = rtc_alarm_is_alarm_enabled();
-            usart_tx_str_blocking(WBEC_DEBUG_MSG_PREFIX "Alarm status: ");
+
             if (alarm) {
-                usart_tx_str_blocking("set\r\n");
+                console_print_w_prefix("Time now: ");
+                console_print_time_now();
+                console_print("\r\n");
+                console_print_w_prefix("Alarm set to ");
+                struct rtc_alarm rtc_alarm;
+                rtc_get_alarm(&rtc_alarm);
+                console_print_dec_pad(BCD_TO_BIN(rtc_alarm.hours), 2, '0');
+                console_print(":");
+                console_print_dec_pad(BCD_TO_BIN(rtc_alarm.minutes), 2, '0');
+                console_print(":");
+                console_print_dec_pad(BCD_TO_BIN(rtc_alarm.seconds), 2, '0');
+                console_print("\r\n");
             } else {
-                usart_tx_str_blocking("not set\r\n");
+                console_print_w_prefix("Alarm: not set\r\n");
             }
+
             console_print_w_prefix("Power status: ");
             if (wbmz) {
                 console_print("powered from WBMZ\r\n");
