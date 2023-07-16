@@ -314,7 +314,7 @@ void wbec_do_periodic_work(void)
             if (!vmon_get_ch_status(VMON_CHANNEL_V_IN)) {
                 if (in_state_time() < WBEC_LINUX_POWER_ON_DELAY_FROM_USB) {
                     static unsigned counter = 0;
-                    console_print_w_prefix("Waiting for 5s so host recognizes USB console ");
+                    console_print_w_prefix("Pausing for 5 seconds to allow PC to detect USB console ");
                     console_print_spinner(counter++);
                     // fill with spaces to clear possible leftover noise
                     for (unsigned i=0; i<30; ++i) {
