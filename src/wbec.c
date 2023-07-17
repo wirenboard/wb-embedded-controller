@@ -325,7 +325,7 @@ void wbec_do_periodic_work(void)
                         console_print_w_prefix("Pausing for 5 seconds to allow PC to detect USB console ");
                         console_print_spinner(counter++);
                         // fill with spaces to clear possible leftover noise
-                        for (unsigned i=0; i<30; ++i) {
+                        for (unsigned int i = 0; i < 30; ++i) {
                             console_print(" ");
                         }
                     }
