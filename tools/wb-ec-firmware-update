@@ -2,6 +2,18 @@
 
 FIRMWARE=${1:-/usr/lib/wb-ec-firmware/WB74.bin}
 
+if [ "$1" = "--help" ]; then
+    echo "Wiren Board Embedded Controller firmware update tool"
+    echo
+    echo "ATTENTION!"
+    echo "This tool will update firmware on WB-EC."
+    echo "Update process is dangerous and can brick your device!"
+    echo "Ensure that you have power backup and you know what you are doing!"
+    echo
+    echo "Usage: $0"
+    exit 0
+fi
+
 GPIO_RESET="EC RESET"
 GPIO_BOOT0="EC SWCLK/BOOT0"
 
