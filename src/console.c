@@ -8,10 +8,16 @@ void console_print(const char str[])
     usart_tx_str_blocking(str);
 }
 
-void console_print_dec_pad(unsigned int val, unsigned int padding, char padding_char)
+void console_print_dec_pad(int val, unsigned int padding, char padding_char)
 {
     char buf[10];
     char *p = buf + sizeof(buf) - 1;
+
+    if (val < 0) {
+        console_print("-");
+        val = -val;
+    }
+
     *p = '\0';
     do {
         *--p = '0' + val % 10;
@@ -21,6 +27,27 @@ void console_print_dec_pad(unsigned int val, unsigned int padding, char padding_
         *--p = padding_char;
     }
     console_print(p);
+}
+
+void console_print_dec(int val)
+{
+    console_print_dec_pad(val, 0, '\0');
+}
+
+void console_print_fixed_point(int val, unsigned int fractional_digits)
+{
+    int denominator = 1;
+    for (unsigned int i = 0; i < fractional_digits; i++) {
+        denominator *= 10;
+    }
+    if (val < 0) {
+        console_print("-");
+        val = -val;
+    }
+
+    console_print_dec(val / denominator);
+    console_print(".");
+    console_print_dec_pad(val % denominator, fractional_digits, '0');
 }
 
 void console_print_time_now(void)
