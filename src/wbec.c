@@ -293,6 +293,8 @@ void wbec_do_periodic_work(void)
                 // В ином случае перехватываем питание (выключаем)
                 // И отправляем информацию в уарт
                 linux_pwr_init(0);
+
+                console_print("\r\n\r\n"); // Это может быть первым сообщением сессии, отделим его от предыдущего вывода
                 console_print_w_prefix("Starting up...\r\n");
                 new_state(WBEC_STATE_VOLTAGE_CHECK);
             }
@@ -521,4 +523,3 @@ void wbec_do_periodic_work(void)
         break;
     }
 }
-
