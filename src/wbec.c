@@ -19,7 +19,7 @@
 #include "console.h"
 
 #define LINUX_POWERON_REASON(m) \
-    m(REASON_POWER_ON,        "Wiren Board supply on"        ) \
+    m(REASON_POWER_ON,        "Power supply on"        ) \
     m(REASON_POWER_KEY,       "Power button"                 ) \
     m(REASON_RTC_ALARM,       "RTC alarm"                    ) \
     m(REASON_REBOOT,          "Reboot"                       ) \
