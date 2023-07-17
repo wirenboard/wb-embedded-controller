@@ -352,7 +352,13 @@ void wbec_do_periodic_work(void)
         console_print_time_now();
         console_print("\r\n");
 
-        // TODO Display voltages and temp
+        console_print_w_prefix("Board temperature: ");
+        console_print_fixed_point(adc.temp / 10, 1);
+        console_print("ºC\r\n");
+
+        console_print_w_prefix("Vin: ");
+        console_print_fixed_point(adc.v_in / 100, 1);
+        console_print("V\r\n");
 
         if (adc.temp < WBEC_MINIMUM_WORKING_TEMPERATURE_C_X100) {
             console_print_w_prefix("WARNING: Board temperature is too low!\r\n");
