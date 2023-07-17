@@ -310,26 +310,31 @@ void wbec_do_periodic_work(void)
         // В этом состоянии линукс всё ещё выключен
         // Тут нужно проверить напряжения и температуру (в будущем)
 
+        // Блокирующая отправка здесь - не страшно,
+        // т.к. устройство в этом состоянии больше ничего не делает
+
         // Если включились по USB (в общем случае - не по Vin) - нужно
         // подождать несколько секунд, чтобы не пропадали первые дебаг-сообщения
         if (wbec_info.poweron_reason == REASON_POWER_ON) {
             if (!vmon_get_ch_status(VMON_CHANNEL_V_IN)) {
                 if (in_state_time() < WBEC_LINUX_POWER_ON_DELAY_FROM_USB) {
                     static unsigned counter = 0;
-                    console_print_w_prefix("Pausing for 5 seconds to allow PC to detect USB console ");
-                    console_print_spinner(counter++);
-                    // fill with spaces to clear possible leftover noise
-                    for (unsigned i=0; i<30; ++i) {
-                        console_print(" ");
+                    if ((counter++) % 17 == 0) {
+                        console_print("\e[?25l"); // hide cursor
+                        console_print("\r");
+                        console_print_w_prefix("Pausing for 5 seconds to allow PC to detect USB console ");
+                        console_print_spinner(counter++);
+                        // fill with spaces to clear possible leftover noise
+                        for (unsigned i=0; i<30; ++i) {
+                            console_print(" ");
+                        }
                     }
-                    console_print("\r");
                     break;
                 }
             }
         }
 
-        // Блокирующая отправка здесь - не страшно,
-        // т.к. устройство в этом состоянии больше ничего не делает
+        console_print("\e[?25h"); // show cursor
         console_print("\r\n\n");
         console_print_w_prefix("Wiren Board Embedded Controller\r\n");
         console_print_w_prefix("Firmware version: ");
