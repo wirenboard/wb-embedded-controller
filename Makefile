@@ -30,4 +30,7 @@ STACK_SIZE = 512
 CFLAGS=
 LDFLAGS=
 
+# Use debian/changelog to get version
+VERSION_STRING = $(shell cat debian/changelog | head -n 1 | cut -d' ' -f2 | sed 's/.*[(]\(.*\)[)].*/\1/' | cut -d'~' -f1)
+
 include libwbmcu-system/build_common.mk
