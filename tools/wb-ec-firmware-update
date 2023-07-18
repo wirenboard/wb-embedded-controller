@@ -34,13 +34,6 @@ DT_OVERLAY="
         };
     };
 
-    fragment-vin-disable {
-        target = <&vin>;
-        __overlay__ {
-            status = \"disabled\";
-        };
-    };
-
     fragment-spi-disable {
         target = <&spi2>;
         __overlay__ {
