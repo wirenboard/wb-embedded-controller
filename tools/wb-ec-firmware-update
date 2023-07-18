@@ -107,6 +107,13 @@ mkdir $DT_OVERLAY_DIR
 echo "$DT_OVERLAY" | dtc -Idts -Odtb > $DT_OVERLAY_DIR/dtbo
 sleep 1.0
 
+# Check that overlay is applied by status property
+if ! grep -q applied $DT_OVERLAY_DIR/status; then
+    echo "Can't apply overlay"
+    remove_overlay_and_start_drivers
+    exit -1
+fi
+
 # Find i2c bus with name i2c_wbec
 I2C_BUS=/dev/$(i2cdetect -l | grep i2c_wbec | cut -f 1 -d$'\t') || {
     echo "I2C bus not found"
