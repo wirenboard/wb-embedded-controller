@@ -105,7 +105,7 @@ systemctl stop watchdog
 rmdir $DT_OVERLAY_DIR 2> /dev/null
 mkdir $DT_OVERLAY_DIR
 echo "$DT_OVERLAY" | dtc -Idts -Odtb > $DT_OVERLAY_DIR/dtbo
-sleep 0.5
+sleep 1.0
 
 # Find i2c bus with name i2c_wbec
 I2C_BUS=/dev/$(i2cdetect -l | grep i2c_wbec | cut -f 1 -d$'\t') || {
