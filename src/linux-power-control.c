@@ -8,6 +8,7 @@
 #include "mcu-pwr.h"
 #include "adc.h"
 #include "system-led.h"
+#include "console.h"
 
 static const gpio_pin_t gpio_linux_power = { EC_GPIO_LINUX_POWER };
 static const gpio_pin_t gpio_pmic_pwron = { EC_GPIO_LINUX_PMIC_PWRON };
@@ -221,7 +222,7 @@ void linux_pwr_do_periodic_work(void)
     // или Vin < 9V или выдернули USB (WBMZ при этом не был включен)
     // В общем случае - не важно почему +5В пропало. Нужно перейти в спящий режим
     if (!vmon_get_ch_status(VMON_CHANNEL_V50)) {
-        usart_tx_str_blocking(WBEC_DEBUG_MSG_PREFIX "No 5V, power off and go to standby now\r\n");
+        console_print_w_prefix("No 5V, power off and go to standby now\r\n");
         mcu_save_vcc_5v_last_state(MCU_VCC_5V_STATE_OFF);
         mcu_goto_standby(WBEC_PERIODIC_WAKEUP_FIRST_TIMEOUT_S);
     }
@@ -238,7 +239,7 @@ void linux_pwr_do_periodic_work(void)
             // Если питание 3.3В пропало - это означает что PMIC выключился по каким-то причинам
             // Нужно попробовать перезапустить всё по питанию
             linux_pwr_gpio_off();
-            usart_tx_str_blocking(WBEC_DEBUG_MSG_PREFIX "3.3V is lost, try to reset power\r\n");
+            console_print_w_prefix("3.3V is lost, try to reset power\r\n");
             new_state(PS_RESET_5V_WAIT);
         }
         break;
@@ -251,7 +252,7 @@ void linux_pwr_do_periodic_work(void)
         }
         if (in_state_time() > 1000) {
             // Если 3.3В не появилось, то попробуем включить PMIC через PWRON
-            usart_tx_str_blocking(WBEC_DEBUG_MSG_PREFIX "No voltage on 3.3V line, try to switch on PMIC throught PWRON\r\n");
+            console_print_w_prefix("No voltage on 3.3V line, try to switch on PMIC throught PWRON\r\n");
             pmic_pwron_gpio_on();
             pwr_ctx.attempt = 0;
             new_state(PS_ON_STEP2_PMIC_PWRON);
@@ -276,7 +277,7 @@ void linux_pwr_do_periodic_work(void)
                 new_state(PS_ON_STEP3_PMIC_PWRON_WAIT);
             } else {
                 // Если попытки кончились - сбрасываем 5В и начинаем заново
-                usart_tx_str_blocking(WBEC_DEBUG_MSG_PREFIX "Still no voltage on 3.3V line, reset 5V line and try to switch on again\r\n");
+                console_print_w_prefix("Still no voltage on 3.3V line, reset 5V line and try to switch on again\r\n");
                 linux_pwr_gpio_off();
                 new_state(PS_RESET_5V_WAIT);
             }
@@ -286,7 +287,7 @@ void linux_pwr_do_periodic_work(void)
     // Третий шаг включения - отпускаем PWRON, ждём, пробуем ещё раз
     case PS_ON_STEP3_PMIC_PWRON_WAIT:
         if (in_state_time() > 500) {
-            usart_tx_str_blocking(WBEC_DEBUG_MSG_PREFIX "One more attempt to switch on PMIC throught PWRON\r\n");
+            console_print_w_prefix("One more attempt to switch on PMIC throught PWRON\r\n");
             pmic_pwron_gpio_on();
             new_state(PS_ON_STEP2_PMIC_PWRON);
         }
@@ -303,7 +304,7 @@ void linux_pwr_do_periodic_work(void)
     // Сброс PMIC через RESET самого PMIC
     case PS_RESET_PMIC_WAIT:
         if ((!vmon_get_ch_status(VMON_CHANNEL_V33)) || (in_state_time() > 2000)) {
-            usart_tx_str_blocking(WBEC_DEBUG_MSG_PREFIX "PMIC was reset throught RESET line\r\n");
+            console_print_w_prefix("PMIC was reset throught RESET line\r\n");
             pmic_reset_gpio_off();
             pmic_pwron_gpio_off();
             new_state(PS_ON_STEP1_WAIT_3V3);
@@ -317,7 +318,7 @@ void linux_pwr_do_periodic_work(void)
         // выключаем 5В
         // И переходим либо в выключенное состояние
         if (!vmon_get_ch_status(VMON_CHANNEL_V33)) {
-            usart_tx_str_blocking(WBEC_DEBUG_MSG_PREFIX "PMIC switched off throught PWRON, disabling 5V line now\r\n");
+            console_print_w_prefix("PMIC switched off throught PWRON, disabling 5V line now\r\n");
             pmic_pwron_gpio_off();
             linux_pwr_gpio_off();
             if (pwr_ctx.reset_flag) {
@@ -326,7 +327,7 @@ void linux_pwr_do_periodic_work(void)
                 new_state(PS_OFF_COMPLETE);
             }
         } else if (in_state_time() > 8000) {
-            usart_tx_str_blocking(WBEC_DEBUG_MSG_PREFIX "Warning: PMIC not switched off throught PWRON after 8s, disabling 5V line now\r\n");
+            console_print_w_prefix("Warning: PMIC not switched off throught PWRON after 8s, disabling 5V line now\r\n");
             pmic_pwron_gpio_off();
             linux_pwr_gpio_off();
             if (pwr_ctx.reset_flag) {
@@ -348,8 +349,8 @@ void linux_pwr_do_periodic_work(void)
             pmic_reset_gpio_off();
             linux_pwr_gpio_off();
             new_state(PS_OFF_COMPLETE);
-            usart_tx_str_blocking("\r\n\n");
-            usart_tx_str_blocking(WBEC_DEBUG_MSG_PREFIX "Power off after power key long press detected.\r\n\n");
+            console_print("\r\n\n");
+            console_print_w_prefix("Power off after power key long press detected.\r\n\n");
             system_led_disable();
             // Ждём отпускания кнопки
             while (pwrkey_pressed()) {
