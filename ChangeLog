@@ -1,3 +1,8 @@
+2023-07-18  Pavel Gasheev <pavel.gasheev@wirenboard.ru>
+
+    * version:  1.0.0-rc6
+    * changed:  WBMZ working status is now in separate register PWR_STATUS
+
 2023-07-15  Evgeny Boger <boger@wirenboard.com>
 
     * version:  1.0.0-rc5

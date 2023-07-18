@@ -54,7 +54,6 @@
         /* -//- */  uint16_t a3 : 1; \
         /* -//- */  uint16_t a4 : 1; \
         /* -//- */  uint16_t v_out : 1; \
-        /* -//- */  uint16_t status_bat : 1; \
     ) \
     /*     Addr     Name            RO/RW */ \
     m(     0x90,    WDT,            RW, \
@@ -78,6 +77,10 @@
     /*     Addr     Name            RO/RW */ \
     m(     0xB4,    IRQ_CLEAR,      RW, \
         /* 0xB4 */  uint16_t irqs; \
+    ) \
+    /*     Addr     Name            RO/RW */ \
+    m(     0xC0,    PWR_STATUS,     RO, \
+        /* 0xC0 */  uint16_t powered_from_wbmz : 1; \
     ) \
 
 // Общее число регистров в адресном пространстве

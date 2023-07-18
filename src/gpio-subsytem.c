@@ -43,9 +43,6 @@ void gpio_do_periodic_work(void)
     gpio_ctx.a3 = 0;
     gpio_ctx.a4 = 0;
 
-    gpio_ctx.status_bat = linux_pwr_is_powered_from_wbmz();
-
-    // TODO Check UVLO/OVP
     set_v_out_state(gpio_ctx.v_out && vmon_get_ch_status(VMON_CHANNEL_V_OUT));
 
     regmap_set_region_data(REGMAP_REGION_GPIO, &gpio_ctx, sizeof(gpio_ctx));

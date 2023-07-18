@@ -9,6 +9,7 @@
 #include "adc.h"
 #include "system-led.h"
 #include "console.h"
+#include "regmap-int.h"
 
 static const gpio_pin_t gpio_linux_power = { EC_GPIO_LINUX_POWER };
 static const gpio_pin_t gpio_pmic_pwron = { EC_GPIO_LINUX_PMIC_PWRON };
@@ -63,6 +64,14 @@ static inline void new_state(enum pwr_state s)
 static inline systime_t in_state_time(void)
 {
     return systick_get_time_since_timestamp(pwr_ctx.timestamp);
+}
+
+static void put_power_status_to_regmap(void)
+{
+    struct REGMAP_PWR_STATUS p = {};
+    p.powered_from_wbmz = linux_pwr_is_powered_from_wbmz();
+
+    regmap_set_region_data(REGMAP_REGION_PWR_STATUS, &p, sizeof(p));
 }
 
 /**
@@ -200,6 +209,8 @@ void linux_pwr_do_periodic_work(void)
     if (!vmon_ready() || !pwr_ctx.initialized) {
         return;
     }
+
+    put_power_status_to_regmap();
 
     if (pwrkey_handle_long_press()) {
         pmic_pwron_gpio_on();
