@@ -69,6 +69,13 @@ remove_overlay_and_start_drivers() {
     systemctl restart watchdog
 }
 
+# Check that this is WB7.4 by reading compatible property from device tree
+if ! grep -q wirenboard,wirenboard-74x /proc/device-tree/compatible; then
+    echo "This is not WB7.4"
+    exit -1
+fi
+
+
 # Check firmware file exists
 if [ ! -f "$FIRMWARE" ]; then
     echo "Firmware file not found"
