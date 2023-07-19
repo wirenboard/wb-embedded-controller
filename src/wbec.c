@@ -460,8 +460,8 @@ void wbec_do_periodic_work(void)
                 // чтобы просыпаться и следить за появлением входного напряжения
                 if (wbmz) {
                     wbec_ctx.powered_from_wbmz = true;
-                
-                console_print_w_prefix("Powering off\r\n");}
+                }
+                console_print_w_prefix("Powering off\r\n");
                 linux_pwr_off();
                 new_state(WBEC_STATE_WAIT_POWER_OFF);
             } else {
