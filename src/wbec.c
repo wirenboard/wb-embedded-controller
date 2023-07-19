@@ -25,6 +25,7 @@
     m(REASON_REBOOT,          "Reboot"                       ) \
     m(REASON_REBOOT_NO_ALARM, "Reboot instead of poweroff"   ) \
     m(REASON_WATCHDOG,        "Watchdog"                     ) \
+    m(REASON_PMIC_OFF,        "PMIC is unexpectedly off"     ) \
     m(REASON_UNKNOWN,         "Unknown"                      ) \
 
 #define __LINUX_POWERON_REASON_NAME(name, string)           name,
@@ -64,6 +65,8 @@ struct wbec_ctx {
     enum wbec_state state;
     systime_t timestamp;
     bool powered_from_wbmz;
+    unsigned power_loss_cnt;
+    systime_t power_loss_timestamp;
 };
 
 static struct REGMAP_INFO wbec_info = {
@@ -267,6 +270,7 @@ void wbec_do_periodic_work(void)
     struct REGMAP_ADC_DATA adc;
     collect_adc_data(&adc);
     regmap_set_region_data(REGMAP_REGION_ADC_DATA, &adc, sizeof(adc));
+    regmap_set_region_data(REGMAP_REGION_INFO, &wbec_info, sizeof(wbec_info));
 
     enum linux_powerctrl_req linux_powerctrl_req = get_linux_powerctrl_req();
 
@@ -301,6 +305,9 @@ void wbec_do_periodic_work(void)
             // Заполним стуктуру INFO данными
             wbec_info.board_rev = fix16_to_int(adc_get_ch_adc_raw(ADC_CHANNEL_ADC_HW_VER));
             regmap_set_region_data(REGMAP_REGION_INFO, &wbec_info, sizeof(wbec_info));
+            // Сбросим счётчик потерь питания
+            wbec_ctx.power_loss_cnt = 0;
+            wbec_ctx.power_loss_timestamp = systick_get_system_time_ms();
         }
         break;
 
@@ -459,8 +466,8 @@ void wbec_do_periodic_work(void)
                 // чтобы просыпаться и следить за появлением входного напряжения
                 if (wbmz) {
                     wbec_ctx.powered_from_wbmz = true;
-                
-                console_print_w_prefix("Powering off\r\n");}
+                }
+                console_print_w_prefix("Powering off\r\n");
                 linux_pwr_off();
                 new_state(WBEC_STATE_WAIT_POWER_OFF);
             } else {
@@ -491,6 +498,28 @@ void wbec_do_periodic_work(void)
             console_print_w_prefix("Watchdog is timed out, reset power.\r\n");
             linux_pwr_reset();
             new_state(WBEC_STATE_WAIT_POWER_ON);
+        }
+
+        // Если пропало 3.3В - пробуем перезапустить питание, но не более N раз за M минут
+        // Если питание пропадает слишком часто - выключаемся
+        if (!vmon_get_ch_status(VMON_CHANNEL_V33)) {
+            if (systick_get_time_since_timestamp(wbec_ctx.power_loss_timestamp) < (WBEC_POWER_LOSS_TIMEOUT_MIN * 60 * 1000)) {
+                wbec_ctx.power_loss_cnt++;
+            } else {
+                wbec_ctx.power_loss_cnt = 0;
+            }
+            wbec_ctx.power_loss_timestamp = systick_get_system_time_ms();
+            if (wbec_ctx.power_loss_cnt > WBEC_POWER_LOSS_ATTEMPTS) {
+                console_print_w_prefix("Reaching power loss limit, power off and go to standby now\r\n");
+                // Чтобы включиться - нужно нажать кнопку или сбросить внешнее питание
+                mcu_save_vcc_5v_last_state(MCU_VCC_5V_STATE_ON);
+                mcu_goto_standby(WBEC_PERIODIC_WAKEUP_FIRST_TIMEOUT_S);
+            } else {
+                console_print_w_prefix("3.3V is lost, try to reset power\r\n");
+                wbec_info.poweron_reason = REASON_PMIC_OFF;
+                linux_pwr_hard_reset();
+                new_state(WBEC_STATE_WAIT_POWER_ON);
+            }
         }
 
         break;

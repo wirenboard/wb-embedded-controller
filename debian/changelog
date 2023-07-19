@@ -1,3 +1,34 @@
+wb-ec-firmware (1.0.0-rc8) stable; urgency=medium
+
+  * Add "WBMZ enabled" bit in POWER_STATUS register
+
+ -- Pavel Gasheev <pavel.gasheev@wirenboard.ru>  Tue, 25 Jul 2023 15:55:51 +0300
+
+wb-ec-firmware (1.0.0-rc7) stable; urgency=low
+
+  * FW version regs in regmap
+  * Disable lowpass filter on A1-A4 channels
+  * Go to standby if 3.3V is lost 2 times in a 10 minutes
+  * 400 mV diode drop voltage on Vin
+
+ -- Pavel Gasheev <pavel.gasheev@wirenboard.ru>  Wed, 19 Jul 2023 08:27:15 +0300
+
+wb-ec-firmware (1.0.0-rc6) stable; urgency=low
+
+  * WBMZ working status is now in separate register PWR_STATUS
+
+ -- Pavel Gasheev <pavel.gasheev@wirenboard.ru>  Tue, 18 Jul 2023 18:23:11 +0300
+
+wb-ec-firmware (1.0.0-rc5) stable; urgency=low
+
+  * Add message on power up by key press from powered off state
+  * Report current RTC date and time on boot
+  * Report RTC current and alarm date and time when going to powered off state
+  * Change EC messages prefix
+  * Don't wait for 5s when woken up by anything else than USB cable insertion
+
+ -- Evgeny Boger <boger@wirenboard.com>  Sat, 15 Jul 2023 22:09:19 +0300
+
 wb-ec-firmware (1.0.0-rc1) stable; urgency=low
 
   * Initial release.
