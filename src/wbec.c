@@ -267,6 +267,7 @@ void wbec_do_periodic_work(void)
     struct REGMAP_ADC_DATA adc;
     collect_adc_data(&adc);
     regmap_set_region_data(REGMAP_REGION_ADC_DATA, &adc, sizeof(adc));
+    regmap_set_region_data(REGMAP_REGION_INFO, &wbec_info, sizeof(wbec_info));
 
     enum linux_powerctrl_req linux_powerctrl_req = get_linux_powerctrl_req();
 
