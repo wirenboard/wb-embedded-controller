@@ -6,11 +6,11 @@
     m(     0x00,    INFO,           RO, \
         /* 0x00 */  uint16_t wbec_id; \
         /* 0x01 */  uint16_t board_rev; \
-        /* 0x02 */  uint16_t fw_ver_major : 8; \
-        /* -//- */  uint16_t fw_ver_minor : 8; \
-        /* 0x03 */  uint16_t fw_ver_patch : 8; \
-        /* -//- */  int16_t fw_ver_suffix : 8; \
-        /* 0x04 */  uint16_t poweron_reason; \
+        /* 0x02 */  uint16_t fw_ver_major; \
+        /* 0x03 */  uint16_t fw_ver_minor; \
+        /* 0x04 */  uint16_t fw_ver_patch; \
+        /* 0x05 */  int16_t fw_ver_suffix; \
+        /* 0x06 */  uint16_t poweron_reason; \
     ) \
     /*     Addr     Name            RO/RW */ \
     m(     0x10,    RTC_TIME,       RW, \
