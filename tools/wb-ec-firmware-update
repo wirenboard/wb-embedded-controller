@@ -1,4 +1,6 @@
 #!/bin/bash
+. /usr/lib/wb-utils/wb_env.sh
+wb_source "of"
 
 DEFAULT_FIRMWARE=$(ls /usr/lib/wb-ec-firmware/*.bin | head -1)
 
@@ -71,8 +73,8 @@ remove_overlay_and_start_drivers() {
 }
 
 # Check that this is WB7.4 by reading compatible property from device tree
-if ! grep -q wirenboard,wirenboard-74x /proc/device-tree/compatible; then
-    echo "This is not WB7.4"
+if ! of_machine_match "wirenboard,wirenboard-74x"; then
+    echo "This Wiren Board has no EC, exiting"
     exit -1
 fi
 
