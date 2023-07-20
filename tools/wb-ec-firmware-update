@@ -1,6 +1,6 @@
 #!/bin/bash
 
-FIRMWARE=${1:-/usr/lib/wb-ec-firmware/WB74.bin}
+FIRMWARE=${1:-/usr/lib/wb-ec-firmware/*.bin}
 
 if [ "$1" = "--help" ]; then
     echo "Wiren Board Embedded Controller firmware update tool"
@@ -10,6 +10,9 @@ if [ "$1" = "--help" ]; then
     echo "Update process is dangerous and can brick your device!"
     echo "Ensure that you have power backup and you know what you are doing!"
     echo
+    echo "Firmware file to flashing: $FIRMWARE"
+    echo
+
     echo "Usage: $0"
     exit 0
 fi
