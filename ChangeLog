@@ -2,6 +2,7 @@
 
     * version:  1.0.0-rc7
     * changed:  FW version regs in regmap
+    * changed:  Disable lowpass filter on A1-A4 channels
 
 2023-07-18  Pavel Gasheev <pavel.gasheev@wirenboard.ru>
 
