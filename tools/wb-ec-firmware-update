@@ -59,6 +59,7 @@ remove_overlay_and_start_drivers() {
 
     systemctl restart wb-mqtt-gpio
     systemctl restart wb-mqtt-adc
+    systemctl restart wb-rules
     systemctl restart watchdog
 }
 
@@ -91,6 +92,7 @@ modprobe -r pwrkey-wbec
 # Stop services
 systemctl stop wb-mqtt-gpio
 systemctl stop wb-mqtt-adc
+systemctl stop wb-rules
 systemctl stop watchdog
 
 
