@@ -1,6 +1,6 @@
 #!/bin/bash
 
-FIRMWARE=${1:-/usr/lib/wb-ec-firmware/*.bin}
+DEFAULT_FIRMWARE=$(ls /usr/lib/wb-ec-firmware/*.bin | head -1)
 
 if [ "$1" = "--help" ]; then
     echo "Wiren Board Embedded Controller firmware update tool"
@@ -10,12 +10,16 @@ if [ "$1" = "--help" ]; then
     echo "Update process is dangerous and can brick your device!"
     echo "Ensure that you have power backup and you know what you are doing!"
     echo
-    echo "Firmware file to flashing: $FIRMWARE"
+    echo "Default firmware file to flashing:"
+    echo "$DEFAULT_FIRMWARE"
+    echo "You can pass another firmware file as argument"
     echo
 
     echo "Usage: $0"
     exit 0
 fi
+
+FIRMWARE=${1:-$DEFAULT_FIRMWARE}
 
 GPIO_RESET="EC RESET"
 GPIO_BOOT0="EC SWCLK/BOOT0"
@@ -72,10 +76,9 @@ if ! grep -q wirenboard,wirenboard-74x /proc/device-tree/compatible; then
     exit -1
 fi
 
-
 # Check firmware file exists
 if [ ! -f "$FIRMWARE" ]; then
-    echo "Firmware file not found"
+    echo "Firmware file $FIRMWARE not found"
     exit -1
 fi
 
@@ -88,6 +91,8 @@ GPIO_BOOT0_NUM=$(gpiofind "$GPIO_BOOT0") || {
     echo "GPIO $GPIO_BOOT0 not found"
     exit -1
 }
+
+echo "Firmware file to flashing: $FIRMWARE"
 
 # Remove pwrkey driver
 modprobe -r pwrkey-wbec
