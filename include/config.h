@@ -28,6 +28,12 @@
 // Температура, ниже которой EC не будет включаться
 #define WBEC_MINIMUM_WORKING_TEMPERATURE_C_X100 -4000
 
+// Число попыток перезапуска PMIC при пропадании 3.3В
+// Если за указанное время 3.3В пропадёт больше, чем указанное число раз,
+// то EC выключит питание и уйдёт в спящий режим
+#define WBEC_POWER_LOSS_TIMEOUT_MIN             10
+#define WBEC_POWER_LOSS_ATTEMPTS                2
+
 
 /* ====== Подключения EC к Wiren Board ====== */
 
@@ -91,7 +97,7 @@
         macro(ADC_IN2,              11,     GPIOB,  10,     0,      1,              0           ) \
         macro(ADC_IN3,              15,     GPIOB,  11,     0,      1,              0           ) \
         macro(ADC_IN4,              16,     GPIOB,  12,     0,      1,              0           ) \
-        macro(ADC_V_IN,             9,      GPIOB,  1,      10,     212.0 / 12.0,   300         ) \
+        macro(ADC_V_IN,             9,      GPIOB,  1,      10,     212.0 / 12.0,   400         ) \
         macro(ADC_5V,               8,      GPIOB,  0,      10,     22.0 / 10.0,    0           ) \
         macro(ADC_3V3,              7,      GPIOA,  7,      10,     32.0 / 22.0,    0           ) \
         macro(ADC_NTC,              6,      GPIOA,  6,      50,     1,              0           ) \
