@@ -1,0 +1,2 @@
+release/*.bin /usr/lib/wb-ec-firmware
+tools/wb-ec-firmware-update /usr/bin
