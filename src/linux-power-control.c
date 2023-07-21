@@ -86,8 +86,7 @@ static void put_power_status_to_regmap(void)
 void linux_pwr_init(bool on)
 {
     if (on) {
-        linux_pwr_gpio_on();
-        new_state(PS_ON_STEP1_WAIT_3V3);
+        linux_pwr_on();
     } else {
         linux_pwr_gpio_off();
         new_state(PS_OFF_COMPLETE);
@@ -168,6 +167,18 @@ void linux_pwr_reset()
 }
 
 /**
+ * @brief Сброс питания (выключение и через 1с включение)
+ * Через отключение 5В (без PMIC)
+ */
+void linux_pwr_hard_reset()
+{
+    linux_pwr_gpio_off();
+    pmic_pwron_gpio_off();
+    new_state(PS_RESET_5V_WAIT);
+    pwr_ctx.reset_flag = true;
+}
+
+/**
  * @brief Сброс PMIC через линию RESET.
  * В нормальной работе не используется, нужен для проверки схемотехники и монтажа.
  * Возможно как-то понадобится в последствии.
@@ -239,20 +250,9 @@ void linux_pwr_do_periodic_work(void)
     }
 
     switch (pwr_ctx.state) {
-    // Если алгоритм завершился (выключил питание) - ничего не делаем
+    // Если алгоритм завершился (выключил или включил питание) - ничего не делаем
     case PS_OFF_COMPLETE:
-        break;
-
-    // Если алгоритм завершился (выключил питание)
-    // Мониторим линию 3.3В на предмет неожиданного выключения PMIC
     case PS_ON_COMPLETE:
-        if (!vmon_get_ch_status(VMON_CHANNEL_V33)) {
-            // Если питание 3.3В пропало - это означает что PMIC выключился по каким-то причинам
-            // Нужно попробовать перезапустить всё по питанию
-            linux_pwr_gpio_off();
-            console_print_w_prefix("3.3V is lost, try to reset power\r\n");
-            new_state(PS_RESET_5V_WAIT);
-        }
         break;
 
     // Первый шаг включения питания: проверка, что 3.3В появилось, после того как подали 5В
