@@ -1,3 +1,9 @@
+wb-ec-firmware (1.0.0-rc8) stable; urgency=medium
+
+  * Add "WBMZ enabled" bit in POWER_STATUS register
+
+ -- Pavel Gasheev <pavel.gasheev@wirenboard.ru>  Tue, 25 Jul 2023 15:55:51 +0300
+
 wb-ec-firmware (1.0.0-rc7) stable; urgency=low
 
   * FW version regs in regmap
