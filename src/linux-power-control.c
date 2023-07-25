@@ -51,7 +51,6 @@ static inline void pmic_pwron_gpio_on(void)      { GPIO_S_SET(gpio_pmic_pwron); 
 static inline void pmic_pwron_gpio_off(void)     { GPIO_S_RESET(gpio_pmic_pwron); }
 static inline void pmic_reset_gpio_on(void)      { GPIO_S_SET(gpio_pmic_reset_pwrok); }
 static inline void pmic_reset_gpio_off(void)     { GPIO_S_RESET(gpio_pmic_reset_pwrok); }
-static inline void wbmz_off(void)                { GPIO_S_RESET(gpio_wbmz_on); }
 static inline void wbmz_on(void)                 { GPIO_S_SET(gpio_wbmz_on); }
 static inline bool wbmz_working(void)            { return (!GPIO_S_TEST(gpio_wbmz_status_bat)); }
 
@@ -70,6 +69,7 @@ static void put_power_status_to_regmap(void)
 {
     struct REGMAP_PWR_STATUS p = {};
     p.powered_from_wbmz = linux_pwr_is_powered_from_wbmz();
+    p.wbmz_enabled = pwr_ctx.wbmz_enabled;
 
     regmap_set_region_data(REGMAP_REGION_PWR_STATUS, &p, sizeof(p));
 }
