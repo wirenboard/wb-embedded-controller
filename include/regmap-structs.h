@@ -5,15 +5,15 @@
     /*     Addr     Name            RO/RW */ \
     m(     0x00,    INFO,           RO, \
         /* 0x00 */  uint16_t wbec_id; \
-        /* 0x01 */  uint16_t board_rev; \
+        /* 0x01 */  uint16_t hwrev; \
                     union { \
                         struct { \
-        /* 0x02 */          uint16_t fw_ver_major; \
-        /* 0x03 */          uint16_t fw_ver_minor; \
-        /* 0x04 */          uint16_t fw_ver_patch; \
-        /* 0x05 */          int16_t fw_ver_suffix; \
+        /* 0x02 */          uint16_t fwrev_major; \
+        /* 0x03 */          uint16_t fwrev_minor; \
+        /* 0x04 */          uint16_t fwrev_patch; \
+        /* 0x05 */          int16_t fwrev_suffix; \
                         }; \
-                        uint16_t fw_ver[4]; \
+                        uint16_t fwrev[4]; \
                     }; \
         /* 0x06 */  uint16_t poweron_reason; \
     ) \

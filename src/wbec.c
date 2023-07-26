@@ -71,8 +71,8 @@ struct wbec_ctx {
 
 static struct REGMAP_INFO wbec_info = {
     .wbec_id = WBEC_ID,
-    .board_rev = 0,
-    .fw_ver = { MODBUS_DEVICE_FW_VERSION_NUMBERS },
+    .hwrev = 0,
+    .fwrev = { MODBUS_DEVICE_FW_VERSION_NUMBERS },
     .poweron_reason = REASON_UNKNOWN,
 };
 
@@ -308,7 +308,7 @@ void wbec_do_periodic_work(void)
                 new_state(WBEC_STATE_VOLTAGE_CHECK);
             }
             // Заполним стуктуру INFO данными
-            wbec_info.board_rev = fix16_to_int(adc_get_ch_adc_raw(ADC_CHANNEL_ADC_HW_VER));
+            wbec_info.hwrev = fix16_to_int(adc_get_ch_adc_raw(ADC_CHANNEL_ADC_HW_VER));
             regmap_set_region_data(REGMAP_REGION_INFO, &wbec_info, sizeof(wbec_info));
             // Сбросим счётчик потерь питания
             wbec_ctx.power_loss_cnt = 0;
