@@ -115,11 +115,16 @@ static inline void collect_adc_data(struct REGMAP_ADC_DATA * adc)
     adc->v_a2 = adc_get_ch_mv(ADC_CHANNEL_ADC_IN2);
     adc->v_a3 = adc_get_ch_mv(ADC_CHANNEL_ADC_IN3);
     adc->v_a4 = adc_get_ch_mv(ADC_CHANNEL_ADC_IN4);
-    adc->v_in = adc_get_ch_mv(ADC_CHANNEL_ADC_V_IN);
     adc->v_5_0 = adc_get_ch_mv(ADC_CHANNEL_ADC_5V);
     adc->v_3_3 = adc_get_ch_mv(ADC_CHANNEL_ADC_3V3);
     adc->vbus_console = adc_get_ch_mv(ADC_CHANNEL_ADC_VBUS_DEBUG);
     adc->vbus_network = adc_get_ch_mv(ADC_CHANNEL_ADC_VBUS_NETWORK);
+
+    if (vmon_get_ch_status(VMON_CHANNEL_V_IN)) {
+        adc->v_in = adc_get_ch_mv(ADC_CHANNEL_ADC_V_IN);
+    } else {
+        adc->v_in = 0;
+    }
 
     // Calc NTC temp
     fix16_t ntc_raw = adc_get_ch_adc_raw(ADC_CHANNEL_ADC_NTC);
