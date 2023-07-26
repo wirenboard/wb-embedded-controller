@@ -111,9 +111,11 @@
 // Должно быть около 10RC канала ADC_5V
 #define VOLTAGE_MONITOR_START_DELAY_MS      100
 
+// Предел измерения V_IN - 58.3 В
+// V_OUT нужно отключать при низком V_IN (при питании от USB)
 #define VOLTAGE_MONITOR_DESC(m) \
     /*Monitor CH        ADC CH              OK min  max         FAIL min max */ \
-    m(V_IN,             ADC_V_IN,           8000,   49000,      7000,   50000 ) \
+    m(V_IN,             ADC_V_IN,           6500,   58000,      6000,   59000 ) \
     m(V_OUT,            ADC_V_IN,           6500,   28000,      6000,   29000 ) \
     m(V33,              ADC_3V3,            3200,   3400,       3100,   3500  ) \
     m(V50,              ADC_5V,             4000,   5500,       3600,   5800  ) \
