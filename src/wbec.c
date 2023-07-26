@@ -54,11 +54,10 @@ enum wbec_state {
     WBEC_STATE_WAIT_STARTUP,
     WBEC_STATE_VOLTAGE_CHECK,
     WBEC_STATE_TEMP_CHECK_LOOP,
-    WBEC_STATE_WAIT_POWER_ON,
+    WBEC_STATE_POWER_ON_SEQUENCE_WAIT,
     WBEC_STATE_WORKING,
-    WBEC_STATE_WAIT_POWER_OFF,
-
-    WBEC_STATE_WAIT_LINUX_POWER_OFF,
+    WBEC_STATE_POWER_OFF_SEQUENCE_WAIT,
+    WBEC_STATE_WAIT_LINUX_OFF_READY,
 };
 
 struct wbec_ctx {
@@ -71,8 +70,8 @@ struct wbec_ctx {
 
 static struct REGMAP_INFO wbec_info = {
     .wbec_id = WBEC_ID,
-    .board_rev = 0,
-    MODBUS_DEVICE_FW_VERSION_NUMBERS,
+    .hwrev = 0,
+    .fwrev = { MODBUS_DEVICE_FW_VERSION_NUMBERS },
     .poweron_reason = REASON_UNKNOWN,
 };
 
@@ -84,18 +83,18 @@ static void new_state(enum wbec_state s)
     wbec_ctx.timestamp = systick_get_system_time_ms();
 
     switch (wbec_ctx.state) {
-    case WBEC_STATE_WAIT_STARTUP:           system_led_blink(5,   100);     break;
-    case WBEC_STATE_VOLTAGE_CHECK:          system_led_blink(5,   100);     break;
-    case WBEC_STATE_TEMP_CHECK_LOOP:        system_led_blink(5,   100);     break;
-    case WBEC_STATE_WAIT_POWER_ON:          system_led_blink(50,  50);      break;
-    case WBEC_STATE_WORKING:                system_led_blink(500, 1000);    break;
-    case WBEC_STATE_WAIT_POWER_OFF:         system_led_blink(50,  50);      break;
-    case WBEC_STATE_WAIT_LINUX_POWER_OFF:   system_led_blink(250, 250);     break;
-    default:                                system_led_enable();            break;
+    case WBEC_STATE_WAIT_STARTUP:               system_led_blink(5,   100);     break;
+    case WBEC_STATE_VOLTAGE_CHECK:              system_led_blink(5,   100);     break;
+    case WBEC_STATE_TEMP_CHECK_LOOP:            system_led_blink(5,   100);     break;
+    case WBEC_STATE_POWER_ON_SEQUENCE_WAIT:     system_led_blink(50,  50);      break;
+    case WBEC_STATE_WORKING:                    system_led_blink(500, 1000);    break;
+    case WBEC_STATE_POWER_OFF_SEQUENCE_WAIT:    system_led_blink(50,  50);      break;
+    case WBEC_STATE_WAIT_LINUX_OFF_READY:       system_led_blink(250, 250);     break;
+    default:                                    system_led_enable();            break;
     }
 }
 
-static inline systime_t in_state_time(void)
+static inline systime_t in_state_time_ms(void)
 {
     return systick_get_time_since_timestamp(wbec_ctx.timestamp);
 }
@@ -216,7 +215,6 @@ void wbec_init(void)
         }
         if (pwrkey_pressed()) {
             wbec_info.poweron_reason = REASON_POWER_KEY;
-            new_state(WBEC_STATE_WAIT_STARTUP);
         } else {
             // Если кнопка не нажата (или нажата коротко и не прошла антидребезг) - засыпаем
             mcu_goto_standby(WBEC_PERIODIC_WAKEUP_NEXT_TIMEOUT_S);
@@ -262,7 +260,7 @@ void wbec_init(void)
         // WBMZ включится отдельным алторитмом, если Vin будет более 11.5 В
     } else {
         // Питания нет - включаем WBMZ
-        linux_pwr_enable_wbmz();
+        linux_cpu_pwr_seq_enable_wbmz();
     }
 
     // Если дошли до этого места, надо включиться в обычном режиме
@@ -281,7 +279,7 @@ void wbec_do_periodic_work(void)
 
     switch (wbec_ctx.state) {
     case WBEC_STATE_WAIT_STARTUP:
-        // После загрузки МК нужно подождать некоторое время, пока пройдут переходные процессы
+        // После загрузки МК нужно подождать готовности vmon, пока пройдут переходные процессы
         // и измерятся значения АЦП
         // В это время линукс выключен, т.к. на плате есть RC-цепочка, которая держит питание выключенным
         // примерно хххх мс после включения питания
@@ -292,23 +290,28 @@ void wbec_do_periodic_work(void)
         // Факт работы линукса определяется по наличию +3.3В
         if (vmon_ready()) {
             if ((wbec_info.poweron_reason == REASON_POWER_ON) && (vmon_get_ch_status(VMON_CHANNEL_V33))) {
-                // Если после включения МК +3.3В есть - значить линукс уже работает
+                // Если после включения МК +3.3В есть - значит линукс уже работает
                 // Не нужно выводить информацию в уарт
                 // Тут ничего не нужно делать
                 // Инициализируем GPIO управления питанием сразу во включенном состоянии
-                linux_pwr_init(1);
-                new_state(WBEC_STATE_WAIT_POWER_ON);
+                linux_cpu_pwr_seq_init(1);
+                new_state(WBEC_STATE_POWER_ON_SEQUENCE_WAIT);
             } else {
-                // В ином случае перехватываем питание (выключаем)
-                // И отправляем информацию в уарт
-                linux_pwr_init(0);
+                // В ином случае (3.3В нет - линукс выключен) перехватываем питание (выключаем)
+                // На момент включения питание держится выключенным RC-цепочкой на ключе питания 5В.
+                // Нужно перехватить питание (удержвать его выключенным сигналом с ЕС)
+                // И отправить информацию в уарт
+                linux_cpu_pwr_seq_init(0);
 
                 console_print("\r\n\r\n"); // Это может быть первым сообщением сессии, отделим его от предыдущего вывода
                 console_print_w_prefix("Starting up...\r\n");
                 new_state(WBEC_STATE_VOLTAGE_CHECK);
             }
             // Заполним стуктуру INFO данными
-            wbec_info.board_rev = fix16_to_int(adc_get_ch_adc_raw(ADC_CHANNEL_ADC_HW_VER));
+            // hwrev определяется делителем на плате между AVCC и GND. Возможные значения: [0, 4095]
+            // EC на данный момент это никак не использует, в линуксе можно получить через sysfs
+            // cat /sys/bus/spi/devices/spi0.0/hwrev
+            wbec_info.hwrev = fix16_to_int(adc_get_ch_adc_raw(ADC_CHANNEL_ADC_HW_VER));
             regmap_set_region_data(REGMAP_REGION_INFO, &wbec_info, sizeof(wbec_info));
             // Сбросим счётчик потерь питания
             wbec_ctx.power_loss_cnt = 0;
@@ -329,7 +332,7 @@ void wbec_do_periodic_work(void)
         // подождать несколько секунд, чтобы не пропадали первые дебаг-сообщения
         if (wbec_info.poweron_reason == REASON_POWER_ON) {
             if (!vmon_get_ch_status(VMON_CHANNEL_V_IN)) {
-                if (in_state_time() < WBEC_LINUX_POWER_ON_DELAY_FROM_USB) {
+                if (in_state_time_ms() < WBEC_LINUX_POWER_ON_DELAY_FROM_USB) {
                     static unsigned counter = 0;
                     if ((counter++) % 17 == 0) {
                         console_print("\e[?25l"); // hide cursor
@@ -378,8 +381,8 @@ void wbec_do_periodic_work(void)
         } else {
             console_print_w_prefix("Turning on the main CPU; all future debug messages will originate from the CPU.\r\n\n\n");
             // После отправки данных включаем линукс
-            linux_pwr_on();
-            new_state(WBEC_STATE_WAIT_POWER_ON);
+            linux_cpu_pwr_seq_on();
+            new_state(WBEC_STATE_POWER_ON_SEQUENCE_WAIT);
         }
 
         break;
@@ -387,23 +390,24 @@ void wbec_do_periodic_work(void)
     case WBEC_STATE_TEMP_CHECK_LOOP:
         // В этом состоянии линукс выключен, проверяем температуру
         // Сидим тут до тех пор, пока температура не станет выше -40
-        if (in_state_time() > 5000) {
+        if (in_state_time_ms() > 5000) {
             if (adc.temp < WBEC_MINIMUM_WORKING_TEMPERATURE_C_X100) {
                 console_print_w_prefix("Board temperature is below -40°C! Rechecking in 5 seconds\r\n");
                 new_state(WBEC_STATE_TEMP_CHECK_LOOP);
             } else {
                 console_print_w_prefix("Temperature is OK!\r\n");
                 console_print_w_prefix("Turning on the main CPU; all future debug messages will originate from the CPU\r\n\n\n");
-                linux_pwr_on();
-                new_state(WBEC_STATE_WAIT_POWER_ON);
+                linux_cpu_pwr_seq_on();
+                new_state(WBEC_STATE_POWER_ON_SEQUENCE_WAIT);
             }
         }
         break;
 
-    case WBEC_STATE_WAIT_POWER_ON:
-        // В этом состоянии ждём, пока логика включения питания его включит
-        if (!linux_pwr_is_busy()) {
-            // Сбросим события с кнопки
+    case WBEC_STATE_POWER_ON_SEQUENCE_WAIT:
+        // В этом состоянии ждём
+        // когда отработает логика включения питания начатая во время вызова linux_cpu_pwr_seq_on()
+        if (!linux_cpu_pwr_seq_is_busy()) {
+            // Нужно проигнорировать все нажатия до включения питания линукса
             pwrkey_handle_short_press();
             pwrkey_handle_long_press();
             // Установим время WDT и запустим его
@@ -423,19 +427,15 @@ void wbec_do_periodic_work(void)
         if (pwrkey_handle_short_press()) {
             wdt_stop();
             irq_set_flag(IRQ_PWR_OFF_REQ);
-            new_state(WBEC_STATE_WAIT_LINUX_POWER_OFF);
+            new_state(WBEC_STATE_WAIT_LINUX_OFF_READY);
         }
 
         if (linux_powerctrl_req == LINUX_POWERCTRL_OFF) {
             // Если прилетел запрос из линукса на выключение
             // Это была выполнена команда `poweroff` или `rtcwake -m off`
-            // Не должно быть возможности программно выключить контроллер так, чтобы
-            // нужно было ехать нажимать кнопку чтобы его включить обратно
-            // Поэтому здесь нужно проверить наличие будильника и если он есть - выключиться
-            // иначе - перезагрузиться
             console_print("\r\n\n");
             console_print_w_prefix("Power off request from Linux.\r\n");
-            bool wbmz = linux_pwr_is_powered_from_wbmz();
+            bool wbmz = linux_cpu_pwr_seq_is_powered_from_wbmz();
             bool alarm = rtc_alarm_is_alarm_enabled();
 
             if (alarm) {
@@ -465,7 +465,11 @@ void wbec_do_periodic_work(void)
                 console_print("powered from external supply\r\n");
             }
 
-            // Выключаться можно только если есть будильник ИЛИ питание от WBMZ
+            // Не должно быть возможности программно выключить контроллер так, чтобы
+            // нужно было ехать нажимать кнопку чтобы его включить обратно
+            // Поэтому здесь нужно проверить наличие будильника и если он есть - выключиться
+            // иначе - перезагрузиться
+            // Также разрешено выключаться по poweroff, если питаемся от WBMZ
             if (wbmz || alarm) {
                 // Если выключаемся при работающем WBMZ - дополнительно заводим RC periodic wakeup
                 // чтобы просыпаться и следить за появлением входного напряжения
@@ -473,27 +477,27 @@ void wbec_do_periodic_work(void)
                     wbec_ctx.powered_from_wbmz = true;
                 }
                 console_print_w_prefix("Powering off\r\n");
-                linux_pwr_off();
-                new_state(WBEC_STATE_WAIT_POWER_OFF);
+                linux_cpu_pwr_seq_off();
+                new_state(WBEC_STATE_POWER_OFF_SEQUENCE_WAIT);
             } else {
                 console_print_w_prefix("Alarm not set, reboot system instead of power off.\r\n\n");
                 wbec_info.poweron_reason = REASON_REBOOT_NO_ALARM;
-                linux_pwr_reset();
-                new_state(WBEC_STATE_WAIT_POWER_ON);
+                linux_cpu_pwr_seq_reset();
+                new_state(WBEC_STATE_POWER_ON_SEQUENCE_WAIT);
             }
         } else if (linux_powerctrl_req == LINUX_POWERCTRL_REBOOT) {
             // Если запрос на перезагрузку - перезагружается
             wbec_info.poweron_reason = REASON_REBOOT;
             console_print("\r\n\n");
             console_print_w_prefix("Reboot request, reset power.\r\n");
-            linux_pwr_reset();
-            new_state(WBEC_STATE_WAIT_POWER_ON);
+            linux_cpu_pwr_seq_reset();
+            new_state(WBEC_STATE_POWER_ON_SEQUENCE_WAIT);
         } else if (linux_powerctrl_req == LINUX_POWERCTRL_PMIC_RESET) {
             wbec_info.poweron_reason = REASON_REBOOT;
             console_print("\r\n\n");
             console_print_w_prefix("PMIC reset request, activate PMIC RESET line now\r\n\n");
-            linux_pwr_reset_pmic();
-            new_state(WBEC_STATE_WAIT_POWER_ON);
+            linux_cpu_pwr_seq_reset_pmic();
+            new_state(WBEC_STATE_POWER_ON_SEQUENCE_WAIT);
         }
 
         // Если сработал WDT - перезагружаемся по питанию
@@ -501,12 +505,15 @@ void wbec_do_periodic_work(void)
             wbec_info.poweron_reason = REASON_WATCHDOG;
             console_print("\r\n\n");
             console_print_w_prefix("Watchdog is timed out, reset power.\r\n");
-            linux_pwr_reset();
-            new_state(WBEC_STATE_WAIT_POWER_ON);
+            linux_cpu_pwr_seq_reset();
+            new_state(WBEC_STATE_POWER_ON_SEQUENCE_WAIT);
         }
 
         // Если пропало 3.3В - пробуем перезапустить питание, но не более N раз за M минут
         // Если питание пропадает слишком часто - выключаемся
+        // Это происходит, например, при питании через плохой USB кабель.
+        // В результате PMIC выключается, но питание на линии 5В остаётся.
+        // Ограничение по числу попыток нужно, чтобы избежать циклического перезапуска.
         if (!vmon_get_ch_status(VMON_CHANNEL_V33)) {
             if (systick_get_time_since_timestamp(wbec_ctx.power_loss_timestamp) < (WBEC_POWER_LOSS_TIMEOUT_MIN * 60 * 1000)) {
                 wbec_ctx.power_loss_cnt++;
@@ -522,30 +529,14 @@ void wbec_do_periodic_work(void)
             } else {
                 console_print_w_prefix("3.3V is lost, try to reset power\r\n");
                 wbec_info.poweron_reason = REASON_PMIC_OFF;
-                linux_pwr_hard_reset();
-                new_state(WBEC_STATE_WAIT_POWER_ON);
+                linux_cpu_pwr_seq_hard_reset();
+                new_state(WBEC_STATE_POWER_ON_SEQUENCE_WAIT);
             }
         }
 
         break;
 
-    case WBEC_STATE_WAIT_POWER_OFF:
-        // В этом состоянии ждем, пока логика управления питанием его выключит
-        // Это занимает довольно много времени, т.к. выключение происходит через
-        // сигнал PWRON, который надо активировать примерно на 6с
-        if (!linux_pwr_is_busy()) {
-            // После того как питание выключилось - засыпаем
-            // Save VCC_5V state to RTC backup register
-            if (wbec_ctx.powered_from_wbmz)
-                mcu_save_vcc_5v_last_state(MCU_VCC_5V_STATE_OFF);
-            else {
-                mcu_save_vcc_5v_last_state(MCU_VCC_5V_STATE_ON);
-            }
-            mcu_goto_standby(WBEC_PERIODIC_WAKEUP_FIRST_TIMEOUT_S);
-        }
-        break;
-
-    case WBEC_STATE_WAIT_LINUX_POWER_OFF:
+    case WBEC_STATE_WAIT_LINUX_OFF_READY:
         // В это состояние попадаем после короткого нажатия кнопки
         // Запрос на выключение в линукс уже отправлен (бит в регистре установлен)
         // Тут нужно подождать и если линукс не отправит запрос на
@@ -555,16 +546,32 @@ void wbec_do_periodic_work(void)
             // Штатное выключение (запрос на выключение был с кнопки)
             console_print("\r\n\n");
             console_print_w_prefix("Power off request from Linux after power key pressed. Powering off...\r\n");
-            linux_pwr_off();
-            new_state(WBEC_STATE_WAIT_POWER_OFF);
-        } else if (in_state_time() >= WBEC_LINUX_POWER_OFF_DELAY_MS) {
+            linux_cpu_pwr_seq_off();
+            new_state(WBEC_STATE_POWER_OFF_SEQUENCE_WAIT);
+        } else if (in_state_time_ms() >= WBEC_LINUX_POWER_OFF_DELAY_MS) {
             // Аварийное выключение (можно как-то дополнительно обработать)
             console_print("\r\n\n");
             console_print_w_prefix("No power off request from Linux after power key pressed. Power is forced off.\r\n");
-            linux_pwr_off();
-            new_state(WBEC_STATE_WAIT_POWER_OFF);
+            linux_cpu_pwr_seq_off();
+            new_state(WBEC_STATE_POWER_OFF_SEQUENCE_WAIT);
         }
 
+        break;
+
+    case WBEC_STATE_POWER_OFF_SEQUENCE_WAIT:
+        // В этом состоянии ждем, когда закончится процесс выключения начатый в linux_cpu_pwr_seq_off()
+        // Это занимает довольно много времени, т.к. выключение происходит через
+        // сигнал PWRON, который надо активировать примерно на 6с
+        if (!linux_cpu_pwr_seq_is_busy()) {
+            // После того как питание выключилось - засыпаем
+            // Save VCC_5V state to RTC backup register
+            if (wbec_ctx.powered_from_wbmz)
+                mcu_save_vcc_5v_last_state(MCU_VCC_5V_STATE_OFF);
+            else {
+                mcu_save_vcc_5v_last_state(MCU_VCC_5V_STATE_ON);
+            }
+            mcu_goto_standby(WBEC_PERIODIC_WAKEUP_FIRST_TIMEOUT_S);
+        }
         break;
     }
 }

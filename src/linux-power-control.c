@@ -18,18 +18,21 @@ static const gpio_pin_t gpio_wbmz_status_bat = { EC_GPIO_WBMZ_STATUS_BAT };
 static const gpio_pin_t gpio_wbmz_on = { EC_GPIO_WBMZ_ON };
 
 enum pwr_state {
-    PS_OFF_COMPLETE,
-    PS_OFF_STEP1_PMIC_PWRON,
+    // Выключение питания делается за 1 этап:
+    PS_OFF_STEP1_PMIC_PWRON,            // Активируем линию PMIC_PWRON и ждём, пока пропадёт 3.3В (примерно 6с)
+    PS_OFF_COMPLETE,                    // Питание выключено
 
+    // Включение питания делается максимум за 3 этапа.
+    // Если всё идет штатно - то за 1 этап.
+    PS_ON_STEP1_WAIT_3V3,               // Ждём, пока появится 3.3В
+    PS_ON_STEP2_PMIC_PWRON,             // Если 3.3В не появляется, пробуем включить PMIC "нажатием" на PWRON
+    PS_ON_STEP3_PMIC_PWRON_OFF_WAIT,    // Если и это не помогло, отпускаем PWRON и делаем несколько попыток
     PS_ON_COMPLETE,
-    PS_ON_STEP1_WAIT_3V3,
-    PS_ON_STEP2_PMIC_PWRON,
-    PS_ON_STEP3_PMIC_PWRON_WAIT,
 
-    PS_RESET_5V_WAIT,
-    PS_RESET_PMIC_WAIT,
+    PS_RESET_5V_WAIT,                   // Нужно при перезаргрузке - выключаем 5В и ждём разрядку линий
+    PS_RESET_PMIC_WAIT,                 // Сброс PMIC через PMIC_RESET_PWROK. Ждём, пока пропадёт 3.3В
 
-    PS_LONG_PRESS_HANDLE,
+    PS_LONG_PRESS_HANDLE,               // Трансляция долгого нажатия в PMIC_PWRON и ожидание выключения PMIC
 };
 
 struct pwr_ctx {
@@ -45,14 +48,14 @@ static struct pwr_ctx pwr_ctx = {
     .state = PS_OFF_COMPLETE,
 };
 
-static inline void linux_pwr_gpio_on(void)       { GPIO_S_SET(gpio_linux_power); }
-static inline void linux_pwr_gpio_off(void)      { GPIO_S_RESET(gpio_linux_power); }
-static inline void pmic_pwron_gpio_on(void)      { GPIO_S_SET(gpio_pmic_pwron); }
-static inline void pmic_pwron_gpio_off(void)     { GPIO_S_RESET(gpio_pmic_pwron); }
-static inline void pmic_reset_gpio_on(void)      { GPIO_S_SET(gpio_pmic_reset_pwrok); }
-static inline void pmic_reset_gpio_off(void)     { GPIO_S_RESET(gpio_pmic_reset_pwrok); }
-static inline void wbmz_on(void)                 { GPIO_S_SET(gpio_wbmz_on); }
-static inline bool wbmz_working(void)            { return (!GPIO_S_TEST(gpio_wbmz_status_bat)); }
+static inline void linux_cpu_pwr_5v_gpio_on(void)   { GPIO_S_SET(gpio_linux_power); }
+static inline void linux_cpu_pwr_5v_gpio_off(void)  { GPIO_S_RESET(gpio_linux_power); }
+static inline void pmic_pwron_gpio_on(void)         { GPIO_S_SET(gpio_pmic_pwron); }
+static inline void pmic_pwron_gpio_off(void)        { GPIO_S_RESET(gpio_pmic_pwron); }
+static inline void pmic_reset_gpio_on(void)         { GPIO_S_SET(gpio_pmic_reset_pwrok); }
+static inline void pmic_reset_gpio_off(void)        { GPIO_S_RESET(gpio_pmic_reset_pwrok); }
+static inline void wbmz_on(void)                    { GPIO_S_SET(gpio_wbmz_on); }
+static inline bool wbmz_working(void)               { return (!GPIO_S_TEST(gpio_wbmz_status_bat)); }
 
 static inline void new_state(enum pwr_state s)
 {
@@ -60,7 +63,7 @@ static inline void new_state(enum pwr_state s)
     pwr_ctx.timestamp = systick_get_system_time_ms();
 }
 
-static inline systime_t in_state_time(void)
+static inline systime_t in_state_time_ms(void)
 {
     return systick_get_time_since_timestamp(pwr_ctx.timestamp);
 }
@@ -68,7 +71,7 @@ static inline systime_t in_state_time(void)
 static void put_power_status_to_regmap(void)
 {
     struct REGMAP_PWR_STATUS p = {};
-    p.powered_from_wbmz = linux_pwr_is_powered_from_wbmz();
+    p.powered_from_wbmz = linux_cpu_pwr_seq_is_powered_from_wbmz();
     p.wbmz_enabled = pwr_ctx.wbmz_enabled;
 
     regmap_set_region_data(REGMAP_REGION_PWR_STATUS, &p, sizeof(p));
@@ -83,12 +86,12 @@ static void put_power_status_to_regmap(void)
  *
  * @param on Начальное состояние питания (вкл/выкл)
  */
-void linux_pwr_init(bool on)
+void linux_cpu_pwr_seq_init(bool on)
 {
     if (on) {
-        linux_pwr_on();
+        linux_cpu_pwr_seq_on();
     } else {
-        linux_pwr_gpio_off();
+        linux_cpu_pwr_5v_gpio_off();
         new_state(PS_OFF_COMPLETE);
     }
     GPIO_S_SET_OUTPUT(gpio_linux_power);
@@ -114,17 +117,17 @@ void linux_pwr_init(bool on)
  * Включается 5В, затем контролируется появление 3.3В.
  * Если 3.3В не появляется, выполняется 3 попытки включить PMIC через PWRON
  */
-void linux_pwr_on(void)
+void linux_cpu_pwr_seq_on(void)
 {
     if ((pwr_ctx.state == PS_ON_COMPLETE) ||
         (pwr_ctx.state == PS_ON_STEP1_WAIT_3V3) ||
         (pwr_ctx.state == PS_ON_STEP2_PMIC_PWRON) ||
-        (pwr_ctx.state == PS_ON_STEP3_PMIC_PWRON_WAIT))
+        (pwr_ctx.state == PS_ON_STEP3_PMIC_PWRON_OFF_WAIT))
     {
         return;
     }
 
-    linux_pwr_gpio_on();
+    linux_cpu_pwr_5v_gpio_on();
     new_state(PS_ON_STEP1_WAIT_3V3);
 }
 
@@ -132,7 +135,7 @@ void linux_pwr_on(void)
  * @brief Выключает питание линукс штатным способом:
  * Активируется сигнал PWRON на PMIC, ждём выключения PMIC, потом выключаем 5В
  */
-void linux_pwr_off(void)
+void linux_cpu_pwr_seq_off(void)
 {
     if ((pwr_ctx.state == PS_OFF_COMPLETE) ||
         (pwr_ctx.state == PS_OFF_STEP1_PMIC_PWRON))
@@ -149,9 +152,9 @@ void linux_pwr_off(void)
  * @brief Выключение питания путём отключения 5В сразу, без PMIC.
  * Нужно для отключения по долгому нажатию
  */
-void linux_pwr_hard_off(void)
+void linux_cpu_pwr_seq_hard_off(void)
 {
-    linux_pwr_gpio_off();
+    linux_cpu_pwr_5v_gpio_off();
     pmic_pwron_gpio_off();
     new_state(PS_OFF_COMPLETE);
 }
@@ -160,9 +163,9 @@ void linux_pwr_hard_off(void)
  * @brief Сброс питания (выключение и через 1с включение)
  * Через PMIC PWRON (как штатное выключение-включение)
  */
-void linux_pwr_reset()
+void linux_cpu_pwr_seq_reset()
 {
-    linux_pwr_off();
+    linux_cpu_pwr_seq_off();
     pwr_ctx.reset_flag = true;
 }
 
@@ -170,9 +173,9 @@ void linux_pwr_reset()
  * @brief Сброс питания (выключение и через 1с включение)
  * Через отключение 5В (без PMIC)
  */
-void linux_pwr_hard_reset()
+void linux_cpu_pwr_seq_hard_reset()
 {
-    linux_pwr_gpio_off();
+    linux_cpu_pwr_5v_gpio_off();
     pmic_pwron_gpio_off();
     new_state(PS_RESET_5V_WAIT);
     pwr_ctx.reset_flag = true;
@@ -183,7 +186,7 @@ void linux_pwr_hard_reset()
  * В нормальной работе не используется, нужен для проверки схемотехники и монтажа.
  * Возможно как-то понадобится в последствии.
  */
-void linux_pwr_reset_pmic(void)
+void linux_cpu_pwr_seq_reset_pmic(void)
 {
     pmic_reset_gpio_on();
     new_state(PS_RESET_PMIC_WAIT);
@@ -195,7 +198,7 @@ void linux_pwr_reset_pmic(void)
  * @return true Питание включено или выключено, алгоритм завершён
  * @return false Алгоритм что-то делает, питание в неопределенном состоянии
  */
-bool linux_pwr_is_busy(void)
+bool linux_cpu_pwr_seq_is_busy(void)
 {
     return (
         (pwr_ctx.state != PS_OFF_COMPLETE) &&
@@ -203,19 +206,21 @@ bool linux_pwr_is_busy(void)
     );
 }
 
-void linux_pwr_enable_wbmz(void)
+void linux_cpu_pwr_seq_enable_wbmz(void)
 {
+    // Вызывается только один раз либо в wbec_init, либо в linux_cpu_pwr_seq_do_periodic_work
+    // Однажны включившийся WBMZ более не выключается
     wbmz_on();
     GPIO_S_SET_OUTPUT(gpio_wbmz_on);
     pwr_ctx.wbmz_enabled = 1;
 }
 
-bool linux_pwr_is_powered_from_wbmz(void)
+bool linux_cpu_pwr_seq_is_powered_from_wbmz(void)
 {
     return wbmz_working();
 }
 
-void linux_pwr_do_periodic_work(void)
+void linux_cpu_pwr_seq_do_periodic_work(void)
 {
     if (!vmon_ready() || !pwr_ctx.initialized) {
         return;
@@ -235,7 +240,7 @@ void linux_pwr_do_periodic_work(void)
     // При этом ЕС продолжит работать от BATSENSE
     if (!pwr_ctx.wbmz_enabled) {
         if (adc_get_ch_mv(ADC_CHANNEL_ADC_V_IN) > 11500) {
-            linux_pwr_enable_wbmz();
+            linux_cpu_pwr_seq_enable_wbmz();
         }
     }
 
@@ -261,7 +266,7 @@ void linux_pwr_do_periodic_work(void)
             // Если 3.3В появилось, то считаем что питание включено
             new_state(PS_ON_COMPLETE);
         }
-        if (in_state_time() > 1000) {
+        if (in_state_time_ms() > 1000) {
             // Если 3.3В не появилось, то попробуем включить PMIC через PWRON
             console_print_w_prefix("No voltage on 3.3V line, try to switch on PMIC throught PWRON\r\n");
             pmic_pwron_gpio_on();
@@ -280,24 +285,25 @@ void linux_pwr_do_periodic_work(void)
             pmic_pwron_gpio_off();
             new_state(PS_ON_COMPLETE);
         }
-        if (in_state_time() > 1500) {
+        if (in_state_time_ms() > 1500) {
             pwr_ctx.attempt++;
             pmic_pwron_gpio_off();
             if (pwr_ctx.attempt <= 3) {
                 // Если попытки не исчерпаны - отключаем PWRON и пробуем ещё
-                new_state(PS_ON_STEP3_PMIC_PWRON_WAIT);
+                new_state(PS_ON_STEP3_PMIC_PWRON_OFF_WAIT);
             } else {
                 // Если попытки кончились - сбрасываем 5В и начинаем заново
                 console_print_w_prefix("Still no voltage on 3.3V line, reset 5V line and try to switch on again\r\n");
-                linux_pwr_gpio_off();
+                // Выключаем линию 5В на время WBEC_POWER_RESET_TIME_MS
+                linux_cpu_pwr_5v_gpio_off();
                 new_state(PS_RESET_5V_WAIT);
             }
         }
         break;
 
     // Третий шаг включения - отпускаем PWRON, ждём, пробуем ещё раз
-    case PS_ON_STEP3_PMIC_PWRON_WAIT:
-        if (in_state_time() > 500) {
+    case PS_ON_STEP3_PMIC_PWRON_OFF_WAIT:
+        if (in_state_time_ms() > 500) {
             console_print_w_prefix("One more attempt to switch on PMIC throught PWRON\r\n");
             pmic_pwron_gpio_on();
             new_state(PS_ON_STEP2_PMIC_PWRON);
@@ -306,15 +312,15 @@ void linux_pwr_do_periodic_work(void)
 
     // Сброс питания 5В
     case PS_RESET_5V_WAIT:
-        if (in_state_time() > WBEC_POWER_RESET_TIME_MS) {
-            linux_pwr_gpio_on();
+        if (in_state_time_ms() > WBEC_POWER_RESET_TIME_MS) {
+            linux_cpu_pwr_5v_gpio_on();
             new_state(PS_ON_STEP1_WAIT_3V3);
         }
         break;
 
     // Сброс PMIC через RESET самого PMIC
     case PS_RESET_PMIC_WAIT:
-        if ((!vmon_get_ch_status(VMON_CHANNEL_V33)) || (in_state_time() > 2000)) {
+        if ((!vmon_get_ch_status(VMON_CHANNEL_V33)) || (in_state_time_ms() > 2000)) {
             console_print_w_prefix("PMIC was reset throught RESET line\r\n");
             pmic_reset_gpio_off();
             pmic_pwron_gpio_off();
@@ -331,16 +337,16 @@ void linux_pwr_do_periodic_work(void)
         if (!vmon_get_ch_status(VMON_CHANNEL_V33)) {
             console_print_w_prefix("PMIC switched off throught PWRON, disabling 5V line now\r\n");
             pmic_pwron_gpio_off();
-            linux_pwr_gpio_off();
+            linux_cpu_pwr_5v_gpio_off();
             if (pwr_ctx.reset_flag) {
                 new_state(PS_RESET_5V_WAIT);
             } else {
                 new_state(PS_OFF_COMPLETE);
             }
-        } else if (in_state_time() > 8000) {
+        } else if (in_state_time_ms() > 8000) {
             console_print_w_prefix("Warning: PMIC not switched off throught PWRON after 8s, disabling 5V line now\r\n");
             pmic_pwron_gpio_off();
-            linux_pwr_gpio_off();
+            linux_cpu_pwr_5v_gpio_off();
             if (pwr_ctx.reset_flag) {
                 new_state(PS_RESET_5V_WAIT);
             } else {
@@ -353,12 +359,12 @@ void linux_pwr_do_periodic_work(void)
     // PMIC_PWRON активирован
     case PS_LONG_PRESS_HANDLE:
         if ((!vmon_get_ch_status(VMON_CHANNEL_V33)) ||
-            (in_state_time() > 10000))
+            (in_state_time_ms() > 10000))
         {
             // Если пропало 3.3В или вышел таймаут - выключаем 5В и засыпаем
             pmic_pwron_gpio_off();
             pmic_reset_gpio_off();
-            linux_pwr_gpio_off();
+            linux_cpu_pwr_5v_gpio_off();
             new_state(PS_OFF_COMPLETE);
             console_print("\r\n\n");
             console_print_w_prefix("Power off after power key long press detected.\r\n\n");
@@ -367,7 +373,7 @@ void linux_pwr_do_periodic_work(void)
             while (pwrkey_pressed()) {
                 pwrkey_do_periodic_work();
             }
-            if (linux_pwr_is_powered_from_wbmz()) {
+            if (linux_cpu_pwr_seq_is_powered_from_wbmz()) {
                 mcu_save_vcc_5v_last_state(MCU_VCC_5V_STATE_OFF);
             } else {
                 mcu_save_vcc_5v_last_state(MCU_VCC_5V_STATE_ON);

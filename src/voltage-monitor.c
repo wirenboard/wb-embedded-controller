@@ -7,10 +7,10 @@
 
 struct vmon_ch_cfg {
     enum adc_channel adc_ch;
-    uint16_t ok_min;
-    uint16_t ok_max;
-    uint16_t fail_min;
-    uint16_t fail_max;
+    uint32_t ok_min;
+    uint32_t ok_max;
+    uint32_t fail_min;
+    uint32_t fail_max;
 };
 
 static const struct vmon_ch_cfg vmon_ch_cfg[VMON_CHANNEL_COUNT] = {
@@ -23,7 +23,7 @@ static systime_t start_timestamp;
 
 static void check_voltage(const struct vmon_ch_cfg * cfg, bool * status)
 {
-    uint16_t mv = adc_get_ch_mv(cfg->adc_ch);
+    uint32_t mv = adc_get_ch_mv(cfg->adc_ch);
 
     if (*status) {
         // If current status OK, check FAIL limits

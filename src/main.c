@@ -44,7 +44,6 @@ int main(void)
 
     // Первым инициализируется WBEC, т.к. он в начале проверяет причину включения
     // и может заснуть обратно, если решит.
-    // Если нужно включаться, в wbec_init() настраивается клок на 64 МГц
     // И переинициализуется АЦП на внешний VREF
     wbec_init();
 
@@ -77,7 +76,7 @@ int main(void)
         pwrkey_do_periodic_work();
         wdt_do_periodic_work();
         gpio_do_periodic_work();
-        linux_pwr_do_periodic_work();
+        linux_cpu_pwr_seq_do_periodic_work();
 
         // Sybsystems
         rtc_alarm_do_periodic_work();
