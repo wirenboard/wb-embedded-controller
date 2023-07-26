@@ -72,7 +72,7 @@ struct wbec_ctx {
 static struct REGMAP_INFO wbec_info = {
     .wbec_id = WBEC_ID,
     .board_rev = 0,
-    MODBUS_DEVICE_FW_VERSION_NUMBERS,
+    .fw_ver = { MODBUS_DEVICE_FW_VERSION_NUMBERS },
     .poweron_reason = REASON_UNKNOWN,
 };
 
