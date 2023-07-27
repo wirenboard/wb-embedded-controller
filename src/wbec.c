@@ -260,7 +260,7 @@ void wbec_init(void)
         // WBMZ включится отдельным алторитмом, если Vin будет более 11.5 В
     } else {
         // Питания нет - включаем WBMZ
-        linux_pwr_enable_wbmz();
+        linux_cpu_pwr_seq_enable_wbmz();
     }
 
     // Если дошли до этого места, надо включиться в обычном режиме
@@ -294,14 +294,14 @@ void wbec_do_periodic_work(void)
                 // Не нужно выводить информацию в уарт
                 // Тут ничего не нужно делать
                 // Инициализируем GPIO управления питанием сразу во включенном состоянии
-                linux_pwr_init(1);
+                linux_cpu_pwr_seq_init(1);
                 new_state(WBEC_STATE_POWER_ON_SEQUENCE_WAIT);
             } else {
                 // В ином случае (3.3В нет - линукс выключен) перехватываем питание (выключаем)
                 // На момент включения питание держится выключенным RC-цепочкой на ключе питания 5В.
                 // Нужно перехватить питание (удержвать его выключенным сигналом с ЕС)
                 // И отправить информацию в уарт
-                linux_pwr_init(0);
+                linux_cpu_pwr_seq_init(0);
 
                 console_print("\r\n\r\n"); // Это может быть первым сообщением сессии, отделим его от предыдущего вывода
                 console_print_w_prefix("Starting up...\r\n");
@@ -381,7 +381,7 @@ void wbec_do_periodic_work(void)
         } else {
             console_print_w_prefix("Turning on the main CPU; all future debug messages will originate from the CPU.\r\n\n\n");
             // После отправки данных включаем линукс
-            linux_pwr_on();
+            linux_cpu_pwr_seq_on();
             new_state(WBEC_STATE_POWER_ON_SEQUENCE_WAIT);
         }
 
@@ -397,7 +397,7 @@ void wbec_do_periodic_work(void)
             } else {
                 console_print_w_prefix("Temperature is OK!\r\n");
                 console_print_w_prefix("Turning on the main CPU; all future debug messages will originate from the CPU\r\n\n\n");
-                linux_pwr_on();
+                linux_cpu_pwr_seq_on();
                 new_state(WBEC_STATE_POWER_ON_SEQUENCE_WAIT);
             }
         }
@@ -405,8 +405,8 @@ void wbec_do_periodic_work(void)
 
     case WBEC_STATE_POWER_ON_SEQUENCE_WAIT:
         // В этом состоянии ждём
-        // когда отработает логика включения питания начатая во время вызова linux_pwr_on()
-        if (!linux_pwr_is_busy()) {
+        // когда отработает логика включения питания начатая во время вызова linux_cpu_pwr_seq_on()
+        if (!linux_cpu_pwr_seq_is_busy()) {
             // Нужно проигнорировать все нажатия до включения питания линукса
             pwrkey_handle_short_press();
             pwrkey_handle_long_press();
@@ -435,7 +435,7 @@ void wbec_do_periodic_work(void)
             // Это была выполнена команда `poweroff` или `rtcwake -m off`
             console_print("\r\n\n");
             console_print_w_prefix("Power off request from Linux.\r\n");
-            bool wbmz = linux_pwr_is_powered_from_wbmz();
+            bool wbmz = linux_cpu_pwr_seq_is_powered_from_wbmz();
             bool alarm = rtc_alarm_is_alarm_enabled();
 
             if (alarm) {
@@ -477,12 +477,12 @@ void wbec_do_periodic_work(void)
                     wbec_ctx.powered_from_wbmz = true;
                 }
                 console_print_w_prefix("Powering off\r\n");
-                linux_pwr_off();
+                linux_cpu_pwr_seq_off();
                 new_state(WBEC_STATE_POWER_OFF_SEQUENCE_WAIT);
             } else {
                 console_print_w_prefix("Alarm not set, reboot system instead of power off.\r\n\n");
                 wbec_info.poweron_reason = REASON_REBOOT_NO_ALARM;
-                linux_pwr_reset();
+                linux_cpu_pwr_seq_reset();
                 new_state(WBEC_STATE_POWER_ON_SEQUENCE_WAIT);
             }
         } else if (linux_powerctrl_req == LINUX_POWERCTRL_REBOOT) {
@@ -490,13 +490,13 @@ void wbec_do_periodic_work(void)
             wbec_info.poweron_reason = REASON_REBOOT;
             console_print("\r\n\n");
             console_print_w_prefix("Reboot request, reset power.\r\n");
-            linux_pwr_reset();
+            linux_cpu_pwr_seq_reset();
             new_state(WBEC_STATE_POWER_ON_SEQUENCE_WAIT);
         } else if (linux_powerctrl_req == LINUX_POWERCTRL_PMIC_RESET) {
             wbec_info.poweron_reason = REASON_REBOOT;
             console_print("\r\n\n");
             console_print_w_prefix("PMIC reset request, activate PMIC RESET line now\r\n\n");
-            linux_pwr_reset_pmic();
+            linux_cpu_pwr_seq_reset_pmic();
             new_state(WBEC_STATE_POWER_ON_SEQUENCE_WAIT);
         }
 
@@ -505,7 +505,7 @@ void wbec_do_periodic_work(void)
             wbec_info.poweron_reason = REASON_WATCHDOG;
             console_print("\r\n\n");
             console_print_w_prefix("Watchdog is timed out, reset power.\r\n");
-            linux_pwr_reset();
+            linux_cpu_pwr_seq_reset();
             new_state(WBEC_STATE_POWER_ON_SEQUENCE_WAIT);
         }
 
@@ -529,7 +529,7 @@ void wbec_do_periodic_work(void)
             } else {
                 console_print_w_prefix("3.3V is lost, try to reset power\r\n");
                 wbec_info.poweron_reason = REASON_PMIC_OFF;
-                linux_pwr_hard_reset();
+                linux_cpu_pwr_seq_hard_reset();
                 new_state(WBEC_STATE_POWER_ON_SEQUENCE_WAIT);
             }
         }
@@ -546,23 +546,23 @@ void wbec_do_periodic_work(void)
             // Штатное выключение (запрос на выключение был с кнопки)
             console_print("\r\n\n");
             console_print_w_prefix("Power off request from Linux after power key pressed. Powering off...\r\n");
-            linux_pwr_off();
+            linux_cpu_pwr_seq_off();
             new_state(WBEC_STATE_POWER_OFF_SEQUENCE_WAIT);
         } else if (in_state_time_ms() >= WBEC_LINUX_POWER_OFF_DELAY_MS) {
             // Аварийное выключение (можно как-то дополнительно обработать)
             console_print("\r\n\n");
             console_print_w_prefix("No power off request from Linux after power key pressed. Power is forced off.\r\n");
-            linux_pwr_off();
+            linux_cpu_pwr_seq_off();
             new_state(WBEC_STATE_POWER_OFF_SEQUENCE_WAIT);
         }
 
         break;
 
     case WBEC_STATE_POWER_OFF_SEQUENCE_WAIT:
-        // В этом состоянии ждем, когда закончится процесс выключения начатый в linux_pwr_off()
+        // В этом состоянии ждем, когда закончится процесс выключения начатый в linux_cpu_pwr_seq_off()
         // Это занимает довольно много времени, т.к. выключение происходит через
         // сигнал PWRON, который надо активировать примерно на 6с
-        if (!linux_pwr_is_busy()) {
+        if (!linux_cpu_pwr_seq_is_busy()) {
             // После того как питание выключилось - засыпаем
             // Save VCC_5V state to RTC backup register
             if (wbec_ctx.powered_from_wbmz)

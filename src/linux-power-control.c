@@ -71,7 +71,7 @@ static inline systime_t in_state_time_ms(void)
 static void put_power_status_to_regmap(void)
 {
     struct REGMAP_PWR_STATUS p = {};
-    p.powered_from_wbmz = linux_pwr_is_powered_from_wbmz();
+    p.powered_from_wbmz = linux_cpu_pwr_seq_is_powered_from_wbmz();
     p.wbmz_enabled = pwr_ctx.wbmz_enabled;
 
     regmap_set_region_data(REGMAP_REGION_PWR_STATUS, &p, sizeof(p));
@@ -86,10 +86,10 @@ static void put_power_status_to_regmap(void)
  *
  * @param on Начальное состояние питания (вкл/выкл)
  */
-void linux_pwr_init(bool on)
+void linux_cpu_pwr_seq_init(bool on)
 {
     if (on) {
-        linux_pwr_on();
+        linux_cpu_pwr_seq_on();
     } else {
         linux_cpu_pwr_5v_gpio_off();
         new_state(PS_OFF_COMPLETE);
@@ -117,7 +117,7 @@ void linux_pwr_init(bool on)
  * Включается 5В, затем контролируется появление 3.3В.
  * Если 3.3В не появляется, выполняется 3 попытки включить PMIC через PWRON
  */
-void linux_pwr_on(void)
+void linux_cpu_pwr_seq_on(void)
 {
     if ((pwr_ctx.state == PS_ON_COMPLETE) ||
         (pwr_ctx.state == PS_ON_STEP1_WAIT_3V3) ||
@@ -135,7 +135,7 @@ void linux_pwr_on(void)
  * @brief Выключает питание линукс штатным способом:
  * Активируется сигнал PWRON на PMIC, ждём выключения PMIC, потом выключаем 5В
  */
-void linux_pwr_off(void)
+void linux_cpu_pwr_seq_off(void)
 {
     if ((pwr_ctx.state == PS_OFF_COMPLETE) ||
         (pwr_ctx.state == PS_OFF_STEP1_PMIC_PWRON))
@@ -152,7 +152,7 @@ void linux_pwr_off(void)
  * @brief Выключение питания путём отключения 5В сразу, без PMIC.
  * Нужно для отключения по долгому нажатию
  */
-void linux_pwr_hard_off(void)
+void linux_cpu_pwr_seq_hard_off(void)
 {
     linux_cpu_pwr_5v_gpio_off();
     pmic_pwron_gpio_off();
@@ -163,9 +163,9 @@ void linux_pwr_hard_off(void)
  * @brief Сброс питания (выключение и через 1с включение)
  * Через PMIC PWRON (как штатное выключение-включение)
  */
-void linux_pwr_reset()
+void linux_cpu_pwr_seq_reset()
 {
-    linux_pwr_off();
+    linux_cpu_pwr_seq_off();
     pwr_ctx.reset_flag = true;
 }
 
@@ -173,7 +173,7 @@ void linux_pwr_reset()
  * @brief Сброс питания (выключение и через 1с включение)
  * Через отключение 5В (без PMIC)
  */
-void linux_pwr_hard_reset()
+void linux_cpu_pwr_seq_hard_reset()
 {
     linux_cpu_pwr_5v_gpio_off();
     pmic_pwron_gpio_off();
@@ -186,7 +186,7 @@ void linux_pwr_hard_reset()
  * В нормальной работе не используется, нужен для проверки схемотехники и монтажа.
  * Возможно как-то понадобится в последствии.
  */
-void linux_pwr_reset_pmic(void)
+void linux_cpu_pwr_seq_reset_pmic(void)
 {
     pmic_reset_gpio_on();
     new_state(PS_RESET_PMIC_WAIT);
@@ -198,7 +198,7 @@ void linux_pwr_reset_pmic(void)
  * @return true Питание включено или выключено, алгоритм завершён
  * @return false Алгоритм что-то делает, питание в неопределенном состоянии
  */
-bool linux_pwr_is_busy(void)
+bool linux_cpu_pwr_seq_is_busy(void)
 {
     return (
         (pwr_ctx.state != PS_OFF_COMPLETE) &&
@@ -206,21 +206,21 @@ bool linux_pwr_is_busy(void)
     );
 }
 
-void linux_pwr_enable_wbmz(void)
+void linux_cpu_pwr_seq_enable_wbmz(void)
 {
-    // Вызывается только один раз либо в wbec_init, либо в linux_pwr_do_periodic_work
+    // Вызывается только один раз либо в wbec_init, либо в linux_cpu_pwr_seq_do_periodic_work
     // Однажны включившийся WBMZ более не выключается
     wbmz_on();
     GPIO_S_SET_OUTPUT(gpio_wbmz_on);
     pwr_ctx.wbmz_enabled = 1;
 }
 
-bool linux_pwr_is_powered_from_wbmz(void)
+bool linux_cpu_pwr_seq_is_powered_from_wbmz(void)
 {
     return wbmz_working();
 }
 
-void linux_pwr_do_periodic_work(void)
+void linux_cpu_pwr_seq_do_periodic_work(void)
 {
     if (!vmon_ready() || !pwr_ctx.initialized) {
         return;
@@ -240,7 +240,7 @@ void linux_pwr_do_periodic_work(void)
     // При этом ЕС продолжит работать от BATSENSE
     if (!pwr_ctx.wbmz_enabled) {
         if (adc_get_ch_mv(ADC_CHANNEL_ADC_V_IN) > 11500) {
-            linux_pwr_enable_wbmz();
+            linux_cpu_pwr_seq_enable_wbmz();
         }
     }
 
@@ -373,7 +373,7 @@ void linux_pwr_do_periodic_work(void)
             while (pwrkey_pressed()) {
                 pwrkey_do_periodic_work();
             }
-            if (linux_pwr_is_powered_from_wbmz()) {
+            if (linux_cpu_pwr_seq_is_powered_from_wbmz()) {
                 mcu_save_vcc_5v_last_state(MCU_VCC_5V_STATE_OFF);
             } else {
                 mcu_save_vcc_5v_last_state(MCU_VCC_5V_STATE_ON);
