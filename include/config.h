@@ -18,7 +18,7 @@
 #define WBEC_POWER_RESET_TIME_MS                1000
 // Время от короткого нажатия кнопки (запрос в линукс)
 // до принудительного выключения (если линукс не ответил)
-#define WBEC_LINUX_POWER_OFF_DELAY_MS           60000
+#define WBEC_LINUX_POWER_OFF_DELAY_MS           90000
 // Время задержки включения при работе от USB
 #define WBEC_LINUX_POWER_ON_DELAY_FROM_USB      5000
 
