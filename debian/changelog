@@ -1,3 +1,9 @@
+wb-ec-firmware (1.0.0-rc11) stable; urgency=medium
+
+  * Incerase linux poweroff delay to 90s
+
+ -- Pavel Gasheev <pavel.gasheev@wirenboard.ru>  Thu, 27 Jul 2023 13:46:42 +0300
+
 wb-ec-firmware (1.0.0-rc10) stable; urgency=medium
 
   * Fix conversations. No functional changes.
