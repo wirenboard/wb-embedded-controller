@@ -94,7 +94,7 @@ static void new_state(enum wbec_state s)
     }
 }
 
-static inline systime_t in_state_time(void)
+static inline systime_t in_state_time_ms(void)
 {
     return systick_get_time_since_timestamp(wbec_ctx.timestamp);
 }
@@ -332,7 +332,7 @@ void wbec_do_periodic_work(void)
         // подождать несколько секунд, чтобы не пропадали первые дебаг-сообщения
         if (wbec_info.poweron_reason == REASON_POWER_ON) {
             if (!vmon_get_ch_status(VMON_CHANNEL_V_IN)) {
-                if (in_state_time() < WBEC_LINUX_POWER_ON_DELAY_FROM_USB) {
+                if (in_state_time_ms() < WBEC_LINUX_POWER_ON_DELAY_FROM_USB) {
                     static unsigned counter = 0;
                     if ((counter++) % 17 == 0) {
                         console_print("\e[?25l"); // hide cursor
@@ -390,7 +390,7 @@ void wbec_do_periodic_work(void)
     case WBEC_STATE_TEMP_CHECK_LOOP:
         // В этом состоянии линукс выключен, проверяем температуру
         // Сидим тут до тех пор, пока температура не станет выше -40
-        if (in_state_time() > 5000) {
+        if (in_state_time_ms() > 5000) {
             if (adc.temp < WBEC_MINIMUM_WORKING_TEMPERATURE_C_X100) {
                 console_print_w_prefix("Board temperature is below -40°C! Rechecking in 5 seconds\r\n");
                 new_state(WBEC_STATE_TEMP_CHECK_LOOP);
@@ -548,7 +548,7 @@ void wbec_do_periodic_work(void)
             console_print_w_prefix("Power off request from Linux after power key pressed. Powering off...\r\n");
             linux_pwr_off();
             new_state(WBEC_STATE_POWER_OFF_SEQUENCE_WAIT);
-        } else if (in_state_time() >= WBEC_LINUX_POWER_OFF_DELAY_MS) {
+        } else if (in_state_time_ms() >= WBEC_LINUX_POWER_OFF_DELAY_MS) {
             // Аварийное выключение (можно как-то дополнительно обработать)
             console_print("\r\n\n");
             console_print_w_prefix("No power off request from Linux after power key pressed. Power is forced off.\r\n");

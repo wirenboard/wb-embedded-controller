@@ -60,7 +60,7 @@ static inline void new_state(enum pwr_state s)
     pwr_ctx.timestamp = systick_get_system_time_ms();
 }
 
-static inline systime_t in_state_time(void)
+static inline systime_t in_state_time_ms(void)
 {
     return systick_get_time_since_timestamp(pwr_ctx.timestamp);
 }
@@ -261,7 +261,7 @@ void linux_pwr_do_periodic_work(void)
             // Если 3.3В появилось, то считаем что питание включено
             new_state(PS_ON_COMPLETE);
         }
-        if (in_state_time() > 1000) {
+        if (in_state_time_ms() > 1000) {
             // Если 3.3В не появилось, то попробуем включить PMIC через PWRON
             console_print_w_prefix("No voltage on 3.3V line, try to switch on PMIC throught PWRON\r\n");
             pmic_pwron_gpio_on();
@@ -280,7 +280,7 @@ void linux_pwr_do_periodic_work(void)
             pmic_pwron_gpio_off();
             new_state(PS_ON_COMPLETE);
         }
-        if (in_state_time() > 1500) {
+        if (in_state_time_ms() > 1500) {
             pwr_ctx.attempt++;
             pmic_pwron_gpio_off();
             if (pwr_ctx.attempt <= 3) {
@@ -297,7 +297,7 @@ void linux_pwr_do_periodic_work(void)
 
     // Третий шаг включения - отпускаем PWRON, ждём, пробуем ещё раз
     case PS_ON_STEP3_PMIC_PWRON_WAIT:
-        if (in_state_time() > 500) {
+        if (in_state_time_ms() > 500) {
             console_print_w_prefix("One more attempt to switch on PMIC throught PWRON\r\n");
             pmic_pwron_gpio_on();
             new_state(PS_ON_STEP2_PMIC_PWRON);
@@ -306,7 +306,7 @@ void linux_pwr_do_periodic_work(void)
 
     // Сброс питания 5В
     case PS_RESET_5V_WAIT:
-        if (in_state_time() > WBEC_POWER_RESET_TIME_MS) {
+        if (in_state_time_ms() > WBEC_POWER_RESET_TIME_MS) {
             linux_pwr_gpio_on();
             new_state(PS_ON_STEP1_WAIT_3V3);
         }
@@ -314,7 +314,7 @@ void linux_pwr_do_periodic_work(void)
 
     // Сброс PMIC через RESET самого PMIC
     case PS_RESET_PMIC_WAIT:
-        if ((!vmon_get_ch_status(VMON_CHANNEL_V33)) || (in_state_time() > 2000)) {
+        if ((!vmon_get_ch_status(VMON_CHANNEL_V33)) || (in_state_time_ms() > 2000)) {
             console_print_w_prefix("PMIC was reset throught RESET line\r\n");
             pmic_reset_gpio_off();
             pmic_pwron_gpio_off();
@@ -337,7 +337,7 @@ void linux_pwr_do_periodic_work(void)
             } else {
                 new_state(PS_OFF_COMPLETE);
             }
-        } else if (in_state_time() > 8000) {
+        } else if (in_state_time_ms() > 8000) {
             console_print_w_prefix("Warning: PMIC not switched off throught PWRON after 8s, disabling 5V line now\r\n");
             pmic_pwron_gpio_off();
             linux_pwr_gpio_off();
@@ -353,7 +353,7 @@ void linux_pwr_do_periodic_work(void)
     // PMIC_PWRON активирован
     case PS_LONG_PRESS_HANDLE:
         if ((!vmon_get_ch_status(VMON_CHANNEL_V33)) ||
-            (in_state_time() > 10000))
+            (in_state_time_ms() > 10000))
         {
             // Если пропало 3.3В или вышел таймаут - выключаем 5В и засыпаем
             pmic_pwron_gpio_off();
