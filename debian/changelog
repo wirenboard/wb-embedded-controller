@@ -1,3 +1,9 @@
+wb-ec-firmware (1.0.0-rc10) stable; urgency=medium
+
+  * Fix conversations. No functional changes.
+
+ -- Pavel Gasheev <pavel.gasheev@wirenboard.ru>  Thu, 27 Jul 2023 11:02:05 +0300
+
 wb-ec-firmware (1.0.0-rc9) stable; urgency=medium
 
   * Disable V_OUT when V_IN < 6.5V
