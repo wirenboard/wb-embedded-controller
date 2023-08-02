@@ -80,6 +80,19 @@ static void put_power_status_to_regmap(void)
     regmap_set_region_data(REGMAP_REGION_PWR_STATUS, &p, sizeof(p));
 }
 
+static void goto_standby_and_save_5v_status(void)
+{
+    if (vmon_get_ch_status(VMON_CHANNEL_V50)) {
+        console_print_w_prefix("5V line status: voltage present\r\n");
+        mcu_save_vcc_5v_last_state(MCU_VCC_5V_STATE_ON);
+    } else {
+        console_print_w_prefix("5V line status: no voltage\r\n");
+        mcu_save_vcc_5v_last_state(MCU_VCC_5V_STATE_OFF);
+    }
+    console_print_w_prefix("Power off and go to standby now\r\n");
+    mcu_goto_standby(WBEC_PERIODIC_WAKEUP_FIRST_TIMEOUT_S);
+}
+
 static void wbmz_control(void)
 {
     bool usb = vmon_get_ch_status(VMON_CHANNEL_VBUS_DEBUG) || vmon_get_ch_status(VMON_CHANNEL_VBUS_NETWORK);
@@ -282,9 +295,8 @@ void linux_cpu_pwr_seq_do_periodic_work(void)
     // или Vin < 9V или выдернули USB (WBMZ при этом не был включен)
     // В общем случае - не важно почему +5В пропало. Нужно перейти в спящий режим
     if (!vmon_get_ch_status(VMON_CHANNEL_V50)) {
-        console_print_w_prefix("No 5V, power off and go to standby now\r\n");
-        mcu_save_vcc_5v_last_state(MCU_VCC_5V_STATE_OFF);
-        mcu_goto_standby(WBEC_PERIODIC_WAKEUP_FIRST_TIMEOUT_S);
+        console_print_w_prefix("Voltage on 5V line is lost, power off and go to standby now\r\n");
+        goto_standby_and_save_5v_status();
     }
 
     switch (pwr_ctx.state) {
@@ -304,15 +316,7 @@ void linux_cpu_pwr_seq_do_periodic_work(void)
             pwr_ctx.wbmz_enabled = 0;
         }
         if (in_state_time_ms() > 200) {
-            if (vmon_get_ch_status(VMON_CHANNEL_V50)) {
-                console_print_w_prefix("5V line status: voltage present\r\n");
-                mcu_save_vcc_5v_last_state(MCU_VCC_5V_STATE_ON);
-            } else {
-                console_print_w_prefix("5V line status: no voltage\r\n");
-                mcu_save_vcc_5v_last_state(MCU_VCC_5V_STATE_OFF);
-            }
-            console_print_w_prefix("Power off and go to standby now\r\n");
-            mcu_goto_standby(WBEC_PERIODIC_WAKEUP_FIRST_TIMEOUT_S);
+            goto_standby_and_save_5v_status();
         }
         break;
 
@@ -422,13 +426,14 @@ void linux_cpu_pwr_seq_do_periodic_work(void)
             pmic_reset_gpio_off();
             linux_cpu_pwr_5v_gpio_off();
             console_print("\r\n\n");
-            console_print_w_prefix("Power off after power key long press detected.\r\n\n");
+            console_print_w_prefix("Power off after power key long press detected.\r\n");
             system_led_disable();
+            wbmz_off();
             // Ждём отпускания кнопки
             while (pwrkey_pressed()) {
                 pwrkey_do_periodic_work();
             }
-            new_state(PS_OFF_COMPLETE);
+            goto_standby_and_save_5v_status();
         } else if (!pwrkey_pressed()) {
             // Если кнопку отпустили - отпускаем PMIC_PWRON
             pmic_pwron_gpio_off();
