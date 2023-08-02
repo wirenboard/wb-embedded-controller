@@ -1,3 +1,14 @@
+wb-ec-firmware (1.0.0-rc12) stable; urgency=medium
+
+  * Immediately power off on short press if Linux is not booted
+  * Enable WBMZ on next reboot if 3.3V is lost to prevent power loss under load (for bad USB cable)
+  * Do not enable WBMZ if powered from USB
+  * Disable WBMZ if powered from USB and WBMZ discharged to prevent charge-discharge cycle
+  * Do not power off if Linux not respond on power off request from button
+  * Make power off request to Linux in the begin of long press
+
+ -- Pavel Gasheev <pavel.gasheev@wirenboard.ru>  Wed, 02 Aug 2023 11:45:20 +0300
+
 wb-ec-firmware (1.0.0-rc11) stable; urgency=medium
 
   * Incerase linux poweroff delay to 90s
