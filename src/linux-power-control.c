@@ -84,17 +84,29 @@ static void wbmz_control(void)
 {
     bool usb = vmon_get_ch_status(VMON_CHANNEL_VBUS_DEBUG) || vmon_get_ch_status(VMON_CHANNEL_VBUS_NETWORK);
     bool vin = vmon_get_ch_status(VMON_CHANNEL_V_IN_FOR_WBMZ);
+    static systime_t wbmz_disable_filter_ms;
 
     // Управление питанием WBMZ
     if (pwr_ctx.wbmz_enabled) {
         // Если WBMZ работает - работаем от батареи до тех пор, пока она не разрядится
-        if (usb && (!vin) && (!wbmz_working())) {
-            // Если работаем от USB и батарейка разрядилась - выключим её,
-            // для того, чтобы не уходить в цикл заряда-разряда
+        if ((!vin) && (!wbmz_working())) {
+            // Факт разряда батареи - совпадение условий
+            // - WBMZ включен
+            // - нет достаточного (11.5В) напряжения на Vin
+            // - нет сигнала STATUS_BAT
+            // Нужно выключить WBMZ для того, чтобы не уходить в цикл заряда-разряда
             // Если 5В при этом пропадет - перейдем в standby
             // Если останется - продолжим работать
-            pwr_ctx.wbmz_enabled = 0;
-            wbmz_off();
+            if (systick_get_time_since_timestamp(wbmz_disable_filter_ms) > 500) {
+                // Этот фильтр нужен, т.к. сигналы имеют разную природу
+                // STATUS_BAT - это GPIO, остальное - АЦП.
+                // Нужно время, чтобы убедиться что они все возникли одновременно
+                // и исключить переходные процессы
+                pwr_ctx.wbmz_enabled = 0;
+                wbmz_off();
+            }
+        } else {
+            wbmz_disable_filter_ms = systick_get_system_time_ms();
         }
     } else {
         // Если Vin превысило порог включения WBMZ - включим его
