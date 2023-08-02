@@ -20,8 +20,6 @@ static const gpio_pin_t gpio_wbmz_on = { EC_GPIO_WBMZ_ON };
 enum pwr_state {
     PS_INIT_OFF,                        // Выключенное состояние после подачи питания и перед включением линукса
 
-    // Выключение питания делается за 1 этап:
-    PS_OFF_STEP1_PMIC_PWRON,            // Активируем линию PMIC_PWRON и ждём, пока пропадёт 3.3В (примерно 6с)
     PS_OFF_COMPLETE,                    // Закончен процесс выключения, переход в standby
 
     // Включение питания делается максимум за 3 этапа.
@@ -33,8 +31,6 @@ enum pwr_state {
 
     PS_RESET_5V_WAIT,                   // Нужно при перезаргрузке - выключаем 5В и ждём разрядку линий
     PS_RESET_PMIC_WAIT,                 // Сброс PMIC через PMIC_RESET_PWROK. Ждём, пока пропадёт 3.3В
-
-    PS_LONG_PRESS_HANDLE,               // Трансляция долгого нажатия в PMIC_PWRON и ожидание выключения PMIC
 };
 
 struct pwr_ctx {
@@ -80,21 +76,46 @@ static void put_power_status_to_regmap(void)
     regmap_set_region_data(REGMAP_REGION_PWR_STATUS, &p, sizeof(p));
 }
 
+static void goto_standby_and_save_5v_status(void)
+{
+    if (vmon_get_ch_status(VMON_CHANNEL_V50)) {
+        console_print_w_prefix("5V line status: voltage present\r\n");
+        mcu_save_vcc_5v_last_state(MCU_VCC_5V_STATE_ON);
+    } else {
+        console_print_w_prefix("5V line status: no voltage\r\n");
+        mcu_save_vcc_5v_last_state(MCU_VCC_5V_STATE_OFF);
+    }
+    console_print_w_prefix("Power off and go to standby now\r\n");
+    mcu_goto_standby(WBEC_PERIODIC_WAKEUP_FIRST_TIMEOUT_S);
+}
+
 static void wbmz_control(void)
 {
     bool usb = vmon_get_ch_status(VMON_CHANNEL_VBUS_DEBUG) || vmon_get_ch_status(VMON_CHANNEL_VBUS_NETWORK);
     bool vin = vmon_get_ch_status(VMON_CHANNEL_V_IN_FOR_WBMZ);
+    static systime_t wbmz_disable_filter_ms;
 
     // Управление питанием WBMZ
     if (pwr_ctx.wbmz_enabled) {
         // Если WBMZ работает - работаем от батареи до тех пор, пока она не разрядится
-        if (usb && (!vin) && (!wbmz_working())) {
-            // Если работаем от USB и батарейка разрядилась - выключим её,
-            // для того, чтобы не уходить в цикл заряда-разряда
+        if ((!vin) && (!wbmz_working())) {
+            // Факт разряда батареи - совпадение условий
+            // - WBMZ включен
+            // - нет достаточного (11.5В) напряжения на Vin
+            // - нет сигнала STATUS_BAT
+            // Нужно выключить WBMZ для того, чтобы не уходить в цикл заряда-разряда
             // Если 5В при этом пропадет - перейдем в standby
             // Если останется - продолжим работать
-            pwr_ctx.wbmz_enabled = 0;
-            wbmz_off();
+            if (systick_get_time_since_timestamp(wbmz_disable_filter_ms) > 500) {
+                // Этот фильтр нужен, т.к. сигналы имеют разную природу
+                // STATUS_BAT - это GPIO, остальное - АЦП.
+                // Нужно время, чтобы убедиться что они все возникли одновременно
+                // и исключить переходные процессы
+                pwr_ctx.wbmz_enabled = 0;
+                wbmz_off();
+            }
+        } else {
+            wbmz_disable_filter_ms = systick_get_system_time_ms();
         }
     } else {
         // Если Vin превысило порог включения WBMZ - включим его
@@ -163,24 +184,6 @@ void linux_cpu_pwr_seq_on(void)
 }
 
 /**
- * @brief Выключает питание линукс штатным способом:
- * Активируется сигнал PWRON на PMIC, ждём выключения PMIC, потом выключаем 5В
- */
-void linux_cpu_pwr_seq_off(void)
-{
-    if ((pwr_ctx.state == PS_INIT_OFF) ||
-        (pwr_ctx.state == PS_OFF_COMPLETE) ||
-        (pwr_ctx.state == PS_OFF_STEP1_PMIC_PWRON))
-    {
-        return;
-    }
-
-    pmic_pwron_gpio_on();
-    new_state(PS_OFF_STEP1_PMIC_PWRON);
-    pwr_ctx.reset_flag = false;
-}
-
-/**
  * @brief Выключение питания путём отключения 5В сразу, без PMIC.
  * Нужно для отключения по долгому нажатию
  */
@@ -189,16 +192,6 @@ void linux_cpu_pwr_seq_hard_off(void)
     linux_cpu_pwr_5v_gpio_off();
     pmic_pwron_gpio_off();
     new_state(PS_OFF_COMPLETE);
-}
-
-/**
- * @brief Сброс питания (выключение и через 1с включение)
- * Через PMIC PWRON (как штатное выключение-включение)
- */
-void linux_cpu_pwr_seq_reset()
-{
-    linux_cpu_pwr_seq_off();
-    pwr_ctx.reset_flag = true;
 }
 
 /**
@@ -261,8 +254,16 @@ void linux_cpu_pwr_seq_do_periodic_work(void)
     put_power_status_to_regmap();
 
     if (pwrkey_handle_long_press()) {
-        pmic_pwron_gpio_on();
-        new_state(PS_LONG_PRESS_HANDLE);
+        linux_cpu_pwr_5v_gpio_off();
+        console_print("\r\n\n");
+        console_print_w_prefix("Power off after power key long press detected.\r\n");
+        system_led_disable();
+        wbmz_off();
+        // Ждём отпускания кнопки
+        while (pwrkey_pressed()) {
+            pwrkey_do_periodic_work();
+        }
+        goto_standby_and_save_5v_status();
     }
 
     // Если неожиданно пропало питание +5В,
@@ -270,9 +271,8 @@ void linux_cpu_pwr_seq_do_periodic_work(void)
     // или Vin < 9V или выдернули USB (WBMZ при этом не был включен)
     // В общем случае - не важно почему +5В пропало. Нужно перейти в спящий режим
     if (!vmon_get_ch_status(VMON_CHANNEL_V50)) {
-        console_print_w_prefix("No 5V, power off and go to standby now\r\n");
-        mcu_save_vcc_5v_last_state(MCU_VCC_5V_STATE_OFF);
-        mcu_goto_standby(WBEC_PERIODIC_WAKEUP_FIRST_TIMEOUT_S);
+        console_print_w_prefix("Voltage on 5V line is lost, power off and go to standby now\r\n");
+        goto_standby_and_save_5v_status();
     }
 
     switch (pwr_ctx.state) {
@@ -292,15 +292,7 @@ void linux_cpu_pwr_seq_do_periodic_work(void)
             pwr_ctx.wbmz_enabled = 0;
         }
         if (in_state_time_ms() > 200) {
-            if (vmon_get_ch_status(VMON_CHANNEL_V50)) {
-                console_print_w_prefix("5V line status: voltage present\r\n");
-                mcu_save_vcc_5v_last_state(MCU_VCC_5V_STATE_ON);
-            } else {
-                console_print_w_prefix("5V line status: no voltage\r\n");
-                mcu_save_vcc_5v_last_state(MCU_VCC_5V_STATE_OFF);
-            }
-            console_print_w_prefix("Power off and go to standby now\r\n");
-            mcu_goto_standby(WBEC_PERIODIC_WAKEUP_FIRST_TIMEOUT_S);
+            goto_standby_and_save_5v_status();
         }
         break;
 
@@ -367,58 +359,6 @@ void linux_cpu_pwr_seq_do_periodic_work(void)
         if ((!vmon_get_ch_status(VMON_CHANNEL_V33)) || (in_state_time_ms() > 2000)) {
             console_print_w_prefix("PMIC was reset throught RESET line\r\n");
             pmic_reset_gpio_off();
-            pmic_pwron_gpio_off();
-            new_state(PS_ON_STEP1_WAIT_3V3);
-        }
-        break;
-
-    // Выключение питания штатным путём через PWRON
-    // В этом состоянии PWRON активирован
-    case PS_OFF_STEP1_PMIC_PWRON:
-        // Если пропало 3.3В (или не пропало и случился таймаут)
-        // выключаем 5В
-        // И переходим либо в выключенное состояние
-        if (!vmon_get_ch_status(VMON_CHANNEL_V33)) {
-            console_print_w_prefix("PMIC switched off throught PWRON, disabling 5V line now\r\n");
-            pmic_pwron_gpio_off();
-            linux_cpu_pwr_5v_gpio_off();
-            if (pwr_ctx.reset_flag) {
-                new_state(PS_RESET_5V_WAIT);
-            } else {
-                new_state(PS_OFF_COMPLETE);
-            }
-        } else if (in_state_time_ms() > 8000) {
-            console_print_w_prefix("Warning: PMIC not switched off throught PWRON after 8s, disabling 5V line now\r\n");
-            pmic_pwron_gpio_off();
-            linux_cpu_pwr_5v_gpio_off();
-            if (pwr_ctx.reset_flag) {
-                new_state(PS_RESET_5V_WAIT);
-            } else {
-                new_state(PS_OFF_COMPLETE);
-            }
-        }
-        break;
-
-    // В это состояние переходим после детектирования долгого нажатия
-    // PMIC_PWRON активирован
-    case PS_LONG_PRESS_HANDLE:
-        if ((!vmon_get_ch_status(VMON_CHANNEL_V33)) ||
-            (in_state_time_ms() > 10000))
-        {
-            // Если пропало 3.3В или вышел таймаут - выключаем 5В и засыпаем
-            pmic_pwron_gpio_off();
-            pmic_reset_gpio_off();
-            linux_cpu_pwr_5v_gpio_off();
-            console_print("\r\n\n");
-            console_print_w_prefix("Power off after power key long press detected.\r\n\n");
-            system_led_disable();
-            // Ждём отпускания кнопки
-            while (pwrkey_pressed()) {
-                pwrkey_do_periodic_work();
-            }
-            new_state(PS_OFF_COMPLETE);
-        } else if (!pwrkey_pressed()) {
-            // Если кнопку отпустили - отпускаем PMIC_PWRON
             pmic_pwron_gpio_off();
             new_state(PS_ON_STEP1_WAIT_3V3);
         }

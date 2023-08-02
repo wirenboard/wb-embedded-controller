@@ -3,9 +3,7 @@
 
 void linux_cpu_pwr_seq_init(bool on);
 void linux_cpu_pwr_seq_on(void);
-void linux_cpu_pwr_seq_off(void);
 void linux_cpu_pwr_seq_hard_off(void);
-void linux_cpu_pwr_seq_reset(void);
 void linux_cpu_pwr_seq_hard_reset(void);
 void linux_cpu_pwr_seq_reset_pmic(void);
 bool linux_cpu_pwr_seq_is_busy(void);

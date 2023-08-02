@@ -1,3 +1,10 @@
+wb-ec-firmware (1.0.0-rc14) stable; urgency=medium
+
+  * Try to restart on 3.3V lost only if 5V present
+  * Powering off and restaring throught 5V line directly, not PMIC
+
+ -- Pavel Gasheev <pavel.gasheev@wirenboard.ru>  Mon, 07 Aug 2023 12:16:34 +0300
+
 wb-ec-firmware (1.0.0-rc13) stable; urgency=medium
 
   * report usb voltages on startup
@@ -12,6 +19,7 @@ wb-ec-firmware (1.0.0-rc12) stable; urgency=medium
   * Disable WBMZ if powered from USB and WBMZ discharged to prevent charge-discharge cycle
   * Do not power off if Linux not respond on power off request from button
   * Make power off request to Linux in the begin of long press
+  * Starting up delay only if powered on from USB Console
 
  -- Pavel Gasheev <pavel.gasheev@wirenboard.ru>  Wed, 02 Aug 2023 11:45:20 +0300
 

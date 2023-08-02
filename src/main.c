@@ -76,7 +76,6 @@ int main(void)
         pwrkey_do_periodic_work();
         wdt_do_periodic_work();
         gpio_do_periodic_work();
-        linux_cpu_pwr_seq_do_periodic_work();
 
         // Sybsystems
         rtc_alarm_do_periodic_work();
@@ -84,6 +83,7 @@ int main(void)
         vmon_do_periodic_work();
 
         // Main algorithm
+        linux_cpu_pwr_seq_do_periodic_work();
         wbec_do_periodic_work();
     }
 }
