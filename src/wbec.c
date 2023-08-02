@@ -333,7 +333,7 @@ void wbec_do_periodic_work(void)
         // Если включились по USB (в общем случае - не по Vin) - нужно
         // подождать несколько секунд, чтобы не пропадали первые дебаг-сообщения
         if (wbec_info.poweron_reason == REASON_POWER_ON) {
-            if (!vmon_get_ch_status(VMON_CHANNEL_V_IN)) {
+            if (vmon_get_ch_status(VMON_CHANNEL_VBUS_DEBUG)) {
                 if (in_state_time_ms() < WBEC_LINUX_POWER_ON_DELAY_FROM_USB) {
                     static unsigned counter = 0;
                     if ((counter++) % 17 == 0) {
