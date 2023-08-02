@@ -18,9 +18,11 @@ static const gpio_pin_t gpio_wbmz_status_bat = { EC_GPIO_WBMZ_STATUS_BAT };
 static const gpio_pin_t gpio_wbmz_on = { EC_GPIO_WBMZ_ON };
 
 enum pwr_state {
+    PS_INIT_OFF,                        // Выключенное состояние после подачи питания и перед включением линукса
+
     // Выключение питания делается за 1 этап:
     PS_OFF_STEP1_PMIC_PWRON,            // Активируем линию PMIC_PWRON и ждём, пока пропадёт 3.3В (примерно 6с)
-    PS_OFF_COMPLETE,                    // Питание выключено
+    PS_OFF_COMPLETE,                    // Закончен процесс выключения, переход в standby
 
     // Включение питания делается максимум за 3 этапа.
     // Если всё идет штатно - то за 1 этап.
@@ -45,7 +47,7 @@ struct pwr_ctx {
 };
 
 static struct pwr_ctx pwr_ctx = {
-    .state = PS_OFF_COMPLETE,
+    .state = PS_INIT_OFF,
 };
 
 static inline void linux_cpu_pwr_5v_gpio_on(void)   { GPIO_S_SET(gpio_linux_power); }
@@ -55,6 +57,7 @@ static inline void pmic_pwron_gpio_off(void)        { GPIO_S_RESET(gpio_pmic_pwr
 static inline void pmic_reset_gpio_on(void)         { GPIO_S_SET(gpio_pmic_reset_pwrok); }
 static inline void pmic_reset_gpio_off(void)        { GPIO_S_RESET(gpio_pmic_reset_pwrok); }
 static inline void wbmz_on(void)                    { GPIO_S_SET(gpio_wbmz_on); }
+static inline void wbmz_off(void)                   { GPIO_S_RESET(gpio_wbmz_on); }
 static inline bool wbmz_working(void)               { return (!GPIO_S_TEST(gpio_wbmz_status_bat)); }
 
 static inline void new_state(enum pwr_state s)
@@ -77,6 +80,34 @@ static void put_power_status_to_regmap(void)
     regmap_set_region_data(REGMAP_REGION_PWR_STATUS, &p, sizeof(p));
 }
 
+static void wbmz_control(void)
+{
+    bool usb = vmon_get_ch_status(VMON_CHANNEL_VBUS_DEBUG) || vmon_get_ch_status(VMON_CHANNEL_VBUS_NETWORK);
+    bool vin = vmon_get_ch_status(VMON_CHANNEL_V_IN_FOR_WBMZ);
+
+    // Управление питанием WBMZ
+    if (pwr_ctx.wbmz_enabled) {
+        // Если WBMZ работает - работаем от батареи до тех пор, пока она не разрядится
+        if (usb && (!vin) && (!wbmz_working())) {
+            // Если работаем от USB и батарейка разрядилась - выключим её,
+            // для того, чтобы не уходить в цикл заряда-разряда
+            // Если 5В при этом пропадет - перейдем в standby
+            // Если останется - продолжим работать
+            pwr_ctx.wbmz_enabled = 0;
+            wbmz_off();
+        }
+    } else {
+        // Если Vin превысило порог включения WBMZ - включим его
+        // Но только если нет USB, т.к. в этом случае WBMZ будет всегда разряжаться
+        // Требование такое: если работаем от USB, не нужно включать батарейку
+        // Однако если хотим чтоб WBMZ работал при подключенном USB, надо
+        // сначала включить контроллер кнопкой, а потом подключать USB
+        if (vin && (!usb)) {
+            linux_cpu_pwr_seq_enable_wbmz();
+        }
+    }
+}
+
 /**
  * @brief Инициализирует GPIO управления питанием как выходы.
  * При включении питания WB питание на процессор не подается, пока не зарядится RC-цепочка
@@ -92,7 +123,7 @@ void linux_cpu_pwr_seq_init(bool on)
         linux_cpu_pwr_seq_on();
     } else {
         linux_cpu_pwr_5v_gpio_off();
-        new_state(PS_OFF_COMPLETE);
+        new_state(PS_INIT_OFF);
     }
     GPIO_S_SET_OUTPUT(gpio_linux_power);
 
@@ -137,7 +168,8 @@ void linux_cpu_pwr_seq_on(void)
  */
 void linux_cpu_pwr_seq_off(void)
 {
-    if ((pwr_ctx.state == PS_OFF_COMPLETE) ||
+    if ((pwr_ctx.state == PS_INIT_OFF) ||
+        (pwr_ctx.state == PS_OFF_COMPLETE) ||
         (pwr_ctx.state == PS_OFF_STEP1_PMIC_PWRON))
     {
         return;
@@ -233,17 +265,6 @@ void linux_cpu_pwr_seq_do_periodic_work(void)
         new_state(PS_LONG_PRESS_HANDLE);
     }
 
-    // Управление питанием WBMZ
-    // Если мы тут находимся, значит хотим линукс включить
-    // И должны включить WBMZ, если Vin > 11.5V
-    // Выключать WBMZ специально не надо - оно выключится само при переходе в standby
-    // При этом ЕС продолжит работать от BATSENSE
-    if (!pwr_ctx.wbmz_enabled) {
-        if (adc_get_ch_mv(ADC_CHANNEL_ADC_V_IN) > 11500) {
-            linux_cpu_pwr_seq_enable_wbmz();
-        }
-    }
-
     // Если неожиданно пропало питание +5В,
     // это означает, что разрядился WBMZ, а EC продолжает работать от BATSENSE
     // или Vin < 9V или выдернули USB (WBMZ при этом не был включен)
@@ -255,9 +276,32 @@ void linux_cpu_pwr_seq_do_periodic_work(void)
     }
 
     switch (pwr_ctx.state) {
-    // Если алгоритм завершился (выключил или включил питание) - ничего не делаем
-    case PS_OFF_COMPLETE:
+    // Если алгоритм ещё не начался - ничего не делаем
+    case PS_INIT_OFF:
+        break;
+
     case PS_ON_COMPLETE:
+        wbmz_control();
+        break;
+
+    case PS_OFF_COMPLETE:
+        // Если алгоритм выключил питание - нужно отключить WBMZ и проверить,
+        // осталось ли напряжение на +5В. Это может быть USB или Vin < 11.5V
+        if (pwr_ctx.wbmz_enabled) {
+            wbmz_off();
+            pwr_ctx.wbmz_enabled = 0;
+        }
+        if (in_state_time_ms() > 200) {
+            if (vmon_get_ch_status(VMON_CHANNEL_V50)) {
+                console_print_w_prefix("5V line status: voltage present\r\n");
+                mcu_save_vcc_5v_last_state(MCU_VCC_5V_STATE_ON);
+            } else {
+                console_print_w_prefix("5V line status: no voltage\r\n");
+                mcu_save_vcc_5v_last_state(MCU_VCC_5V_STATE_OFF);
+            }
+            console_print_w_prefix("Power off and go to standby now\r\n");
+            mcu_goto_standby(WBEC_PERIODIC_WAKEUP_FIRST_TIMEOUT_S);
+        }
         break;
 
     // Первый шаг включения питания: проверка, что 3.3В появилось, после того как подали 5В
@@ -365,7 +409,6 @@ void linux_cpu_pwr_seq_do_periodic_work(void)
             pmic_pwron_gpio_off();
             pmic_reset_gpio_off();
             linux_cpu_pwr_5v_gpio_off();
-            new_state(PS_OFF_COMPLETE);
             console_print("\r\n\n");
             console_print_w_prefix("Power off after power key long press detected.\r\n\n");
             system_led_disable();
@@ -373,12 +416,7 @@ void linux_cpu_pwr_seq_do_periodic_work(void)
             while (pwrkey_pressed()) {
                 pwrkey_do_periodic_work();
             }
-            if (linux_cpu_pwr_seq_is_powered_from_wbmz()) {
-                mcu_save_vcc_5v_last_state(MCU_VCC_5V_STATE_OFF);
-            } else {
-                mcu_save_vcc_5v_last_state(MCU_VCC_5V_STATE_ON);
-            }
-            mcu_goto_standby(WBEC_PERIODIC_WAKEUP_FIRST_TIMEOUT_S);
+            new_state(PS_OFF_COMPLETE);
         } else if (!pwrkey_pressed()) {
             // Если кнопку отпустили - отпускаем PMIC_PWRON
             pmic_pwron_gpio_off();
