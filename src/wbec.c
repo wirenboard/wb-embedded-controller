@@ -375,6 +375,10 @@ void wbec_do_periodic_work(void)
 
         console_print_w_prefix("Vin: ");
         console_print_fixed_point(adc.v_in / 100, 1);
+        console_print("V, USB Net: ");
+        console_print_fixed_point(adc.vbus_network / 100, 1);
+        console_print("V, USB Console: ");
+        console_print_fixed_point(adc.vbus_console / 100, 1);
         console_print("V\r\n");
 
         if (adc.temp < WBEC_MINIMUM_WORKING_TEMPERATURE_C_X100) {

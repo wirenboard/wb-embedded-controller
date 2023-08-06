@@ -1,3 +1,9 @@
+wb-ec-firmware (1.0.0-rc13) stable; urgency=medium
+
+  * report usb voltages on startup
+
+ -- Evgeny Boger <boger@wirenboard.com>  Sun, 06 Aug 2023 16:36:41 +0300
+
 wb-ec-firmware (1.0.0-rc12) stable; urgency=medium
 
   * Immediately power off on short press if Linux is not booted
