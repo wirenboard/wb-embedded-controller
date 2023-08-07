@@ -31,8 +31,6 @@ enum pwr_state {
 
     PS_RESET_5V_WAIT,                   // Нужно при перезаргрузке - выключаем 5В и ждём разрядку линий
     PS_RESET_PMIC_WAIT,                 // Сброс PMIC через PMIC_RESET_PWROK. Ждём, пока пропадёт 3.3В
-
-    PS_LONG_PRESS_HANDLE,               // Трансляция долгого нажатия в PMIC_PWRON и ожидание выключения PMIC
 };
 
 struct pwr_ctx {
@@ -256,8 +254,16 @@ void linux_cpu_pwr_seq_do_periodic_work(void)
     put_power_status_to_regmap();
 
     if (pwrkey_handle_long_press()) {
-        pmic_pwron_gpio_on();
-        new_state(PS_LONG_PRESS_HANDLE);
+        linux_cpu_pwr_5v_gpio_off();
+        console_print("\r\n\n");
+        console_print_w_prefix("Power off after power key long press detected.\r\n");
+        system_led_disable();
+        wbmz_off();
+        // Ждём отпускания кнопки
+        while (pwrkey_pressed()) {
+            pwrkey_do_periodic_work();
+        }
+        goto_standby_and_save_5v_status();
     }
 
     // Если неожиданно пропало питание +5В,
@@ -353,32 +359,6 @@ void linux_cpu_pwr_seq_do_periodic_work(void)
         if ((!vmon_get_ch_status(VMON_CHANNEL_V33)) || (in_state_time_ms() > 2000)) {
             console_print_w_prefix("PMIC was reset throught RESET line\r\n");
             pmic_reset_gpio_off();
-            pmic_pwron_gpio_off();
-            new_state(PS_ON_STEP1_WAIT_3V3);
-        }
-        break;
-
-    // В это состояние переходим после детектирования долгого нажатия
-    // PMIC_PWRON активирован
-    case PS_LONG_PRESS_HANDLE:
-        if ((!vmon_get_ch_status(VMON_CHANNEL_V33)) ||
-            (in_state_time_ms() > 10000))
-        {
-            // Если пропало 3.3В или вышел таймаут - выключаем 5В и засыпаем
-            pmic_pwron_gpio_off();
-            pmic_reset_gpio_off();
-            linux_cpu_pwr_5v_gpio_off();
-            console_print("\r\n\n");
-            console_print_w_prefix("Power off after power key long press detected.\r\n");
-            system_led_disable();
-            wbmz_off();
-            // Ждём отпускания кнопки
-            while (pwrkey_pressed()) {
-                pwrkey_do_periodic_work();
-            }
-            goto_standby_and_save_5v_status();
-        } else if (!pwrkey_pressed()) {
-            // Если кнопку отпустили - отпускаем PMIC_PWRON
             pmic_pwron_gpio_off();
             new_state(PS_ON_STEP1_WAIT_3V3);
         }
