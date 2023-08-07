@@ -548,24 +548,31 @@ void wbec_do_periodic_work(void)
         // В результате PMIC выключается, но питание на линии 5В остаётся.
         // Ограничение по числу попыток нужно, чтобы избежать циклического перезапуска.
         if (!vmon_get_ch_status(VMON_CHANNEL_V33)) {
-            if (systick_get_time_since_timestamp(wbec_ctx.power_loss_timestamp) < (WBEC_POWER_LOSS_TIMEOUT_MIN * 60 * 1000)) {
-                wbec_ctx.power_loss_cnt++;
-            } else {
-                wbec_ctx.power_loss_cnt = 0;
-            }
-            wbec_ctx.power_loss_timestamp = systick_get_system_time_ms();
-            if (wbec_ctx.power_loss_cnt > WBEC_POWER_LOSS_ATTEMPTS) {
-                console_print_w_prefix("Reaching power loss limit, power off and go to standby now\r\n");
-                // Чтобы включиться - нужно нажать кнопку или сбросить внешнее питание
+            if (!vmon_get_ch_status(VMON_CHANNEL_V50)) {
+                // Если при этом нет напряжения на линии 5В - это означает, что выдернули питание
+                // и не надо пытаться включиться заново
                 linux_cpu_pwr_seq_hard_off();
                 new_state(WBEC_STATE_POWER_OFF_SEQUENCE_WAIT);
             } else {
-                console_print_w_prefix("3.3V is lost, try to reset power\r\n");
-                console_print_w_prefix("Enable WBMZ to prevent power loss under load\r\n");
-                wbec_info.poweron_reason = REASON_PMIC_OFF;
-                linux_cpu_pwr_seq_enable_wbmz();
-                linux_cpu_pwr_seq_hard_reset();
-                new_state(WBEC_STATE_POWER_ON_SEQUENCE_WAIT);
+                if (systick_get_time_since_timestamp(wbec_ctx.power_loss_timestamp) < (WBEC_POWER_LOSS_TIMEOUT_MIN * 60 * 1000)) {
+                    wbec_ctx.power_loss_cnt++;
+                } else {
+                    wbec_ctx.power_loss_cnt = 0;
+                }
+                wbec_ctx.power_loss_timestamp = systick_get_system_time_ms();
+                if (wbec_ctx.power_loss_cnt > WBEC_POWER_LOSS_ATTEMPTS) {
+                    console_print_w_prefix("Reaching power loss limit, power off and go to standby now\r\n");
+                    // Чтобы включиться - нужно нажать кнопку или сбросить внешнее питание
+                    linux_cpu_pwr_seq_hard_off();
+                    new_state(WBEC_STATE_POWER_OFF_SEQUENCE_WAIT);
+                } else {
+                    console_print_w_prefix("3.3V is lost, try to reset power\r\n");
+                    console_print_w_prefix("Enable WBMZ to prevent power loss under load\r\n");
+                    wbec_info.poweron_reason = REASON_PMIC_OFF;
+                    linux_cpu_pwr_seq_enable_wbmz();
+                    linux_cpu_pwr_seq_hard_reset();
+                    new_state(WBEC_STATE_POWER_ON_SEQUENCE_WAIT);
+                }
             }
         }
         break;
