@@ -1,3 +1,10 @@
+wb-ec-firmware (1.0.0-rc14) stable; urgency=medium
+
+  * Try to restart on 3.3V lost only if 5V present
+  * Powering off and restaring throught 5V line directly, not PMIC
+
+ -- Pavel Gasheev <pavel.gasheev@wirenboard.ru>  Mon, 07 Aug 2023 12:16:34 +0300
+
 wb-ec-firmware (1.0.0-rc13) stable; urgency=medium
 
   * report usb voltages on startup
