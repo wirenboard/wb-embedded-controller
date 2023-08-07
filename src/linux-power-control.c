@@ -20,8 +20,6 @@ static const gpio_pin_t gpio_wbmz_on = { EC_GPIO_WBMZ_ON };
 enum pwr_state {
     PS_INIT_OFF,                        // Выключенное состояние после подачи питания и перед включением линукса
 
-    // Выключение питания делается за 1 этап:
-    PS_OFF_STEP1_PMIC_PWRON,            // Активируем линию PMIC_PWRON и ждём, пока пропадёт 3.3В (примерно 6с)
     PS_OFF_COMPLETE,                    // Закончен процесс выключения, переход в standby
 
     // Включение питания делается максимум за 3 этапа.
@@ -188,24 +186,6 @@ void linux_cpu_pwr_seq_on(void)
 }
 
 /**
- * @brief Выключает питание линукс штатным способом:
- * Активируется сигнал PWRON на PMIC, ждём выключения PMIC, потом выключаем 5В
- */
-void linux_cpu_pwr_seq_off(void)
-{
-    if ((pwr_ctx.state == PS_INIT_OFF) ||
-        (pwr_ctx.state == PS_OFF_COMPLETE) ||
-        (pwr_ctx.state == PS_OFF_STEP1_PMIC_PWRON))
-    {
-        return;
-    }
-
-    pmic_pwron_gpio_on();
-    new_state(PS_OFF_STEP1_PMIC_PWRON);
-    pwr_ctx.reset_flag = false;
-}
-
-/**
  * @brief Выключение питания путём отключения 5В сразу, без PMIC.
  * Нужно для отключения по долгому нажатию
  */
@@ -214,16 +194,6 @@ void linux_cpu_pwr_seq_hard_off(void)
     linux_cpu_pwr_5v_gpio_off();
     pmic_pwron_gpio_off();
     new_state(PS_OFF_COMPLETE);
-}
-
-/**
- * @brief Сброс питания (выключение и через 1с включение)
- * Через PMIC PWRON (как штатное выключение-включение)
- */
-void linux_cpu_pwr_seq_reset()
-{
-    linux_cpu_pwr_seq_off();
-    pwr_ctx.reset_flag = true;
 }
 
 /**
@@ -385,33 +355,6 @@ void linux_cpu_pwr_seq_do_periodic_work(void)
             pmic_reset_gpio_off();
             pmic_pwron_gpio_off();
             new_state(PS_ON_STEP1_WAIT_3V3);
-        }
-        break;
-
-    // Выключение питания штатным путём через PWRON
-    // В этом состоянии PWRON активирован
-    case PS_OFF_STEP1_PMIC_PWRON:
-        // Если пропало 3.3В (или не пропало и случился таймаут)
-        // выключаем 5В
-        // И переходим либо в выключенное состояние
-        if (!vmon_get_ch_status(VMON_CHANNEL_V33)) {
-            console_print_w_prefix("PMIC switched off throught PWRON, disabling 5V line now\r\n");
-            pmic_pwron_gpio_off();
-            linux_cpu_pwr_5v_gpio_off();
-            if (pwr_ctx.reset_flag) {
-                new_state(PS_RESET_5V_WAIT);
-            } else {
-                new_state(PS_OFF_COMPLETE);
-            }
-        } else if (in_state_time_ms() > 8000) {
-            console_print_w_prefix("Warning: PMIC not switched off throught PWRON after 8s, disabling 5V line now\r\n");
-            pmic_pwron_gpio_off();
-            linux_cpu_pwr_5v_gpio_off();
-            if (pwr_ctx.reset_flag) {
-                new_state(PS_RESET_5V_WAIT);
-            } else {
-                new_state(PS_OFF_COMPLETE);
-            }
         }
         break;
 

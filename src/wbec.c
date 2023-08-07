@@ -510,12 +510,12 @@ void wbec_do_periodic_work(void)
             // выключились по кнопке
             if (wbmz || alarm || btn) {
                 console_print_w_prefix("Powering off\r\n");
-                linux_cpu_pwr_seq_off();
+                linux_cpu_pwr_seq_hard_off();
                 new_state(WBEC_STATE_POWER_OFF_SEQUENCE_WAIT);
             } else {
                 console_print_w_prefix("Alarm not set, reboot system instead of power off.\r\n\n");
                 wbec_info.poweron_reason = REASON_REBOOT_NO_ALARM;
-                linux_cpu_pwr_seq_reset();
+                linux_cpu_pwr_seq_hard_reset();
                 new_state(WBEC_STATE_POWER_ON_SEQUENCE_WAIT);
             }
         } else if (linux_powerctrl_req == LINUX_POWERCTRL_REBOOT) {
@@ -523,7 +523,7 @@ void wbec_do_periodic_work(void)
             wbec_info.poweron_reason = REASON_REBOOT;
             console_print("\r\n\n");
             console_print_w_prefix("Reboot request, reset power.\r\n");
-            linux_cpu_pwr_seq_reset();
+            linux_cpu_pwr_seq_hard_reset();
             new_state(WBEC_STATE_POWER_ON_SEQUENCE_WAIT);
         } else if (linux_powerctrl_req == LINUX_POWERCTRL_PMIC_RESET) {
             wbec_info.poweron_reason = REASON_REBOOT;
@@ -538,7 +538,7 @@ void wbec_do_periodic_work(void)
             wbec_info.poweron_reason = REASON_WATCHDOG;
             console_print("\r\n\n");
             console_print_w_prefix("Watchdog is timed out, reset power.\r\n");
-            linux_cpu_pwr_seq_reset();
+            linux_cpu_pwr_seq_hard_reset();
             new_state(WBEC_STATE_POWER_ON_SEQUENCE_WAIT);
         }
 
