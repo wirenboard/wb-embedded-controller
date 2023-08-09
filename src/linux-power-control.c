@@ -86,7 +86,7 @@ static void goto_standby_and_save_5v_status(void)
         mcu_save_vcc_5v_last_state(MCU_VCC_5V_STATE_OFF);
     }
     console_print_w_prefix("Power off and go to standby now\r\n");
-    mcu_goto_standby(WBEC_PERIODIC_WAKEUP_FIRST_TIMEOUT_S);
+    linux_cpu_pwr_seq_off_and_goto_standby(WBEC_PERIODIC_WAKEUP_FIRST_TIMEOUT_S);
 }
 
 static void wbmz_control(void)
@@ -153,15 +153,29 @@ void linux_cpu_pwr_seq_init(bool on)
     GPIO_S_SET_OUTPUT(gpio_pmic_reset_pwrok);
     GPIO_S_SET_OUTPUT(gpio_pmic_pwron);
 
-    // Подтяжка вниз в режиме standby для GPIO управления питанием линукса
-    // Таким образом, в standby линукс будет выключен
-    PWR->PDCRD |= (1 << gpio_linux_power.pin);
-
     // STATUS_BAT это вход, который WBMZ тянет к земле открытым коллектором
     // Подтянут снаружи к V_EC
     GPIO_S_SET_INPUT(gpio_wbmz_status_bat);
 
     pwr_ctx.initialized = true;
+}
+
+/**
+ * @brief Переводит EC в standby и заводит таймер на пробуждение.
+ * Питание линукса держится выключенным в этом режиме.
+ *
+ * @param wakeup_after_s Задержка на пробуждение в секундах
+ */
+void linux_cpu_pwr_seq_off_and_goto_standby(uint16_t wakeup_after_s)
+{
+    // Подтяжка вниз в режиме standby для GPIO управления питанием линукса
+    // Таким образом, в standby линукс будет выключен
+    PWR->PDCRD |= (1 << gpio_linux_power.pin);
+
+    // Apply pull-up and pull-down configuration
+    PWR->CR3 |= PWR_CR3_APC;
+
+    mcu_goto_standby(wakeup_after_s);
 }
 
 /**

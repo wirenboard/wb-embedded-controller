@@ -218,7 +218,7 @@ void wbec_init(void)
             wbec_info.poweron_reason = REASON_POWER_KEY;
         } else {
             // Если кнопка не нажата (или нажата коротко и не прошла антидребезг) - засыпаем
-            mcu_goto_standby(WBEC_PERIODIC_WAKEUP_NEXT_TIMEOUT_S);
+            linux_cpu_pwr_seq_off_and_goto_standby(WBEC_PERIODIC_WAKEUP_NEXT_TIMEOUT_S);
         }
         break;
 
@@ -245,11 +245,11 @@ void wbec_init(void)
         } else if ((!vcc_5v_ok) && (vcc_5v_last_state == MCU_VCC_5V_STATE_ON)) {
             // Питание было и пропало - сохраняем послденее состояние в RTC домене
             mcu_save_vcc_5v_last_state(MCU_VCC_5V_STATE_OFF);
-            mcu_goto_standby(WBEC_PERIODIC_WAKEUP_NEXT_TIMEOUT_S);
+            linux_cpu_pwr_seq_off_and_goto_standby(WBEC_PERIODIC_WAKEUP_NEXT_TIMEOUT_S);
         } else {
             // Питание не появилось или не пропадало - засыпаем и ждём дальше
             // Здесь активен RTC periodic wakeup
-            mcu_goto_standby(WBEC_PERIODIC_WAKEUP_NEXT_TIMEOUT_S);
+            linux_cpu_pwr_seq_off_and_goto_standby(WBEC_PERIODIC_WAKEUP_NEXT_TIMEOUT_S);
         }
         break;
     }

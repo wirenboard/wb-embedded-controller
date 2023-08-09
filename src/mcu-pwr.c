@@ -31,9 +31,6 @@ void mcu_goto_standby(uint16_t wakeup_after_s)
     }
     rtc_set_periodic_wakeup(wakeup_after_s);
 
-    // Apply pull-up and pull-down configuration
-    PWR->CR3 |= PWR_CR3_APC;
-
     // Clear WKUP flags
     PWR->SCR = PWR_SCR_CWUF;
 
