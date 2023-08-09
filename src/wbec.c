@@ -218,7 +218,7 @@ void wbec_init(void)
             wbec_info.poweron_reason = REASON_POWER_KEY;
         } else {
             // Если кнопка не нажата (или нажата коротко и не прошла антидребезг) - засыпаем
-            mcu_goto_standby(WBEC_PERIODIC_WAKEUP_NEXT_TIMEOUT_S);
+            linux_cpu_pwr_seq_off_and_goto_standby(WBEC_PERIODIC_WAKEUP_NEXT_TIMEOUT_S);
         }
         break;
 
@@ -238,18 +238,26 @@ void wbec_init(void)
         // Напряжение питания ЕС может плавать от 2.7 до 3.3 В
         // Тут нужно ждать появления питания на линии +5В - измерять её относительно INT VREF
 
-        if ((vcc_5v_ok) && (vcc_5v_last_state == MCU_VCC_5V_STATE_OFF)) {
-            // Питание появилось - включаемся в обычном режиме
-            // (просто идём дальше)
-            wbec_info.poweron_reason = REASON_POWER_ON;
-        } else if ((!vcc_5v_ok) && (vcc_5v_last_state == MCU_VCC_5V_STATE_ON)) {
-            // Питание было и пропало - сохраняем послденее состояние в RTC домене
-            mcu_save_vcc_5v_last_state(MCU_VCC_5V_STATE_OFF);
-            mcu_goto_standby(WBEC_PERIODIC_WAKEUP_NEXT_TIMEOUT_S);
+        if (vcc_5v_ok) {
+            // Возможна ситуация, если долго держать EC RESET, то причина
+            // POWER ON переопределяется причиной PERIODIC WAKE UP
+            // В этом случае тоже нужно включиться.
+            // Понять это можно, измерив 3.3В
+            bool vcc_3v3_ok = vmon_check_ch_once(VMON_CHANNEL_V33);
+
+            if ((vcc_3v3_ok) || (vcc_5v_last_state == MCU_VCC_5V_STATE_OFF)) {
+                // Питание появилось или есть 3.3В (уже работаем) - включаемся в обычном режиме
+                // (просто идём дальше)
+                wbec_info.poweron_reason = REASON_POWER_ON;
+            } else {
+                linux_cpu_pwr_seq_off_and_goto_standby(WBEC_PERIODIC_WAKEUP_NEXT_TIMEOUT_S);
+            }
         } else {
-            // Питание не появилось или не пропадало - засыпаем и ждём дальше
-            // Здесь активен RTC periodic wakeup
-            mcu_goto_standby(WBEC_PERIODIC_WAKEUP_NEXT_TIMEOUT_S);
+            if (vcc_5v_last_state == MCU_VCC_5V_STATE_ON) {
+                // Питание было и пропало - сохраняем последнее состояние в RTC домене
+                mcu_save_vcc_5v_last_state(MCU_VCC_5V_STATE_OFF);
+            }
+            linux_cpu_pwr_seq_off_and_goto_standby(WBEC_PERIODIC_WAKEUP_NEXT_TIMEOUT_S);
         }
         break;
     }

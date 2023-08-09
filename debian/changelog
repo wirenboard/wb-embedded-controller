@@ -1,3 +1,10 @@
+wb-ec-firmware (1.0.0-rc15) stable; urgency=medium
+
+  * Use PA13 as hwrev pin instead of PA2
+  * Fix behavior when EC RESET is long pressed
+
+ -- Pavel Gasheev <pavel.gasheev@wirenboard.ru>  Thu, 10 Aug 2023 10:33:55 +0300
+
 wb-ec-firmware (1.0.0-rc14) stable; urgency=medium
 
   * Try to restart on 3.3V lost only if 5V present
