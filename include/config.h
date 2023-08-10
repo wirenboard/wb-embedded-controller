@@ -107,9 +107,10 @@
         macro(ADC_NTC,              6,      GPIOA,  6,      50,     1,              0           ) \
         macro(ADC_VBUS_DEBUG,       3,      GPIOA,  3,      10,     2.2 / 1.0,      0           ) \
         macro(ADC_VBUS_NETWORK,     5,      GPIOA,  5,      10,     2.2 / 1.0,      0           ) \
-        macro(ADC_HW_VER,           2,      GPIOA,  2,      50,     1,              0           ) \
+        macro(ADC_HW_VER,           17,     GPIOA,  13,     50,     1,              0           ) \
         macro(ADC_INT_VREF,         13,     0,      0,      50,     1,              0           ) \
 
+// macro(ADC_HW_VER,           17,      GPIOA,  13,     50,     1,              0           )
 
 // Ожидание после старта прошивки и перед опросом напряжений
 // Должно быть около 10RC канала ADC_5V
