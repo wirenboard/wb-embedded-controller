@@ -1,3 +1,9 @@
+wb-ec-firmware (1.0.0-rc16) stable; urgency=medium
+
+  * RTC: check and set all regs at startup
+
+ -- Pavel Gasheev <pavel.gasheev@wirenboard.ru>  Mon, 14 Aug 2023 16:20:05 +0300
+
 wb-ec-firmware (1.0.0-rc15) stable; urgency=medium
 
   * Use PA13 as hwrev pin instead of PA2
