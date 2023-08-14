@@ -15,6 +15,36 @@ static_assert((RTC_LSE_DRIVE_CAPABILITY >= 0) && (RTC_LSE_DRIVE_CAPABILITY <= 3)
 
 #define RTC_WUCKSEL_DIVIDER         0b100   // ck_spre (usually 1 Hz) clock
 
+// Значения регистров для настройки RTC
+#define RTC_PRER_REG_VAL            0x007F00FF  // 32768 Hz / (127 + 1) / (255 + 1) = 1 Hz
+#define RTC_PRER_REG_MSK            0x007F7FFF
+
+#define RTC_WUTR_REG_VAL            0x0000FFFF
+#define RTC_WUTR_REG_MSK            0x0000FFFF
+
+#define RTC_CR_REG_VAL ( \
+    (RTC_WUCKSEL_DIVIDER << RTC_CR_WUCKSEL_Pos) \
+)
+#define RTC_CR_REG_MSK ( \
+    RTC_CR_WUCKSEL_Msk | \
+    RTC_CR_TSEDGE_Msk | \
+    RTC_CR_REFCKON_Msk | \
+    RTC_CR_BYPSHAD_Msk | \
+    RTC_CR_FMT_Msk | \
+    RTC_CR_ALRBE_Msk | \
+    RTC_CR_TSE_Msk | \
+    RTC_CR_ALRBIE_Msk | \
+    RTC_CR_TSIE_Msk | \
+    RTC_CR_BKP_Msk | \
+    RTC_CR_POL_Msk | \
+    RTC_CR_OSEL_Msk | \
+    RTC_CR_ITSE_Msk | \
+    RTC_CR_TAMPTS_Msk | \
+    RTC_CR_TAMPOE_Msk | \
+    RTC_CR_TAMPALRM_PU_Msk | \
+    RTC_CR_TAMPALRM_TYPE_Msk \
+)
+
 // Время, которое будет установлено, если RTC на момент включения питания не работает
 static const struct rtc_time init_time = {
     .seconds = 0x00,
@@ -136,37 +166,26 @@ void rtc_init(void)
 	RCC->BDCR |= RCC_BDCR_RTCSEL_0;
 	RCC->BDCR |= RCC_BDCR_LSEON;
 
-    if (RTC->ICSR & RTC_ICSR_INITS) {
-        // RTC already initialized, check settings
-
-        // Check periodic wakeup clock selection
-        if ((RTC->CR & RTC_CR_WUCKSEL_Msk) != (RTC_WUCKSEL_DIVIDER << RTC_CR_WUCKSEL_Pos)) {
-            // Настройка не сбрасывается при ресете МК
-            // И может быть обновлена в новой прошивке
-            // Поэтому нужно проверить и при необходимости обновить настройку
-
-            // Disable RTC write protection
-            disable_wpr();
-
-            // Set new settings
-            RTC->CR &= ~RTC_CR_WUTE;
-            RTC->CR &= ~RTC_CR_WUCKSEL_Msk;
-            RTC->CR |= RTC_WUCKSEL_DIVIDER << RTC_CR_WUCKSEL_Pos;
-
-            // Enable RTC write protection
-            enable_wpr();
-        }
-        return;
+    // Регистры RTC не сбрасываются при System Reset, поэтому их нужно сравнить с нужными настройками
+    // и переинициализровать, если отличаются.
+    // Т.к. в новых прошивках возможны новые значения настроек и они должны корректно примениться
+    if (((RTC->CR & RTC_CR_REG_MSK) != RTC_CR_REG_VAL) ||
+        ((RTC->PRER & RTC_PRER_REG_MSK) != RTC_PRER_REG_VAL) ||
+        ((RTC->WUTR & RTC_WUTR_REG_MSK) != RTC_WUTR_REG_VAL))
+    {
+        disable_wpr();
+        RTC->CR = RTC_CR_REG_VAL;
+        RTC->PRER = RTC_PRER_REG_VAL;
+        RTC->WUTR = RTC_WUTR_REG_VAL;
+        enable_wpr();
     }
 
-    start_init_disable_wpr();
-
-    // Set 24-hour format
-    RTC->CR &= ~RTC_CR_FMT;
-
-    set_datetime(&init_time);
-
-    end_init_enable_wpr();
+    // Если RTC не инициализирован - нужно настроить часы на дефолтную дату
+    if ((RTC->ICSR & RTC_ICSR_INITS) == 0) {
+        start_init_disable_wpr();
+        set_datetime(&init_time);
+        end_init_enable_wpr();
+    }
 }
 
 
