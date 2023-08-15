@@ -19,9 +19,6 @@ static_assert((RTC_LSE_DRIVE_CAPABILITY >= 0) && (RTC_LSE_DRIVE_CAPABILITY <= 3)
 #define RTC_PRER_REG_VAL            0x007F00FF  // 32768 Hz / (127 + 1) / (255 + 1) = 1 Hz
 #define RTC_PRER_REG_MSK            0x007F7FFF
 
-#define RTC_WUTR_REG_VAL            0x0000FFFF
-#define RTC_WUTR_REG_MSK            0x0000FFFF
-
 #define RTC_CR_REG_VAL ( \
     (RTC_WUCKSEL_DIVIDER << RTC_CR_WUCKSEL_Pos) \
 )
@@ -170,13 +167,11 @@ void rtc_init(void)
     // и переинициализровать, если отличаются.
     // Т.к. в новых прошивках возможны новые значения настроек и они должны корректно примениться
     if (((RTC->CR & RTC_CR_REG_MSK) != RTC_CR_REG_VAL) ||
-        ((RTC->PRER & RTC_PRER_REG_MSK) != RTC_PRER_REG_VAL) ||
-        ((RTC->WUTR & RTC_WUTR_REG_MSK) != RTC_WUTR_REG_VAL))
+        ((RTC->PRER & RTC_PRER_REG_MSK) != RTC_PRER_REG_VAL))
     {
         disable_wpr();
         RTC->CR = RTC_CR_REG_VAL;
         RTC->PRER = RTC_PRER_REG_VAL;
-        RTC->WUTR = RTC_WUTR_REG_VAL;
         enable_wpr();
     }
 
