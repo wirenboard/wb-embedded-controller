@@ -19,39 +19,62 @@
 
 static_assert(EC_GPIO_PWRKEY_WKUP_NUM >= 1 && EC_GPIO_PWRKEY_WKUP_NUM <= 6, "Unsupported WKUP number");
 
+enum pwrkey_state {
+    PWRKEY_UNINTIALIZATED,
+    PWRKEY_RELEASED,
+    PWRKEY_PRESSED,
+};
+
+enum press_state {
+    PRESS_STATE_NO_PRESS,
+    PRESS_STATE_PRESS_BEGIN,
+    PRESS_STATE_LONG_PRESS,
+};
+
 static const gpio_pin_t pwrkey_gpio = { EC_GPIO_PWRKEY };
 
 // Состояние gpio. Используется для подавления дребезга
 struct pwrkey_gpio_ctx {
     systime_t timestamp;
-    bool prev_gpio_state;
-    bool logic_state;
-    bool initializated;
+    // bool prev_gpio_state;
+    // bool logic_state;
+    // bool initializated;
+    enum pwrkey_state prev_gpio_state;
+    enum pwrkey_state logic_state;
 };
 
 // Состояние кнопки после антидребезга. Используется для детектирования нажатий
 struct pwrkey_logic_ctx {
     systime_t timestamp;
-    bool prev_logic_state;
+    enum pwrkey_state prev_logic_state;
+    enum press_state press_state;
     bool short_pressed_flag;
     bool long_pressed_flag;
-    bool long_pressed_detected;
+    // bool long_pressed_detected;
 };
 
 static struct pwrkey_gpio_ctx gpio_ctx;
 static struct pwrkey_logic_ctx logic_ctx;
 
-static inline bool get_pwrkey_state(void)
+static inline enum pwrkey_state get_pwrkey_state(void)
 {
     #ifdef EC_GPIO_PWRKEY_ACTIVE_LOW
-        return !GPIO_S_TEST(pwrkey_gpio);
+        if GPIO_S_TEST(pwrkey_gpio) {
+            return PWRKEY_RELEASED;
+        } else {
+            return PWRKEY_PRESSED;
+        }
     #elif EC_GPIO_PWRKEY_ACTIVE_HIGH
-        return GPIO_S_TEST(pwrkey_gpio);
+        if GPIO_S_TEST(pwrkey_gpio) {
+            return PWRKEY_PRESSED;
+        } else {
+            return PWRKEY_RELEASED;
+        }
     #endif
 }
 
 // Выполняет подавление дребезга, результат записывает в gpio_ctx.logic_state
-static inline void debounce(bool gpio_state)
+static inline void debounce(enum pwrkey_state gpio_state)
 {
     // If GPIO state changed - save timestamp
     if (gpio_ctx.prev_gpio_state != gpio_state) {
@@ -70,28 +93,50 @@ static inline void debounce(bool gpio_state)
 
 // Детектирует нажатия, результат - установленные флаги нажатий
 // logic_ctx.short_pressed_flag или logic_ctx.long_pressed_flag
-static inline void handle_presses(bool gpio_debounced_state)
+static inline void handle_presses(enum pwrkey_state gpio_debounced_state)
 {
-    // Handle presses
+    // Детектирование нажатий
+    // Если состояние после дебаунса отличается от предыдущего, нужно распознавать  нажатия
+    // При этом после включения питания сюда попадем в любом случае (нажата кнопка или отпущена)
+    // после того как отработает дебаунс, т.к. исходное состояние - PWRKEY_UNINTIALIZATED
     if (logic_ctx.prev_logic_state != gpio_debounced_state) {
-        logic_ctx.prev_logic_state = gpio_debounced_state;
-        if (gpio_debounced_state) {
+        // Нажатие кнопки - это смена состояния с PWRKEY_RELEASED на PWRKEY_PRESSED
+        // Если предыдущее состояние было PWRKEY_UNINTIALIZATED, сюда не попадаем
+        // Поэтому если исходно кнопка будет нажата (включи кнопкой и держат)
+        // события нажатий не произойдут
+        if ((logic_ctx.prev_logic_state == PWRKEY_RELEASED) &&
+            (gpio_debounced_state == PWRKEY_PRESSED))
+        {
             // If button pressed - save timestamp
             logic_ctx.timestamp = systick_get_system_time_ms();
-            logic_ctx.long_pressed_detected = 0;
-        } else {
-            // If button released - check that it is not long press
-            if (!logic_ctx.long_pressed_detected) {
+            logic_ctx.press_state = PRESS_STATE_PRESS_BEGIN;
+        }
+
+        // Отпускание кнопки - это смена состояния с PWRKEY_PRESSED на PWRKEY_RELEASED
+        // Тут нужно проверить, было ли начато нажание (PRESS_STATE_PRESS_BEGIN)
+        // и если да - то какое оно: если не длинное - значит короткое
+        if ((logic_ctx.prev_logic_state == PWRKEY_PRESSED) &&
+            (gpio_debounced_state == PWRKEY_RELEASED))
+        {
+            if (logic_ctx.press_state == PRESS_STATE_PRESS_BEGIN) {
                 logic_ctx.short_pressed_flag = 1;
             }
+            logic_ctx.press_state = PRESS_STATE_NO_PRESS;
         }
+
+        logic_ctx.prev_logic_state = gpio_debounced_state;
     }
 
-    if (gpio_debounced_state) {
+    // Измеряем длительность удержания кнопки и фиксируем долгое нажатие
+    // Дополнительно проверяем, что нажатие началось,
+    // чтобы не фиксировать долгое нажатие, если кнопку держат после включения
+    if ((logic_ctx.press_state == PRESS_STATE_PRESS_BEGIN) &&
+        (gpio_debounced_state == PWRKEY_PRESSED))
+    {
         systime_t held_time = systick_get_time_since_timestamp(logic_ctx.timestamp);
         if (held_time > PWRKEY_LONG_PRESS_TIME_MS) {
+            logic_ctx.press_state = PRESS_STATE_LONG_PRESS;
             logic_ctx.long_pressed_flag = 1;
-            logic_ctx.long_pressed_detected = 1;
         }
     }
 }
@@ -109,7 +154,7 @@ void pwrkey_init(void)
     #elif EC_GPIO_PWRKEY_ACTIVE_HIGH
         PWR->PDCRA |= (1 << pwrkey_gpio.pin);
     #else
-        #error "pwrkey polarity not defined
+        #error "pwrkey polarity not defined"
     #endif
 
     // Set BUTTON pin as wakeup source
@@ -118,24 +163,20 @@ void pwrkey_init(void)
 
 void pwrkey_do_periodic_work(void)
 {
-    bool current_state = get_pwrkey_state();
-
-    // После включения питания кнопка может быть нажата
-    // (если кнопка и есть источник включения)
-    // Поэтому прежде чем делать всё остальное, нужно подождать пока кнопку отпустят
-    if (!gpio_ctx.initializated) {
-        if (current_state) {
-            gpio_ctx.timestamp = systick_get_system_time_ms();
-        } else {
-            if (systick_get_time_since_timestamp(gpio_ctx.timestamp) > PWRKEY_DEBOUNCE_MS) {
-                gpio_ctx.initializated = 1;
-            }
-        }
-        return;
-    }
+    enum pwrkey_state current_state = get_pwrkey_state();
 
     debounce(current_state);
     handle_presses(gpio_ctx.logic_state);
+}
+
+bool pwrkey_ready(void)
+{
+    return (gpio_ctx.logic_state != PWRKEY_UNINTIALIZATED);
+}
+
+bool pwrkey_pressed(void)
+{
+    return (gpio_ctx.logic_state == PWRKEY_PRESSED);
 }
 
 bool pwrkey_handle_short_press(void)
