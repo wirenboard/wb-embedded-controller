@@ -101,10 +101,6 @@ static inline void reset_and_init_spi(void)
 
 void spi_slave_init(void)
 {
-    // TODO Remove debug
-    GPIO_SET_OUTPUT(GPIOD, 0);
-    GPIO_SET_OUTPUT(GPIOD, 1);
-
     // Init SPI GPIOs
     GPIO_S_SET_OUTPUT(spi_pins.miso);
     GPIO_S_SET_INPUT(spi_pins.mosi);
@@ -138,9 +134,6 @@ void spi_slave_init(void)
 static void spi_irq_handler(void)
 {
     if (SPI2->SR & SPI_SR_RXNE) {
-        // TODO Remove debug
-        GPIO_SET(GPIOD, 0);
-
         // В прерывание по RXNE попадаем в любом случае
         // Если операция - чтение, принятые байты просто игнорируются
 
@@ -157,15 +150,9 @@ static void spi_irq_handler(void)
         } else if (spi_op == SPI_SLAVE_RECEIVE) {
             regmap_ext_write_reg_autoinc(rd);
         }
-
-        // TODO Remove debug
-        GPIO_RESET(GPIOD, 0);
     }
 
     if (SPI2->SR & SPI_SR_TXE) {
-        // TODO Remove debug
-        GPIO_SET(GPIOD, 1);
-
         // В прерывание по TXE также попадаем в любом случае,
         // даже если бит TXE выключен, в обработчик всё равно попадаем по RXNE
         // Это не мешает, если операция - не чтение, передаются нули
@@ -175,9 +162,6 @@ static void spi_irq_handler(void)
             w = regmap_ext_read_reg_autoinc();
         }
         spi_tx_u16(w);
-
-        // TODO Remove debug
-        GPIO_RESET(GPIOD, 1);
     }
 }
 
