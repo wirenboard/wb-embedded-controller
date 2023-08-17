@@ -9,6 +9,13 @@
  *  - выставляет флаг будильника в IRQ, если он сработал
  */
 
+static bool alarm_enabled = 0;
+
+bool rtc_alarm_is_alarm_enabled(void)
+{
+    return alarm_enabled;
+}
+
 void rtc_alarm_do_periodic_work(void)
 {
     if (rtc_get_ready_read()) {
@@ -41,7 +48,13 @@ void rtc_alarm_do_periodic_work(void)
         if (rtc_alarm.flag) {
             irq_set_flag(IRQ_ALARM);
             rtc_clear_alarm_flag();
+            // После сработки будильника нужно его выключить
+            // Чтобы он не срабатывал на втором круге
+            rtc_alarm.enabled = 0;
+            rtc_set_alarm(&rtc_alarm);
         }
+
+        alarm_enabled = rtc_alarm.enabled;
     }
 
     if (regmap_is_region_changed(REGMAP_REGION_RTC_TIME)) {
@@ -82,7 +95,7 @@ void rtc_alarm_do_periodic_work(void)
 
     if (regmap_is_region_changed(REGMAP_REGION_RTC_CFG)) {
         struct REGMAP_RTC_CFG cfg;
-        regmap_get_region_data(REGMAP_REGION_RTC_ALARM, &cfg, sizeof(cfg));
+        regmap_get_region_data(REGMAP_REGION_RTC_CFG, &cfg, sizeof(cfg));
 
         rtc_set_offset(cfg.offset);
 
