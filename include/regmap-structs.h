@@ -43,7 +43,7 @@
         /* 0x44 */  uint16_t v_a2; \
         /* 0x45 */  uint16_t v_a3; \
         /* 0x46 */  uint16_t v_a4; \
-        /* 0x47 */  uint16_t temp; \
+        /* 0x47 */  int16_t temp; \
         /* 0x48 */  uint16_t vbus_console; \
         /* 0x49 */  uint16_t vbus_network; \
     ) \
@@ -76,6 +76,7 @@
     m(     0xA0,    POWER_CTRL,     RW, \
         /* 0xA0 */  uint16_t off : 1; \
         /* -//- */  uint16_t reboot : 1; \
+        /* -//- */  uint16_t reset_pmic : 1; \
     ) \
     /*     Addr     Name            RO/RW */ \
     m(     0xB0,    IRQ_FLAGS,      RO, \
