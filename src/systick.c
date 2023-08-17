@@ -1,6 +1,7 @@
 #include "systick.h"
 #include "wbmcu_system.h"
 #include "config.h"
+#include "rcc.h"
 
 /**
  * Модуль считает время с дискретностью 1 мс
@@ -19,10 +20,10 @@ static void systick_irq_handler(void)
 
 void systick_init(void)
 {
-    system_time_ms = 0;
+    SysTick->CTRL &= ~(SysTick_CTRL_ENABLE_Msk | SysTick_CTRL_TICKINT_Msk);
 
     SysTick->VAL = 0;
-    SysTick->LOAD = F_CPU / 8 / 1000 - 1;
+    SysTick->LOAD = SystemCoreClock / 8 / 1000 - 1;
     SysTick->CTRL |= SysTick_CTRL_ENABLE_Msk | SysTick_CTRL_TICKINT_Msk;
     NVIC_SetHandler(SysTick_IRQn, systick_irq_handler);
     NVIC_EnableIRQ(SysTick_IRQn);
