@@ -64,12 +64,17 @@ DT_OVERLAY="
 remove_overlay_and_start_drivers() {
     rmdir $DT_OVERLAY_DIR
 
-    modprobe pwrkey-wbec
+    # This script may be called from bootlet in chroot
+    # where we can't manage services and kernel modules,
+    # so this check will suppress error messages.
+    if ! ischroot; then
+        modprobe pwrkey-wbec
 
-    systemctl restart wb-mqtt-gpio
-    systemctl restart wb-mqtt-adc
-    systemctl restart wb-rules
-    systemctl restart watchdog
+        systemctl restart wb-mqtt-gpio
+        systemctl restart wb-mqtt-adc
+        systemctl restart wb-rules
+        systemctl restart watchdog
+    fi
 }
 
 # Check that this is WB7.4 by reading compatible property from device tree
@@ -96,15 +101,19 @@ GPIO_BOOT0_NUM=$(gpiofind "$GPIO_BOOT0") || {
 
 echo "Firmware file to flashing: $FIRMWARE"
 
-# Remove pwrkey driver
-modprobe -r pwrkey-wbec
+# This script may be called from bootlet in chroot
+# where we can't manage services and kernel modules,
+# so this check will suppress error messages.
+if ! ischroot; then
+    # Remove pwrkey driver
+    modprobe -r pwrkey-wbec
 
-# Stop services
-systemctl stop wb-mqtt-gpio
-systemctl stop wb-mqtt-adc
-systemctl stop wb-rules
-systemctl stop watchdog
-
+    # Stop services
+    systemctl stop wb-mqtt-gpio
+    systemctl stop wb-mqtt-adc
+    systemctl stop wb-rules
+    systemctl stop watchdog
+fi
 
 # Apply overlay to disable spi and enable i2c
 rmdir $DT_OVERLAY_DIR 2> /dev/null

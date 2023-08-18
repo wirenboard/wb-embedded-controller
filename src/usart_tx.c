@@ -1,6 +1,7 @@
 #include "wbmcu_system.h"
 #include "gpio.h"
 #include "config.h"
+#include "rcc.h"
 
 /**
  * Модуль позволяет передавать строки в отладочный UART.
@@ -37,9 +38,13 @@ void usart_init(void)
 
     #ifdef EC_DEBUG_USART_USE_USART1
         RCC->APBENR2 |= RCC_APBENR2_USART1EN;
+
+        // Reset USART
+        RCC->APBRSTR2 |= RCC_APBRSTR2_USART1RST;
+        RCC->APBRSTR2 &= ~RCC_APBRSTR2_USART1RST;
     #endif
 
-    D_USART->BRR = F_CPU / EC_DEBUG_USART_BAUDRATE;
+    D_USART->BRR = SystemCoreClock / EC_DEBUG_USART_BAUDRATE;
     D_USART->CR1 |= USART_CR1_TE | USART_CR1_UE;
 }
 

@@ -1,6 +1,8 @@
 #include "rtc.h"
 #include "wbmcu_system.h"
 #include "gpio.h"
+#include "config.h"
+#include <assert.h>
 
 /**
  * Модуль предоставляет доступ к RTC через функции записи-чтения
@@ -9,6 +11,36 @@
  * Данные отдаются в BCD формате
  */
 
+static_assert((RTC_LSE_DRIVE_CAPABILITY >= 0) && (RTC_LSE_DRIVE_CAPABILITY <= 3), "Select proper LSE drive capability");
+
+#define RTC_WUCKSEL_DIVIDER         0b100   // ck_spre (usually 1 Hz) clock
+
+// Значения регистров для настройки RTC
+#define RTC_PRER_REG_VAL            0x007F00FF  // 32768 Hz / (127 + 1) / (255 + 1) = 1 Hz
+#define RTC_PRER_REG_MSK            0x007F7FFF
+
+#define RTC_CR_REG_VAL ( \
+    (RTC_WUCKSEL_DIVIDER << RTC_CR_WUCKSEL_Pos) \
+)
+#define RTC_CR_REG_MSK ( \
+    RTC_CR_WUCKSEL_Msk | \
+    RTC_CR_TSEDGE_Msk | \
+    RTC_CR_REFCKON_Msk | \
+    RTC_CR_BYPSHAD_Msk | \
+    RTC_CR_FMT_Msk | \
+    RTC_CR_ALRBE_Msk | \
+    RTC_CR_TSE_Msk | \
+    RTC_CR_ALRBIE_Msk | \
+    RTC_CR_TSIE_Msk | \
+    RTC_CR_BKP_Msk | \
+    RTC_CR_POL_Msk | \
+    RTC_CR_OSEL_Msk | \
+    RTC_CR_ITSE_Msk | \
+    RTC_CR_TAMPTS_Msk | \
+    RTC_CR_TAMPOE_Msk | \
+    RTC_CR_TAMPALRM_PU_Msk | \
+    RTC_CR_TAMPALRM_TYPE_Msk \
+)
 
 // Время, которое будет установлено, если RTC на момент включения питания не работает
 static const struct rtc_time init_time = {
@@ -111,23 +143,44 @@ void rtc_init(void)
     RCC->APBENR1 |= RCC_APBENR1_PWREN | RCC_APBENR1_RTCAPBEN;
 	PWR->CR1 |= PWR_CR1_DBP;
 
+    // Check LSE drive capability
+    if ((RCC->BDCR & RCC_BDCR_LSEDRV_Msk) != (RTC_LSE_DRIVE_CAPABILITY << RCC_BDCR_LSEDRV_Pos)) {
+        // Настройка не сбрасывается при ресете МК
+        // И может быть обновлена в новой прошивке
+        // Поэтому нужно проверить и при необходимости обновить настройку
+        // Изменять её можно только при остановленном LSE
+
+        // Disable LSE to change settings
+        RCC->BDCR &= ~RCC_BDCR_LSEON;
+        // Wait until disabled
+        while (RCC->BDCR & RCC_BDCR_LSERDY) {};
+        // Set new settings
+        RCC->BDCR &= ~RCC_BDCR_LSEDRV_Msk;
+        RCC->BDCR |= RTC_LSE_DRIVE_CAPABILITY << RCC_BDCR_LSEDRV_Pos;
+    }
+
 	RCC->BDCR |= RCC_BDCR_RTCEN;
 	RCC->BDCR |= RCC_BDCR_RTCSEL_0;
 	RCC->BDCR |= RCC_BDCR_LSEON;
 
-    if (RTC->ICSR & RTC_ICSR_INITS) {
-        // RTC already initialized, exit here
-        return;
+    // Регистры RTC не сбрасываются при System Reset, поэтому их нужно сравнить с нужными настройками
+    // и переинициализровать, если отличаются.
+    // Т.к. в новых прошивках возможны новые значения настроек и они должны корректно примениться
+    if (((RTC->CR & RTC_CR_REG_MSK) != RTC_CR_REG_VAL) ||
+        ((RTC->PRER & RTC_PRER_REG_MSK) != RTC_PRER_REG_VAL))
+    {
+        disable_wpr();
+        RTC->CR = RTC_CR_REG_VAL;
+        RTC->PRER = RTC_PRER_REG_VAL;
+        enable_wpr();
     }
 
-    start_init_disable_wpr();
-
-    // Set 24-hour format
-    RTC->CR &= ~RTC_CR_FMT;
-
-    set_datetime(&init_time);
-
-    end_init_enable_wpr();
+    // Если RTC не инициализирован - нужно настроить часы на дефолтную дату
+    if ((RTC->ICSR & RTC_ICSR_INITS) == 0) {
+        start_init_disable_wpr();
+        set_datetime(&init_time);
+        end_init_enable_wpr();
+    }
 }
 
 
@@ -245,6 +298,7 @@ void rtc_enable_pc13_1hz_clkout(void)
     GPIO_SET_OUTPUT(GPIOC, 13);
 
     start_init_disable_wpr();
+    RTC->CR &= ~(RTC_CR_COE | RTC_CR_COSEL | RTC_CR_OUT2EN);
     RTC->CR |= RTC_CR_COE | RTC_CR_COSEL;
     end_init_enable_wpr();
 }
@@ -254,6 +308,75 @@ void rtc_disable_pc13_1hz_clkout(void)
     GPIO_SET_INPUT(GPIOC, 13);
 
     start_init_disable_wpr();
-    RTC->CR &= ~(RTC_CR_COE | RTC_CR_COSEL);
+    RTC->CR &= ~(RTC_CR_COE | RTC_CR_COSEL | RTC_CR_OUT2EN);
     end_init_enable_wpr();
+}
+
+void rtc_enable_pa4_1hz_clkout(void)
+{
+    GPIO_SET_PUSHPULL(GPIOA, 4);
+    GPIO_SET_OUTPUT(GPIOA, 4);
+    GPIO_SET_AF(GPIOA, 4, 7);
+
+    start_init_disable_wpr();
+    RTC->CR &= ~(RTC_CR_COE | RTC_CR_COSEL | RTC_CR_OUT2EN);
+    RTC->CR |= RTC_CR_COE | RTC_CR_OUT2EN | RTC_CR_COSEL;
+    end_init_enable_wpr();
+}
+
+void rtc_disable_pa4_1hz_clkout(void)
+{
+    GPIO_SET_INPUT(GPIOA, 4);
+
+    start_init_disable_wpr();
+    RTC->CR &= ~(RTC_CR_COE | RTC_CR_COSEL | RTC_CR_OUT2EN);
+    end_init_enable_wpr();
+}
+
+void rtc_set_periodic_wakeup(uint16_t period_s)
+{
+    if (period_s < 1) {
+        return;
+    }
+
+    start_init_disable_wpr();
+
+    RTC->CR &= ~RTC_CR_WUTE;
+
+    while ((RTC->ICSR & RTC_ICSR_WUTWF) == 0) {}
+    // When the wakeup timer is enabled (WUTE set to 1), the WUTF flag is set every (WUT[15:0] + 1) ck_wut cycles
+    RTC->WUTR = period_s - 1;
+    RTC->CR |= RTC_CR_WUTIE | RTC_CR_WUTE;
+
+    end_init_enable_wpr();
+
+    // Clear wakeup flag
+    RTC->SCR = RTC_SCR_CWUTF;
+}
+
+void rtc_disable_periodic_wakeup(void)
+{
+    start_init_disable_wpr();
+
+    RTC->CR &= ~(RTC_CR_WUTIE | RTC_CR_WUTE);
+
+    end_init_enable_wpr();
+}
+
+void rtc_save_to_tamper_reg(uint8_t index, uint32_t data)
+{
+    if (index > 4) {
+        return;
+    }
+
+    (&(TAMP->BKP0R))[index] = data;
+}
+
+uint32_t rtc_get_tamper_reg(uint8_t index)
+{
+    if (index > 4) {
+        return 0;
+    }
+
+    return (&(TAMP->BKP0R))[index];
 }

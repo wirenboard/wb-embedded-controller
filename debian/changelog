@@ -1,3 +1,91 @@
+wb-ec-firmware (1.0.0-rc16) stable; urgency=medium
+
+  * RTC: check and set all regs at startup
+
+ -- Pavel Gasheev <pavel.gasheev@wirenboard.ru>  Mon, 14 Aug 2023 16:20:05 +0300
+
+wb-ec-firmware (1.0.0-rc15) stable; urgency=medium
+
+  * Use PA13 as hwrev pin instead of PA2
+  * Fix behavior when EC RESET is long pressed
+
+ -- Pavel Gasheev <pavel.gasheev@wirenboard.ru>  Thu, 10 Aug 2023 10:33:55 +0300
+
+wb-ec-firmware (1.0.0-rc14) stable; urgency=medium
+
+  * Try to restart on 3.3V lost only if 5V present
+  * Powering off and restaring throught 5V line directly, not PMIC
+
+ -- Pavel Gasheev <pavel.gasheev@wirenboard.ru>  Mon, 07 Aug 2023 12:16:34 +0300
+
+wb-ec-firmware (1.0.0-rc13) stable; urgency=medium
+
+  * report usb voltages on startup
+
+ -- Evgeny Boger <boger@wirenboard.com>  Sun, 06 Aug 2023 16:36:41 +0300
+
+wb-ec-firmware (1.0.0-rc12) stable; urgency=medium
+
+  * Immediately power off on short press if Linux is not booted
+  * Enable WBMZ on next reboot if 3.3V is lost to prevent power loss under load (for bad USB cable)
+  * Do not enable WBMZ if powered from USB
+  * Disable WBMZ if powered from USB and WBMZ discharged to prevent charge-discharge cycle
+  * Do not power off if Linux not respond on power off request from button
+  * Make power off request to Linux in the begin of long press
+  * Starting up delay only if powered on from USB Console
+
+ -- Pavel Gasheev <pavel.gasheev@wirenboard.ru>  Wed, 02 Aug 2023 11:45:20 +0300
+
+wb-ec-firmware (1.0.0-rc11) stable; urgency=medium
+
+  * Incerase linux poweroff delay to 90s
+
+ -- Pavel Gasheev <pavel.gasheev@wirenboard.ru>  Thu, 27 Jul 2023 13:46:42 +0300
+
+wb-ec-firmware (1.0.0-rc10) stable; urgency=medium
+
+  * Fix conversations. No functional changes.
+
+ -- Pavel Gasheev <pavel.gasheev@wirenboard.ru>  Thu, 27 Jul 2023 11:02:05 +0300
+
+wb-ec-firmware (1.0.0-rc9) stable; urgency=medium
+
+  * Disable V_OUT when V_IN < 6.5V
+  * Zeroing V_IN when V_IN < 6.5V
+
+ -- Pavel Gasheev <pavel.gasheev@wirenboard.ru>  Wed, 26 Jul 2023 10:23:42 +0300
+
+wb-ec-firmware (1.0.0-rc8) stable; urgency=medium
+
+  * Add "WBMZ enabled" bit in POWER_STATUS register
+
+ -- Pavel Gasheev <pavel.gasheev@wirenboard.ru>  Tue, 25 Jul 2023 15:55:51 +0300
+
+wb-ec-firmware (1.0.0-rc7) stable; urgency=low
+
+  * FW version regs in regmap
+  * Disable lowpass filter on A1-A4 channels
+  * Go to standby if 3.3V is lost 2 times in a 10 minutes
+  * 400 mV diode drop voltage on Vin
+
+ -- Pavel Gasheev <pavel.gasheev@wirenboard.ru>  Wed, 19 Jul 2023 08:27:15 +0300
+
+wb-ec-firmware (1.0.0-rc6) stable; urgency=low
+
+  * WBMZ working status is now in separate register PWR_STATUS
+
+ -- Pavel Gasheev <pavel.gasheev@wirenboard.ru>  Tue, 18 Jul 2023 18:23:11 +0300
+
+wb-ec-firmware (1.0.0-rc5) stable; urgency=low
+
+  * Add message on power up by key press from powered off state
+  * Report current RTC date and time on boot
+  * Report RTC current and alarm date and time when going to powered off state
+  * Change EC messages prefix
+  * Don't wait for 5s when woken up by anything else than USB cable insertion
+
+ -- Evgeny Boger <boger@wirenboard.com>  Sat, 15 Jul 2023 22:09:19 +0300
+
 wb-ec-firmware (1.0.0-rc1) stable; urgency=low
 
   * Initial release.
