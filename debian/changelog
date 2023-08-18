@@ -1,3 +1,9 @@
+wb-ec-firmware (1.0.0) stable; urgency=medium
+
+  * First stable release
+
+ -- Pavel Gasheev <pavel.gasheev@wirenboard.ru>  Fri, 18 Aug 2023 15:26:48 +0300
+
 wb-ec-firmware (1.0.0-rc16) stable; urgency=medium
 
   * RTC: check and set all regs at startup
