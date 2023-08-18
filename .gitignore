@@ -1,0 +1,5 @@
+/.vscode/
+release/
+release_internal/
+build/
+*.svd
