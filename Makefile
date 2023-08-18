@@ -9,7 +9,7 @@ MODEL_LIST = MODEL_WB74
 #######################################
 
 SRC_DIR = src
-INCLUDE_DIR = include
+INCLUDE_DIR = include libwbmcu-system/common
 SUBMODULES_DIR = libfixmath/libfixmath
 
 #order important
