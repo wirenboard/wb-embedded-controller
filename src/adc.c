@@ -41,8 +41,6 @@
 #define ADC_INT_VREF_FACTORY_CAL_MV     3000
 #define ADC_INT_VREF_CAL_VALUE          (*((uint16_t*)0x1FFF75AA))
 
-#define ADC_INT_VREF_FACTOR             F16((ADC_INT_VREF_FACTORY_CAL_MV / ADC_INT_VREF_CAL_VALUE)  
-
 struct adc_ctx {
     bool initialized;
     enum adc_vref vref;
@@ -50,6 +48,7 @@ struct adc_ctx {
     uint16_t raw_values[ADC_CHANNEL_COUNT];
     fix16_t  lowpass_values[ADC_CHANNEL_COUNT];
     fix16_t  lowpass_factors[ADC_CHANNEL_COUNT];
+    fix16_t int_vref_coeff;
 };
 
 struct adc_ctx adc_ctx = {};
@@ -73,6 +72,15 @@ struct adc_config_record {
 struct adc_config_record adc_cfg[ADC_CHANNEL_COUNT] = {
     ADC_CHANNELS_DESC(ADC_CHANNEL_DATA)
 };
+
+static inline void update_int_vref_coeff(void)
+{
+    fix16_t int_vref_value = adc_ctx.lowpass_values[ADC_CHANNEL_INDEX(ADC_CHANNEL_ADC_INT_VREF)];
+    fix16_t int_vref_cal = fix16_from_int(ADC_INT_VREF_CAL_VALUE);
+    fix16_t k_int_ext = F16((float)ADC_INT_VREF_FACTORY_CAL_MV / ADC_VREF_EXT_MV);
+    fix16_t k_vref = fix16_div(int_vref_cal, int_vref_value);
+    adc_ctx.int_vref_coeff = fix16_mul(k_int_ext, k_vref);
+}
 
 static inline fix16_t calculate_rc_factor(uint32_t tau_ms)
 {
@@ -108,8 +116,9 @@ static void dma_end_transfer_irq(void)
     for (uint8_t i = 0; i < ADC_CHANNEL_COUNT; i++) {
         adc_ctx.lowpass_values[i] = fix16_from_int(adc_ctx.raw_values[i]);
     }
-    adc_ctx.initialized = 1;
+    update_int_vref_coeff();
     adc_ctx.timestamp = systick_get_system_time_ms();
+    adc_ctx.initialized = 1;
 }
 
 void adc_init(enum adc_clock clock_divider, enum adc_vref vref)
@@ -231,21 +240,9 @@ uint32_t adc_get_ch_mv(enum adc_channel channel)
 
     uint32_t raw_value;
     if (adc_ctx.vref == ADC_VREF_INT) {
-        fix16_t int_vref_raw = adc_ctx.lowpass_values[ADC_CHANNEL_INDEX(ADC_CHANNEL_ADC_INT_VREF)];
-        fix16_t int_vef_cal = fix16_from_int(ADC_INT_VREF_CAL_VALUE);
-        fix16_t k_vref = fix16_div(int_vref_raw, int_vef_cal);
-        fix16_t k_int_ext = F16((float)ADC_INT_VREF_FACTORY_CAL_MV / ADC_VREF_EXT_MV);
-        fix16_t k = fix16_div(k_vref, k_int_ext);
         raw_value = fix16_to_int(
-            fix16_mul(ch_raw, k)
+            fix16_mul(ch_raw, adc_ctx.int_vref_coeff)
         );
-        // raw_value = fix16_to_int(
-        //     fix16_mul(
-        //         ch_raw,
-        //         fix16_div(int_vref, fix16_from_int(ADC_INT_VREF_CAL_VALUE))
-        //     )
-        // );
-        // raw_value = fix16_to_int(ch_raw);
     } else {
         raw_value = fix16_to_int(ch_raw);
     }
@@ -279,4 +276,5 @@ void adc_do_periodic_work(void)
             )
         );
     }
+    update_int_vref_coeff();
 }
