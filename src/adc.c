@@ -75,6 +75,8 @@ struct adc_config_record adc_cfg[ADC_CHANNEL_COUNT] = {
 
 static inline void update_int_vref_coeff(void)
 {
+    // Вызывается из прерывания DMA только 1 раз (первый) во время инициализации lowpass фильтра
+    // Далее вызывается в основном цикле из adc_do_periodic_work
     fix16_t int_vref_value = adc_ctx.lowpass_values[ADC_CHANNEL_INDEX(ADC_CHANNEL_ADC_INT_VREF)];
     fix16_t int_vref_cal = fix16_from_int(ADC_INT_VREF_CAL_VALUE);
     fix16_t k_int_ext = F16((float)ADC_INT_VREF_FACTORY_CAL_MV / ADC_VREF_EXT_MV);
