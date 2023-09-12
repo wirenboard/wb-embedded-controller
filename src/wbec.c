@@ -427,6 +427,7 @@ void wbec_do_periodic_work(void)
             // Установим время WDT и запустим его
             wdt_set_timeout(WBEC_WATCHDOG_INITIAL_TIMEOUT_S);
             wdt_start_reset();
+            wdt_handle_timed_out();
             // Флаг linux_initial_powered_on нужен чтобы понять, что линукс уже работал на момент включения ЕС
             // В этом случае считаем его уже загруженным
             wbec_ctx.linux_booted = wbec_ctx.linux_initial_powered_on;

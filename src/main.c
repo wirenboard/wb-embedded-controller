@@ -50,7 +50,7 @@ int main(void)
     // Дальше попадаем, только если хотим включаться
     rcc_set_hsi_pll_64mhz_clock();
     systick_init();
-    adc_init(ADC_CLOCK_DIV_64, ADC_VREF_EXT);
+    adc_init(ADC_CLOCK_DIV_64, ADC_VREF_INT);
 
     // Init drivers
     gpio_init();

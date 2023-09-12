@@ -1,3 +1,11 @@
+wb-ec-firmware (1.0.1) stable; urgency=medium
+
+  * ADC: set lowpass RC to 50 ms for A1-A4
+  * ADC: use internal Vref
+  * watchdog: reset flag on startup (bug if power resetting time is bigger than watchdog timeout)
+
+ -- Pavel Gasheev <pavel.gasheev@wirenboard.ru>  Tue, 12 Sep 2023 09:55:53 +0300
+
 wb-ec-firmware (1.0.0) stable; urgency=medium
 
   * First stable release
