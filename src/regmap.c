@@ -147,10 +147,9 @@ bool regmap_set_region_data(enum regmap_region r, const void * data, size_t size
 
     uint16_t offset = region_first_reg(r);
     ATOMIC {
-        if (is_busy) {
-            return 0;
+        if (!is_busy) {
+            memcpy(&regs[offset], data, size);
         }
-        memcpy(&regs[offset], data, size);
     }
     return 1;
 }
@@ -169,10 +168,9 @@ void regmap_get_region_data(enum regmap_region r, void * data, size_t size)
 
     uint16_t offset = region_first_reg(r);
     ATOMIC {
-        if (is_busy) {
-            return;
+        if (!is_busy) {
+            memcpy(data, &regs[offset], size);
         }
-        memcpy(data, &regs[offset], size);
     }
 }
 
@@ -208,11 +206,10 @@ void regmap_clear_changed(enum regmap_region r)
     uint16_t r_end = region_last_reg(r);
 
     ATOMIC {
-        if (is_busy) {
-            return;
-        }
-        for (uint16_t i = r_start; i <= r_end; i++) {
-            clear_bit_flag(i, written_flags);
+        if (!is_busy) {
+            for (uint16_t i = r_start; i <= r_end; i++) {
+                clear_bit_flag(i, written_flags);
+            }
         }
     }
 }
