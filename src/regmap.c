@@ -117,6 +117,18 @@ static inline bool get_bit_flag(uint16_t addr, const uint32_t bit_array[])
     return bit_array[addr_to_word_offset(addr)] & addr_to_bit_mask(addr);
 }
 
+static inline bool is_regs_changed(uint16_t r_start, uint16_t r_end)
+{
+    bool is_changed = 0;
+    for (uint16_t i = r_start; i <= r_end; i++) {
+        if (get_bit_flag(i, written_flags)) {
+            is_changed = 1;
+            break;
+        }
+    }
+    return is_changed;
+}
+
 void regmap_init(void)
 {
     // Fill RW bits for each register
@@ -141,17 +153,20 @@ bool regmap_set_region_data(enum regmap_region r, const void * data, size_t size
     if (size != region_size(r)) {
         return 0;
     }
-    if (regmap_is_region_changed(r)) {
-        return 0;
-    }
 
-    uint16_t offset = region_first_reg(r);
+    uint16_t r_start = region_first_reg(r);
+    uint16_t r_end = region_last_reg(r);
+
+    bool ret = 0;
     ATOMIC {
         if (!is_busy) {
-            memcpy(&regs[offset], data, size);
+            if (!is_regs_changed(r_start, r_end)) {
+                memcpy(&regs[r_start], data, size);
+                ret = 1;
+            }
         }
     }
-    return 1;
+    return ret;
 }
 
 // Получает данные из региона
@@ -177,9 +192,6 @@ void regmap_get_region_data(enum regmap_region r, void * data, size_t size)
 // Проверяет, изменился ли регион снаружи
 bool regmap_is_region_changed(enum regmap_region r)
 {
-    if (is_busy) {
-        return 0;
-    }
     if (r >= REGMAP_REGION_COUNT) {
         return 0;
     }
@@ -187,12 +199,13 @@ bool regmap_is_region_changed(enum regmap_region r)
     uint16_t r_start = region_first_reg(r);
     uint16_t r_end = region_last_reg(r);
 
-    for (uint16_t i = r_start; i <= r_end; i++) {
-        if (get_bit_flag(i, written_flags)) {
-            return 1;
+    bool ret = 0;
+    ATOMIC {
+        if (!is_busy) {
+            ret = is_regs_changed(r_start, r_end);
         }
     }
-    return 0;
+    return ret;
 }
 
 // Атомарно сбрасывает флаги изменения региона
