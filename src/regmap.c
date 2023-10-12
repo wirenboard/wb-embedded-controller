@@ -202,7 +202,9 @@ bool regmap_is_region_changed(enum regmap_region r)
     bool ret = 0;
     ATOMIC {
         if (!is_busy) {
-            ret = is_regs_changed(r_start, r_end);
+            if (is_regs_changed(r_start, r_end)) {
+                ret = 1;
+            }
         }
     }
     return ret;
