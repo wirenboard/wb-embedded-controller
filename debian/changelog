@@ -1,9 +1,9 @@
-wb-ec-firmware (1.0.2-rc1) stable; urgency=medium
+wb-ec-firmware (1.0.2) stable; urgency=medium
 
   * regmap: fix atomic operations (may be returns with interrupts disabled)
   * regmap: atomic check for reg chaged in regmap_set_region_data
 
- -- Pavel Gasheev <pavel.gasheev@wirenboard.ru>  Wed, 11 Oct 2023 16:34:44 +0300
+ -- Pavel Gasheev <pavel.gasheev@wirenboard.ru>  Thu, 12 Oct 2023 16:00:38 +0300
 
 wb-ec-firmware (1.0.1) stable; urgency=medium
 
