@@ -88,6 +88,10 @@
         /* 0xC0 */  uint16_t powered_from_wbmz : 1; \
         /* 0xC0 */  uint16_t wbmz_enabled : 1; \
     ) \
+    /*     Addr     Name            RO/RW */ \
+    m(     0xF0,    TEST,           RW, \
+        /* 0xF0 */  uint16_t send_test_message : 1; \
+    ) \
 
 // Общее число регистров в адресном пространстве
 // Число должно быть больше или равно адресу последнего регистра
