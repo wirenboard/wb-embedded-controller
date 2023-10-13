@@ -16,6 +16,7 @@
 #include "linux-power-control.h"
 #include "rcc.h"
 #include "mcu-pwr.h"
+#include "test_subsystem.h"
 
 int main(void)
 {
@@ -81,6 +82,7 @@ int main(void)
         rtc_alarm_do_periodic_work();
         irq_do_periodic_work();
         vmon_do_periodic_work();
+        test_do_periodic_work();
 
         // Main algorithm
         linux_cpu_pwr_seq_do_periodic_work();
