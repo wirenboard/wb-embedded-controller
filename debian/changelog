@@ -1,4 +1,4 @@
-wb-ec-firmware (1.1.0+nmu1) UNRELEASED; urgency=medium
+wb-ec-firmware (1.1.1) stable; urgency=medium
 
   * disable watchdog
 
