@@ -49,6 +49,8 @@ void wdt_stop(void)
 
 bool wdt_handle_timed_out(void)
 {
+    return 0;  // FIXME
+
     bool ret = wdt_ctx.timed_out;
     if (ret) {
         wdt_ctx.timed_out = 0;

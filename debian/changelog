@@ -1,3 +1,9 @@
+wb-ec-firmware (1.1.0+nmu1) UNRELEASED; urgency=medium
+
+  * disable watchdog
+
+ -- Nikita Maslov <nikita.maslov@wirenboard.ru>  Wed, 18 Oct 2023 16:07:37 +0600
+
 wb-ec-firmware (1.1.0) stable; urgency=medium
 
   * add test subsystem: print message to console when appropriate bit is set
