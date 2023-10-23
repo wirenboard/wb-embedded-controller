@@ -243,7 +243,7 @@ void wbec_init(void)
             // POWER ON переопределяется причиной PERIODIC WAKE UP
             // В этом случае тоже нужно включиться.
             // Понять это можно, измерив 3.3В
-            bool vcc_3v3_ok = vmon_check_ch_once(VMON_CHANNEL_V33);
+            bool vcc_3v3_ok = vmon_check_ch_once(VMON_CHANNEL_V33_STARTUP);
 
             if ((vcc_3v3_ok) || (vcc_5v_last_state == MCU_VCC_5V_STATE_OFF)) {
                 // Питание появилось или есть 3.3В (уже работаем) - включаемся в обычном режиме
@@ -298,7 +298,7 @@ void wbec_do_periodic_work(void)
         // а линукс в это время работает. Тогда его не надо перезагружать.
         // Факт работы линукса определяется по наличию +3.3В
         if (vmon_ready()) {
-            if ((wbec_info.poweron_reason == REASON_POWER_ON) && (vmon_get_ch_status(VMON_CHANNEL_V33))) {
+            if ((wbec_info.poweron_reason == REASON_POWER_ON) && (vmon_get_ch_status(VMON_CHANNEL_V33_STARTUP))) {
                 // Если после включения МК +3.3В есть - значит линукс уже работает
                 // Не нужно выводить информацию в уарт
                 // Тут ничего не нужно делать
