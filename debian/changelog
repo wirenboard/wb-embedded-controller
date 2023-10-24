@@ -1,3 +1,9 @@
+wb-ec-firmware (1.1.1) stable; urgency=medium
+
+  * Check 3.3V line with range 3.0-3.3V on startup
+
+ -- Pavel Gasheev <pavel.gasheev@wirenboard.ru>  Mon, 23 Oct 2023 14:18:18 +0300
+
 wb-ec-firmware (1.1.0) stable; urgency=medium
 
   * add test subsystem: print message to console when appropriate bit is set
