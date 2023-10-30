@@ -30,7 +30,7 @@
 #define WBEC_PERIODIC_WAKEUP_NEXT_TIMEOUT_S     2
 
 // Температура, ниже которой EC не будет включаться
-#define WBEC_MINIMUM_WORKING_TEMPERATURE_C_X100 -4000
+#define WBEC_MINIMUM_WORKING_TEMPERATURE_C_X100 -2500
 
 // Число попыток перезапуска PMIC при пропадании 3.3В
 // Если за указанное время 3.3В пропадёт больше, чем указанное число раз,
