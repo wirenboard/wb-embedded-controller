@@ -9,7 +9,7 @@ MODEL_LIST = MODEL_WB74
 #######################################
 
 SRC_DIR = src
-INCLUDE_DIR = include libwbmcu-system/common
+INCLUDE_DIR = include system/common
 SUBMODULES_DIR = libfixmath/libfixmath
 
 #order important
@@ -33,4 +33,4 @@ LDFLAGS=
 # Use debian/changelog to get version
 VERSION_STRING = $(shell cat debian/changelog | head -n 1 | cut -d' ' -f2 | sed 's/.*[(]\(.*\)[)].*/\1/' | cut -d'~' -f1)
 
-include libwbmcu-system/build_common.mk
+include system/build_common.mk
