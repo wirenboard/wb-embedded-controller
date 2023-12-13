@@ -1,3 +1,13 @@
+wb-ec-firmware (1.2.0-rc1) stable; urgency=medium
+
+  * Get rid of private library dependencies
+  * Increase pwrkey debonce to 2000 ms for prevent false clicks
+  * Add rtc_reset bit to regmap
+  * RTC_OUT is disabled by default and controlled by regmap
+  * Change 3.3V line range: 3.0V is ok now
+
+ -- Pavel Gasheev <pavel.gasheev@wirenboard.ru>  Wed, 13 Dec 2023 10:45:08 +0300
+
 wb-ec-firmware (1.1.1) stable; urgency=medium
 
   * Check 3.3V line with range 3.0-3.3V on startup
