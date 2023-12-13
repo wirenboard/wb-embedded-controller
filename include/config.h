@@ -55,7 +55,10 @@
 #define EC_GPIO_PWRKEY                  GPIOA, 0
 #define EC_GPIO_PWRKEY_ACTIVE_LOW
 #define EC_GPIO_PWRKEY_WKUP_NUM         1
-#define PWRKEY_DEBOUNCE_MS              50
+// Для игнорирования случайных нажатий во время открывания/закрывания крышки
+// или случайного прикосновения к корпусу дебаунс нужно делать большим
+// значение 2000 мс подобрано экспериментально
+#define PWRKEY_DEBOUNCE_MS              2000
 #define PWRKEY_LONG_PRESS_TIME_MS       8000
 
 // Включение V_OUT
