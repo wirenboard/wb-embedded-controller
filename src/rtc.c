@@ -39,7 +39,10 @@ static_assert((RTC_LSE_DRIVE_CAPABILITY >= 0) && (RTC_LSE_DRIVE_CAPABILITY <= 3)
     RTC_CR_TAMPTS_Msk | \
     RTC_CR_TAMPOE_Msk | \
     RTC_CR_TAMPALRM_PU_Msk | \
-    RTC_CR_TAMPALRM_TYPE_Msk \
+    RTC_CR_TAMPALRM_TYPE_Msk | \
+    RTC_CR_COE_Msk | \
+    RTC_CR_COSEL_Msk | \
+    RTC_CR_OUT2EN_Msk \
 )
 
 // Время, которое будет установлено, если RTC на момент включения питания не работает
@@ -183,6 +186,13 @@ void rtc_init(void)
     }
 }
 
+void rtc_reset(void)
+{
+    RCC->BDCR |= RCC_BDCR_BDRST;
+    RCC->BDCR &= ~RCC_BDCR_BDRST;
+
+    rtc_init();
+}
 
 bool rtc_get_ready_read(void)
 {
