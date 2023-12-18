@@ -31,7 +31,7 @@
 #define __LINUX_POWERON_REASON_NAME(name, string)           name,
 #define __LINUX_POWERON_REASON_STRING(name, string)         string,
 
-static const char fwver_chars[] = { MODBUS_DEVICE_FW_VERSION_STRING };
+static const char fwver_chars[] = { FW_VERSION_STRING };
 
 // Причина включения питания Linux
 enum linux_poweron_reason {
@@ -73,7 +73,7 @@ struct wbec_ctx {
 static struct REGMAP_INFO wbec_info = {
     .wbec_id = WBEC_ID,
     .hwrev = 0,
-    .fwrev = { MODBUS_DEVICE_FW_VERSION_NUMBERS },
+    .fwrev = { FW_VERSION_NUMBERS },
     .poweron_reason = REASON_UNKNOWN,
 };
 

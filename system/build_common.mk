@@ -3,13 +3,6 @@
 DEFS += $(MODEL_DEFINE)
 
 #######################################
-# FlashFS parameters
-#######################################
-
-FLASHFS_MIN_FREE_PAGES_FOR_WRITE ?= 2
-FLASHFS_MIN_FREE_PAGES_FOR_DEFRAG ?= 3
-
-#######################################
 # version parsing
 #######################################
 
@@ -37,9 +30,9 @@ VERSION_SUFFIX_M := $(shell echo $$(( -1 - $(VERSION_SUFFIX) )))
 endif
 
 # global defines with version in different formats
-DEFS += MODBUS_DEVICE_FW_VERSION_NUMBERS=$(VERSION_MAJOR),$(VERSION_MINOR),$(VERSION_PATCH),$(VERSION_SUFFIX)
-DEFS += MODBUS_DEVICE_FW_VERSION_STRING=$(shell echo $(VERSION) | sed "s/./\\\\\'&\\\\\',/g" | sed 's/.$$//')
-DEFS += MODBUS_DEVICE_FW_VERSION=$(shell echo $$(( ($(VERSION_MAJOR) << 24) + ($(VERSION_MINOR) << 16) + ($(VERSION_PATCH) << 8) + $(VERSION_SUFFIX_M) )))
+DEFS += FW_VERSION_NUMBERS=$(VERSION_MAJOR),$(VERSION_MINOR),$(VERSION_PATCH),$(VERSION_SUFFIX)
+DEFS += FW_VERSION_STRING=$(shell echo $(VERSION) | sed "s/./\\\\\'&\\\\\',/g" | sed 's/.$$//')
+DEFS += FW_VERSION=$(shell echo $$(( ($(VERSION_MAJOR) << 24) + ($(VERSION_MINOR) << 16) + ($(VERSION_PATCH) << 8) + $(VERSION_SUFFIX_M) )))
 
 #######################################
 # target and git info
@@ -77,7 +70,6 @@ MCU = $(CPU_FAMILY) -mthumb $(FPU) $(FLOAT-ABI)
 # toolchain binaries
 #######################################
 
-# GCC_DIR = /home/nikita/software/gcc-arm-none-eabi-7-2018-q2-update/bin/
 PREFIX = arm-none-eabi-
 
 CC = $(GCC_DIR)$(PREFIX)gcc
@@ -101,8 +93,6 @@ vpath %.c $(sort $(dir $(C_SOURCES)))
 
 LD_FILES += $(addprefix $(LD_DIR)/, $(LDSCRIPT))
 
-LDFLAGS += -Wl,-defsym=__storage_min_free_pages_for_write=$(FLASHFS_MIN_FREE_PAGES_FOR_WRITE)
-LDFLAGS += -Wl,-defsym=__storage_min_free_pages_for_defrag=$(FLASHFS_MIN_FREE_PAGES_FOR_DEFRAG)
 LDFLAGS += $(MCU) $(OPT) $(CC_LD_FLAGS) -nostartfiles -Xlinker --gc-sections -Wl,-Map,"$(BUILD_DIR)/$(TARGET).map"
 LDFLAGS +=  $(addprefix -T, $(LD_FILES)) $(TARGET_DIR)/stack_size.ld
 
@@ -136,10 +126,7 @@ build_model: $(RELEASE_DIR) $(TARGET_DIR)/$(TARGET).elf $(TARGET_DIR)/$(TARGET).
 	cp $(TARGET_DIR)/$(TARGET).bin $(RELEASE_DIR)/$(TARGET_GIT_INFO).bin
 
 $(BUILD_DIR)/%.o: %.c Makefile | $(BUILD_DIR)
-	$(CC) $(CFLAGS) -DMODULE_NAME=$(subst -,_,$(subst .c,,$(notdir $<))) -Wa,-a,-ad,-alms=$(BUILD_DIR)/$(notdir $(<:.c=.lst)) $< -o $@
-
-# макрос MODULE_NAME необходим для генерации уникальных имен в структурах описания модбас регистров
-# символ '-' в значении макроса ломает сборку. такчто меняем его на подчеркивание.
+	$(CC) $(CFLAGS) -Wa,-a,-ad,-alms=$(BUILD_DIR)/$(notdir $(<:.c=.lst)) $< -o $@
 
 $(TARGET_DIR)/$(TARGET).elf: version_check $(OBJECTS) $(LD_FILES) $(TARGET_DIR)/stack_size.ld Makefile
 	$(CC) $(OBJECTS) $(LDFLAGS) -o $@
