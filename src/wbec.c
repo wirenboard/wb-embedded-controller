@@ -273,6 +273,7 @@ void wbec_init(void)
     }
 
     // Если дошли до этого места, надо включиться в обычном режиме
+    pwrkey_set_debounce_ms(PWRKEY_DEBOUNCE_MS_OFF);
     rtc_disable_periodic_wakeup();
     new_state(WBEC_STATE_WAIT_STARTUP);
 }
