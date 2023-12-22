@@ -51,7 +51,6 @@ struct pwrkey_logic_ctx {
 
 static struct pwrkey_gpio_ctx gpio_ctx;
 static struct pwrkey_logic_ctx logic_ctx;
-static uint16_t pwrkey_debounce_ms = PWRKEY_DEBOUNCE_MS_ON;
 
 static inline enum pwrkey_state get_pwrkey_state(void)
 {
@@ -82,7 +81,7 @@ static inline void debounce(enum pwrkey_state gpio_state)
     // If logic state and GPIO state differs - check debounce time elapsed
     if (gpio_ctx.logic_state != gpio_state) {
         systime_t held_time = systick_get_time_since_timestamp(gpio_ctx.timestamp);
-        if (held_time > pwrkey_debounce_ms) {
+        if (held_time > PWRKEY_DEBOUNCE_MS) {
             gpio_ctx.logic_state = gpio_state;
         }
     }
@@ -192,9 +191,4 @@ bool pwrkey_handle_long_press(void)
         logic_ctx.long_pressed_flag = 0;
     }
     return ret;
-}
-
-void pwrkey_set_debounce_ms(uint16_t debounce_ms)
-{
-    pwrkey_debounce_ms = debounce_ms;
 }
