@@ -26,6 +26,7 @@ struct rtc_alarm {
 };
 
 void rtc_init(void);
+void rtc_reset(void);
 bool rtc_get_ready_read(void);
 void rtc_get_datetime(struct rtc_time * tm);
 void rtc_set_datetime(const struct rtc_time * tm);

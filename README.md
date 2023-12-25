@@ -1,57 +1,72 @@
-# WB Embedded Controller firmwaware
+# Wiren Board Embedded Controller
+
+## Описание
+
+В контроллере Wiren Board 7.4 и новее есть специальная микросхема, которая управляет питанием — Embedded Controller, или EC. Перед стартом он включает в правильной последовательности рейки питания, а также проверяет нормальное ли напряжение на них, если с напряжениями всё хорошо то он даёт команду старта основного процессора.
+
+Кроме этого на нём реализованы: сторожевой таймер, часы реального времени, будильники, обработка нажатий на кнопку ON/OFF и другие системные функции.
 
 
-## Коммерческая тайна 1
-Конфиденциально. Всё содержимое документа имеет гриф "коммерческая тайна". Коммерческая тайна ИП Лесничий Яков Васильевич. Адрес 352380, Краснодарский край, г.Кропоткин, ул. Темирязева, д.55  ИНН: 231302744108 Срок действия: 15 лет. Экз. номер 1
-## Коммерческая тайна
+## Индикация и отключение
 
-Конфиденциально. 
-Всё содержимое репозитория или архива имеет гриф "коммерческая тайна".
-Коммерческая тайна ООО Бесконтактные устройства.
-Адрес: 127051, г. Москва, Малый Сухаревский переулок, д. 9, стр. 1, этаж 2, пом. I, ком. 56а
-ИНН/КПП:    7702818199/770201001
-Срок действия: 15 лет.
-Экз. номер 1
+У EC есть индикатор LED1, установленный на плате контролера:
 
-Copyright (c) 2014-2017 Contactless Devices, LLC. CONFIDENTIAL
-info@contactless.ru
-Unpublished Copyright (c) 2014-2017 Contactless Devices, LLC, All Rights Reserved.
+- Рабочий режим — светодиод мигает 500 мс включен, 1000 мс выключен.
+- Проверяет рейки питания и пробует запустить основной процессор — мигает очень часто 50 мс включен, 50 мс выключен.
+- Спящий режим — очень короткие вспышки раз в 2 секунды.
+
+Есть кнопка B1 и перемычка SJ2, которые объедены в группу Watchdog OFF — они замыкают ресет EC на землю, чем блокируют его работу. Это может быть полезно, если вам надо временно отключить сторожевой таймер, или по каким-то причинам EC начал сбоить и не давать контроллеру запуститься.
+
+## Функции
+
+### Будильник
+
+Вы можете включать контроллер по будильнику — это может быть полезным при работе от автономного источника питания. Будильник настраивается в консоли контроллера утилитой rtcwake, примеры:
+
+Выключить сейчас и включить через 60 секунд:
+```bash
+rtcwake -m off -s 60
 ```
-NOTICE:  All information contained herein is, and remains the property of Contactless Devices, LLC. The intellectual and technical concepts contained
-herein are proprietary to Contactless Devices, LLC and may be covered by U.S. and Foreign Patents, patents in process, and are protected by trade secret or copyright law.
- Dissemination of this information or reproduction of this material is strictly forbidden unless prior written permission is obtained
- from Contactless Devices, LLC.  Access to the source code contained herein is hereby forbidden to anyone except current Contactless Devices, LLC employees, managers or contractors who have executed 
- Confidentiality and Non-disclosure agreements explicitly covering such access.
 
- The copyright notice above does not evidence any actual or intended publication or disclosure  of  this source code, which includes  
- information that is confidential and/or proprietary, and is a trade secret, of  Contactless Devices, LLC.   ANY REPRODUCTION, MODIFICATION, DISTRIBUTION, PUBLIC  PERFORMANCE, 
- OR PUBLIC DISPLAY OF OR THROUGH USE  OF THIS  SOURCE CODE  WITHOUT  THE EXPRESS WRITTEN CONSENT OF Contactless Devices, LLC IS STRICTLY PROHIBITED, AND IN VIOLATION OF APPLICABLE 
- LAWS AND INTERNATIONAL TREATIES.  THE RECEIPT OR POSSESSION OF  THIS SOURCE CODE AND/OR RELATED INFORMATION DOES NOT CONVEY OR IMPLY ANY RIGHTS  
- TO REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL ANYTHING THAT IT  MAY DESCRIBE, IN WHOLE OR IN PART.        
- ```      
+Выключить сейчас и включить 31.07.2023 в 07:15 локального времени:
+```bash
+rtcwake -m off -l -t $(date +%s -d "2023-07-31 07:15")
+```
 
+Установку будильника можно автоматизировать с помощью [wb-rules](https://wirenboard.com/wiki/Wb-rules).
 
-Конфиденциально. 
-Всё содержимое репозитория или архива имеет гриф "коммерческая тайна".
-Коммерческая тайна ООО Бесконтактные устройства.
-Адрес: 127051, г. Москва, Малый Сухаревский переулок, д. 9, стр. 1, этаж 2, пом. I, ком. 56а
-ИНН/КПП:    7702818199/770201001
-Срок действия: 15 лет.
-Экз. номер 1
+### Выключение контроллера
 
-Copyright (c) 2014-2017 Contactless Devices, LLC. CONFIDENTIAL
-info@contactless.ru
-Unpublished Copyright (c) 2014-2017 Contactless Devices, LLC, All Rights Reserved.
+Выключение контроллера из Linux по команде `poweroff` возможно только при установленном будильнике, или при работе от модуля [WBMZ4-BATTERY](https://wirenboard.com/wiki/WBMZ4-BATTERY_Backup_Power_Module) / [WBMZ4-SUPERCAP](https://wirenboard.com/wiki/WBMZ4-SUPERCAP_Backup_Power_Module) и отсутствии внешнего питания. Будьте осторожны с выключением контроллера из Linux, если у вас нет физического доступа к контроллеру — включить его можно будет в таком случае дождавшись когда сработает будильник, либо когда появится питающее напряжение.
 
-NOTICE:  All information contained herein is, and remains the property of Contactless Devices, LLC. The intellectual and technical concepts contained
-herein are proprietary to Contactless Devices, LLC and may be covered by U.S. and Foreign Patents, patents in process, and are protected by trade secret or copyright law.
- Dissemination of this information or reproduction of this material is strictly forbidden unless prior written permission is obtained
- from Contactless Devices, LLC.  Access to the source code contained herein is hereby forbidden to anyone except current Contactless Devices, LLC employees, managers or contractors who have executed 
- Confidentiality and Non-disclosure agreements explicitly covering such access.
+### Обработка нажатия кнопки On/Off
 
- The copyright notice above does not evidence any actual or intended publication or disclosure  of  this source code, which includes  
- information that is confidential and/or proprietary, and is a trade secret, of  Contactless Devices, LLC.   ANY REPRODUCTION, MODIFICATION, DISTRIBUTION, PUBLIC  PERFORMANCE, 
- OR PUBLIC DISPLAY OF OR THROUGH USE  OF THIS  SOURCE CODE  WITHOUT  THE EXPRESS WRITTEN CONSENT OF Contactless Devices, LLC IS STRICTLY PROHIBITED, AND IN VIOLATION OF APPLICABLE 
- LAWS AND INTERNATIONAL TREATIES.  THE RECEIPT OR POSSESSION OF  THIS SOURCE CODE AND/OR RELATED INFORMATION DOES NOT CONVEY OR IMPLY ANY RIGHTS  
- TO REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL ANYTHING THAT IT  MAY DESCRIBE, IN WHOLE OR IN PART.                
+При подаче напряжения питания на любой из возможных входов (Vin, PoE, USB-C), контроллер включается автоматически. Для выключения на месте в контроллере есть кнопка ON/OFF, у которой есть два типа нажатий:
 
+Все нажатия на кнопку длительностью менее 500 мс игнорируются для предотвращения случайного включения или выключения контроллера.
+
+Короткое нажатие отправит операционной системе Linux команду `poweroff`, что приведёт к завершению работы и отключению питания.
+Длинное нажатие принудительно выключает питание контроллера — это полезно, если по каким-то причинам Linux не может завершить работу сам.
+
+### Дополнительные функции
+
+- Аппаратный [watchdog](https://wirenboard.com/wiki/Watchdog).
+- Часы реального времени RTC. Питаются от собственного отдельного аккумулятора, периодическая замена батарейки не требуется. Ёмкости аккумулятора хватает на 2-3 месяца работы часов при отключенном питании контроллера.
+- Измерение температуры внутри корпуса.
+- Управление выходом Vout с защитой от превышения напряжения. Если напряжение питания контроллера больше 29 В, то EC отключит выход Vout т.к. напряжение с Vin на Vout идёт напрямую и может повредить устройства подключенные к контроллеру. Если напряжение снизится ниже 28 вольт — выход будет включён снова. Также выход Vout отключается, если контроллер работает от USB.
+
+## Обновление прошивки EC
+
+Этот раздел про обновление прошивки EC, если вам надо обновить ПО самого контроллера Wiren Board, вам сюда [Обновление прошивки контроллера Wiren Board](https://wirenboard.com/wiki/Wiren_Board_Firmware_Update).
+
+Текущую версию прошивки можно узнать командой `cat /sys/bus/spi/drivers/wbec/spi0.0/fwrev`.
+
+Узнать, какая именно версия прошивки будет зашита так: `wb-ec-firmware-update --help`, внизу вывода будет имя доступного файла прошивки.
+
+Для обновления прошивки:
+
+- Подключите к контроллеру внешнее питание — это важно, от батарейки прошить EC не получится.
+- Подключитесь к контроллеру по SSH.
+- Обновите пакеты: `apt update; apt upgrade`
+- Выполните команду `wb-ec-firmware-update`, дождитесь завершения процедуры.
+- Перезагрузите контроллер.
