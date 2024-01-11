@@ -5,6 +5,7 @@ Maintainer: Wiren Board Team <info@wirenboard.com>
 Build-Depends: debhelper-compat (= 13), make, gcc-arm-none-eabi, libnewlib-arm-none-eabi, gcc
 Standards-Version: 4.5.1
 Rules-Requires-Root: no
+Homepage: https://github.com/wirenboard/wb-embedded-controller
 
 Package: wb-ec-firmware
 Architecture: all
