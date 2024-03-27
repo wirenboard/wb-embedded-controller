@@ -435,6 +435,7 @@ void wbec_do_periodic_work(void)
             wbec_ctx.linux_booted = wbec_ctx.linux_initial_powered_on;
             wbec_ctx.linux_initial_powered_on = false;
             wbec_ctx.pwrkey_pressed = false;
+            wbec_ctx.power_loss_cnt = 0;
             // Как только питание включилось - переходим в рабочий режим
             new_state(WBEC_STATE_WORKING);
         }
@@ -443,6 +444,13 @@ void wbec_do_periodic_work(void)
     case WBEC_STATE_WORKING:
         // В этом состоянии линукс работает
         // И всё остальное тоже работает
+
+        if (pwrkey_handle_long_press()) {
+            console_print("\r\n\n");
+            console_print_w_prefix("Hard reset power after power key long press detected.\r\n");
+            linux_cpu_pwr_seq_hard_reset();
+            new_state(WBEC_STATE_POWER_ON_SEQUENCE_WAIT);
+        }
 
         // Ждём загрузки линукс (просто по времени)
         if ((!wbec_ctx.linux_booted) && (in_state_time_ms() > WBEC_LINUX_BOOT_TIME_MS)) {
@@ -455,17 +463,17 @@ void wbec_do_periodic_work(void)
             // Если выполняется долгое нажатие, то есть шанс что линукс успеет
             // корректно выключиться
             if (pwrkey_pressed()) {
-                wbec_ctx.pwrkey_pressed = true;
-                wbec_ctx.pwrkey_pressed_timestamp = systick_get_system_time_ms();
-                irq_set_flag(IRQ_PWR_OFF_REQ);
+                // wbec_ctx.pwrkey_pressed = true;
+                // wbec_ctx.pwrkey_pressed_timestamp = systick_get_system_time_ms();
+                // irq_set_flag(IRQ_PWR_OFF_REQ);
             }
         } else {
             // Если линукс не загружен - выключаемся по питанию сразу же
             // При это ждём полноценное нажатие, т.к. есть вероятность, что
             // пока держат кнопку - линукс загрузится и успеет штатно выключиться
             if (pwrkey_handle_short_press()) {
-                linux_cpu_pwr_seq_hard_off();
-                new_state(WBEC_STATE_POWER_OFF_SEQUENCE_WAIT);
+                // linux_cpu_pwr_seq_hard_off();
+                // new_state(WBEC_STATE_POWER_OFF_SEQUENCE_WAIT);
             }
         }
 

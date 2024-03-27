@@ -197,20 +197,6 @@ void linux_cpu_pwr_seq_do_periodic_work(void)
         return;
     }
 
-    if (pwrkey_handle_long_press()) {
-        linux_cpu_pwr_5v_gpio_off();
-        console_print("\r\n\n");
-        console_print_w_prefix("Power off after power key long press detected.\r\n");
-        system_led_disable();
-        wbmz_disable_stepup();
-        // Ждём отпускания кнопки
-        while (pwrkey_pressed()) {
-            pwrkey_do_periodic_work();
-            watchdog_reload();
-        }
-        goto_standby_and_save_5v_status();
-    }
-
     // Если неожиданно пропало питание +5В,
     // это означает, что разрядился WBMZ, а EC продолжает работать от BATSENSE
     // или Vin < 9V или выдернули USB (WBMZ при этом не был включен)
