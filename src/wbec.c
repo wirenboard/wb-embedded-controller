@@ -453,17 +453,17 @@ void wbec_do_periodic_work(void)
             // Если выполняется долгое нажатие, то есть шанс что линукс успеет
             // корректно выключиться
             if (pwrkey_pressed()) {
-                wbec_ctx.pwrkey_pressed = true;
-                wbec_ctx.pwrkey_pressed_timestamp = systick_get_system_time_ms();
-                irq_set_flag(IRQ_PWR_OFF_REQ);
+                // wbec_ctx.pwrkey_pressed = true;
+                // wbec_ctx.pwrkey_pressed_timestamp = systick_get_system_time_ms();
+                // irq_set_flag(IRQ_PWR_OFF_REQ);
             }
         } else {
             // Если линукс не загружен - выключаемся по питанию сразу же
             // При это ждём полноценное нажатие, т.к. есть вероятность, что
             // пока держат кнопку - линукс загрузится и успеет штатно выключиться
             if (pwrkey_handle_short_press()) {
-                linux_cpu_pwr_seq_hard_off();
-                new_state(WBEC_STATE_POWER_OFF_SEQUENCE_WAIT);
+                // linux_cpu_pwr_seq_hard_off();
+                // new_state(WBEC_STATE_POWER_OFF_SEQUENCE_WAIT);
             }
         }
 

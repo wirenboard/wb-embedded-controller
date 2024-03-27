@@ -268,16 +268,16 @@ void linux_cpu_pwr_seq_do_periodic_work(void)
     put_power_status_to_regmap();
 
     if (pwrkey_handle_long_press()) {
-        linux_cpu_pwr_5v_gpio_off();
-        console_print("\r\n\n");
-        console_print_w_prefix("Power off after power key long press detected.\r\n");
-        system_led_disable();
-        wbmz_off();
-        // Ждём отпускания кнопки
-        while (pwrkey_pressed()) {
-            pwrkey_do_periodic_work();
-        }
-        goto_standby_and_save_5v_status();
+        // linux_cpu_pwr_5v_gpio_off();
+        // console_print("\r\n\n");
+        // console_print_w_prefix("Power off after power key long press detected.\r\n");
+        // system_led_disable();
+        // wbmz_off();
+        // // Ждём отпускания кнопки
+        // while (pwrkey_pressed()) {
+        //     pwrkey_do_periodic_work();
+        // }
+        // goto_standby_and_save_5v_status();
     }
 
     // Если неожиданно пропало питание +5В,
