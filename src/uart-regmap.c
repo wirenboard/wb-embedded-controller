@@ -91,18 +91,45 @@ void uart_regmap_init(void)
 void uart_regmap_do_periodic_work(void)
 {
     static struct REGMAP_UART_TX uart_tx = {};
+    static struct REGMAP_UART_RX uart_rx = {};
+
     if (regmap_is_region_changed(REGMAP_REGION_UART_TX)) {
         regmap_get_region_data(REGMAP_REGION_UART_TX, &uart_tx, sizeof(uart_tx));
 
-        if ((uart_tx.available_bytes_to_tx == 0) && (get_buffer_available_space(&uart_ctx.tx) >= uart_tx.bytes_to_tx)) {
-            for (size_t i = 0; i < uart_tx.bytes_to_tx; i++) {
-                put_byte_to_buffer(&uart_ctx.tx, uart_tx.bytes[i]);
+        uint16_t regmap_bytes_count = uart_tx.bytes_to_send_count;
+        uint16_t buffer_free_space = get_buffer_available_space(&uart_ctx.tx);
+
+        if (regmap_bytes_count > buffer_free_space) {
+            regmap_bytes_count = buffer_free_space;
+        }
+        for (size_t i = 0; i < regmap_bytes_count; i++) {
+            put_byte_to_buffer(&uart_ctx.tx, uart_tx.bytes_to_send[i]);
+        }
+        uart_rx.number_of_send_bytes = regmap_bytes_count;
+
+        uint16_t rx_buf_size = get_buffer_used_space(&uart_ctx.rx);
+        uint16_t regmap_read_bytes_count = uart_tx.number_of_read_bytes;
+        if (regmap_read_bytes_count > rx_buf_size) {
+            regmap_read_bytes_count = rx_buf_size;
+        }
+        for (size_t i = 0; i < uart_tx.number_of_read_bytes; i++) {
+            if (get_buffer_used_space(&uart_ctx.rx) > 0) {
+                push_byte_from_buffer(&uart_ctx.rx);
             }
         }
+
         regmap_clear_changed(REGMAP_REGION_UART_TX);
     }
-    uart_tx.available_bytes_to_tx = get_buffer_available_space(&uart_ctx.tx);
-    regmap_set_region_data(REGMAP_REGION_UART_TX, &uart_tx, sizeof(uart_tx));
+
+    uart_rx.read_bytes_count = get_buffer_used_space(&uart_ctx.rx);
+    if (uart_rx.read_bytes_count > ARRAY_SIZE(uart_rx.read_bytes)) {
+        uart_rx.read_bytes_count = ARRAY_SIZE(uart_rx.read_bytes);
+    }
+    for (size_t i = 0; i < uart_rx.read_bytes_count; i++) {
+        uart_rx.read_bytes[i] = get_byte_from_buffer(&uart_ctx.rx, i);
+    }
+    regmap_set_region_data(REGMAP_REGION_UART_RX, &uart_rx, sizeof(uart_rx));
+
 
     if (USART2->ISR & USART_ISR_TXE_TXFNF) {
         if (uart_ctx.tx.head != uart_ctx.tx.tail) {
@@ -115,33 +142,5 @@ void uart_regmap_do_periodic_work(void)
         if (get_buffer_available_space(&uart_ctx.rx) > 0) {
             put_byte_to_buffer(&uart_ctx.rx, byte);
         }
-    }
-
-    do {
-        struct REGMAP_UART_RX r;
-        r.received_bytes = get_buffer_used_space(&uart_ctx.rx);
-        if (r.received_bytes > ARRAY_SIZE(r.bytes)) {
-            r.received_bytes = ARRAY_SIZE(r.bytes);
-        }
-        for (size_t i = 0; i < r.received_bytes; i++) {
-            r.bytes[i] = get_byte_from_buffer(&uart_ctx.rx, i);
-        }
-        regmap_set_region_data(REGMAP_REGION_UART_RX, &r, sizeof(r));
-    } while (0);
-
-    if (regmap_is_region_changed(REGMAP_REGION_UART_RX_CLEAR)) {
-        struct REGMAP_UART_RX_CLEAR r;
-        regmap_get_region_data(REGMAP_REGION_UART_RX_CLEAR, &r, sizeof(r));
-
-        if (r.number_of_received_bytes > 0) {
-            if (r.number_of_received_bytes > get_buffer_used_space(&uart_ctx.rx)) {
-                r.number_of_received_bytes = get_buffer_used_space(&uart_ctx.rx);
-            }
-
-            for (size_t i = 0; i < r.number_of_received_bytes; i++) {
-                push_byte_from_buffer(&uart_ctx.rx);
-            }
-        }
-        regmap_clear_changed(REGMAP_REGION_UART_RX_CLEAR);
     }
 }
