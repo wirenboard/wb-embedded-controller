@@ -4,11 +4,13 @@
 #include "gpio.h"
 #include "rcc.h"
 #include "array_size.h"
+#include "atomic.h"
+#include "config.h"
 
 static const gpio_pin_t usart_tx_gpio = { GPIOA, 2 };
 static const gpio_pin_t usart_rx_gpio = { GPIOA, 15 };
 static const gpio_pin_t usart_rts_gpio = { GPIOA, 1 };
-
+static const gpio_pin_t usart_irq_gpio = { EC_GPIO_INT };
 
 struct circular_buffer {
     uint8_t data[128];
@@ -19,9 +21,30 @@ struct circular_buffer {
 struct uart_ctx {
     struct circular_buffer tx;
     struct circular_buffer rx;
+    bool rx_irq_handled;
 };
 
 static struct uart_ctx uart_ctx = {};
+
+static inline void set_irq_gpio_active(void)
+{
+    uart_ctx.rx_irq_handled = true;
+    #ifdef EC_GPIO_INT_ACTIVE_HIGH
+        GPIO_S_SET(usart_irq_gpio);
+    #else
+        GPIO_S_RESET(usart_irq_gpio);
+    #endif
+}
+
+static inline void set_irq_gpio_inactive(void)
+{
+    uart_ctx.rx_irq_handled = false;
+    #ifdef EC_GPIO_INT_ACTIVE_HIGH
+        GPIO_S_RESET(usart_irq_gpio);
+    #else
+        GPIO_S_SET(usart_irq_gpio);
+    #endif
+}
 
 static inline uint8_t get_buffer_used_space(const struct circular_buffer *buf)
 {
@@ -69,6 +92,9 @@ void uart_regmap_init(void)
     GPIO_S_SET_AF(usart_rts_gpio, 1);
     GPIO_S_SET_AF(usart_rx_gpio, 1);
 
+    GPIO_S_SET_PUSHPULL(usart_tx_gpio);
+    GPIO_S_SET_OUTPUT(usart_irq_gpio);
+
     RCC->APBENR1 |= RCC_APBENR1_USART2EN;
 
     // Reset USART
@@ -91,7 +117,6 @@ void uart_regmap_init(void)
 void uart_regmap_do_periodic_work(void)
 {
     static struct REGMAP_UART_TX uart_tx = {};
-    static struct REGMAP_UART_RX uart_rx = {};
 
     if (regmap_is_region_changed(REGMAP_REGION_UART_TX)) {
         regmap_get_region_data(REGMAP_REGION_UART_TX, &uart_tx, sizeof(uart_tx));
@@ -105,31 +130,34 @@ void uart_regmap_do_periodic_work(void)
         for (size_t i = 0; i < regmap_bytes_count; i++) {
             put_byte_to_buffer(&uart_ctx.tx, uart_tx.bytes_to_send[i]);
         }
-        uart_rx.number_of_send_bytes = regmap_bytes_count;
 
-        uint16_t rx_buf_size = get_buffer_used_space(&uart_ctx.rx);
-        uint16_t regmap_read_bytes_count = uart_tx.number_of_read_bytes;
-        if (regmap_read_bytes_count > rx_buf_size) {
-            regmap_read_bytes_count = rx_buf_size;
-        }
-        for (size_t i = 0; i < uart_tx.number_of_read_bytes; i++) {
-            if (get_buffer_used_space(&uart_ctx.rx) > 0) {
-                push_byte_from_buffer(&uart_ctx.rx);
-            }
-        }
+        struct REGMAP_UART_TX_INFO uart_tx_info = {};
+        uart_tx_info.number_of_send_bytes = regmap_bytes_count;
+        regmap_set_region_data(REGMAP_REGION_UART_TX_INFO, &uart_tx_info, sizeof(uart_tx_info));
 
         regmap_clear_changed(REGMAP_REGION_UART_TX);
     }
 
-    uart_rx.read_bytes_count = get_buffer_used_space(&uart_ctx.rx);
-    if (uart_rx.read_bytes_count > ARRAY_SIZE(uart_rx.read_bytes)) {
-        uart_rx.read_bytes_count = ARRAY_SIZE(uart_rx.read_bytes);
+    if (uart_ctx.rx_irq_handled) {
+        if (regmap_is_region_was_read(REGMAP_REGION_UART_RX)) {
+            set_irq_gpio_inactive();
+            regmap_clear_was_read(REGMAP_REGION_UART_RX);
+        }
+    } else {
+        uint16_t rx_bytes_count = get_buffer_used_space(&uart_ctx.rx);
+        if (rx_bytes_count > 0) {
+            struct REGMAP_UART_RX uart_rx;
+            if (rx_bytes_count > ARRAY_SIZE(uart_rx.read_bytes)) {
+                rx_bytes_count = ARRAY_SIZE(uart_rx.read_bytes);
+            }
+            uart_rx.read_bytes_count = rx_bytes_count;
+            for (size_t i = 0; i < rx_bytes_count; i++) {
+                uart_rx.read_bytes[i] = push_byte_from_buffer(&uart_ctx.rx);
+            }
+            regmap_set_region_data(REGMAP_REGION_UART_RX, &uart_rx, sizeof(uart_rx));
+            set_irq_gpio_active();
+        }
     }
-    for (size_t i = 0; i < uart_rx.read_bytes_count; i++) {
-        uart_rx.read_bytes[i] = get_byte_from_buffer(&uart_ctx.rx, i);
-    }
-    regmap_set_region_data(REGMAP_REGION_UART_RX, &uart_rx, sizeof(uart_rx));
-
 
     if (USART2->ISR & USART_ISR_TXE_TXFNF) {
         if (uart_ctx.tx.head != uart_ctx.tx.tail) {
