@@ -13,22 +13,28 @@ static const gpio_pin_t usart_rts_gpio = { GPIOA, 1 };
 static const gpio_pin_t usart_irq_gpio = { EC_GPIO_INT };
 
 struct circular_buffer {
-    uint8_t data[128];
-    uint8_t head;
-    uint8_t tail;
+    uint8_t data[512];
+    uint16_t head;
+    uint16_t tail;
 };
 
 struct uart_ctx {
     struct circular_buffer tx;
     struct circular_buffer rx;
-    bool rx_irq_handled;
+    int rx_irq_handled;
+    struct {
+        uint16_t pe;
+        uint16_t fe;
+        uint16_t ne;
+        uint16_t ore;
+    } errors;
 };
 
 static struct uart_ctx uart_ctx = {};
 
 static inline void set_irq_gpio_active(void)
 {
-    uart_ctx.rx_irq_handled = true;
+    uart_ctx.rx_irq_handled = 1;
     #ifdef EC_GPIO_INT_ACTIVE_HIGH
         GPIO_S_SET(usart_irq_gpio);
     #else
@@ -38,7 +44,7 @@ static inline void set_irq_gpio_active(void)
 
 static inline void set_irq_gpio_inactive(void)
 {
-    uart_ctx.rx_irq_handled = false;
+    uart_ctx.rx_irq_handled = -10;
     #ifdef EC_GPIO_INT_ACTIVE_HIGH
         GPIO_S_RESET(usart_irq_gpio);
     #else
@@ -46,9 +52,9 @@ static inline void set_irq_gpio_inactive(void)
     #endif
 }
 
-static inline uint8_t get_buffer_used_space(const struct circular_buffer *buf)
+static inline uint16_t get_buffer_used_space(const struct circular_buffer *buf)
 {
-    return (uint8_t)(buf->head - buf->tail);
+    return (uint16_t)(buf->head - buf->tail);
 }
 
 static inline size_t get_buffer_available_space(const struct circular_buffer *buf)
@@ -58,23 +64,44 @@ static inline size_t get_buffer_available_space(const struct circular_buffer *bu
 
 static inline void put_byte_to_buffer(struct circular_buffer *buf, uint8_t byte)
 {
-    uint8_t byte_pos = buf->head % sizeof(buf->data);
+    uint16_t byte_pos = buf->head % sizeof(buf->data);
     buf->head++;
     buf->data[byte_pos] = byte;
 }
 
 static inline uint8_t push_byte_from_buffer(struct circular_buffer *buf)
 {
-    uint8_t byte_pos = buf->tail % sizeof(buf->data);
-    uint8_t byte = buf->data[byte_pos];
+    uint16_t byte_pos = buf->tail % sizeof(buf->data);
+    uint16_t byte = buf->data[byte_pos];
     buf->tail++;
     return byte;
 }
 
-static inline uint8_t get_byte_from_buffer(const struct circular_buffer *buf, uint8_t index)
+static void uart_irq_handler(void)
 {
-    uint8_t byte_pos = (buf->tail + index) % sizeof(buf->data);
-    return buf->data[byte_pos];
+    if (USART2->ISR & USART_ISR_RXNE_RXFNE) {
+        uint8_t byte = USART2->RDR;
+        if (get_buffer_available_space(&uart_ctx.rx) > 0) {
+            put_byte_to_buffer(&uart_ctx.rx, byte);
+        }
+    }
+
+    if (USART2->ISR & USART_ISR_PE) {
+        uart_ctx.errors.pe++;
+        USART2->ICR |= USART_ICR_PECF;
+    }
+    if (USART2->ISR & USART_ISR_FE) {
+        uart_ctx.errors.fe++;
+        USART2->ICR |= USART_ICR_FECF;
+    }
+    if (USART2->ISR & USART_ISR_NE) {
+        uart_ctx.errors.ne++;
+        USART2->ICR |= USART_ICR_NECF;
+    }
+    if (USART2->ISR & USART_ISR_ORE) {
+        uart_ctx.errors.ore++;
+        USART2->ICR |= USART_ICR_ORECF;
+    }
 }
 
 void uart_regmap_init(void)
@@ -105,7 +132,12 @@ void uart_regmap_init(void)
     USART2->BRR = SystemCoreClock / 115200;
     USART2->CR1 |= 0x08 << 21 | 0x08 << 16;     // driver enable assert and de-assert time;
     USART2->CR3 |= USART_CR3_DEM;               // activate external transceiver control through the DE (Driver Enable) signal
-    USART2->CR1 |= USART_CR1_TE | USART_CR1_UE | USART_CR1_RE;
+    USART2->CR3 |= USART_CR3_EIE;               // error interrupt enable
+    USART2->CR1 |= USART_CR1_TE | USART_CR1_UE | USART_CR1_RE | USART_CR1_RXNEIE_RXFNEIE | USART_CR1_PEIE;
+
+    NVIC_EnableIRQ(USART2_IRQn);
+    NVIC_SetPriority(USART2_IRQn, 1);
+    NVIC_SetHandler(USART2_IRQn, uart_irq_handler);
 
     // Add test string to tx buffer
     const char test_string[] = "Hello, World!\r\n";
@@ -138,12 +170,13 @@ void uart_regmap_do_periodic_work(void)
         regmap_clear_changed(REGMAP_REGION_UART_TX);
     }
 
-    if (uart_ctx.rx_irq_handled) {
-        if (regmap_is_region_was_read(REGMAP_REGION_UART_RX)) {
-            set_irq_gpio_inactive();
-            regmap_clear_was_read(REGMAP_REGION_UART_RX);
-        }
-    } else {
+    if (regmap_is_region_was_read(REGMAP_REGION_UART_RX)) {
+        set_irq_gpio_inactive();
+        regmap_clear_was_read(REGMAP_REGION_UART_RX);
+    }
+    if (uart_ctx.rx_irq_handled < 0) {
+        uart_ctx.rx_irq_handled++;
+    } else if (uart_ctx.rx_irq_handled == 0) {
         uint16_t rx_bytes_count = get_buffer_used_space(&uart_ctx.rx);
         if (rx_bytes_count > 0) {
             struct REGMAP_UART_RX uart_rx;
@@ -162,13 +195,6 @@ void uart_regmap_do_periodic_work(void)
     if (USART2->ISR & USART_ISR_TXE_TXFNF) {
         if (uart_ctx.tx.head != uart_ctx.tx.tail) {
             USART2->TDR = push_byte_from_buffer(&uart_ctx.tx);
-        }
-    }
-
-    if (USART2->ISR & USART_ISR_RXNE_RXFNE) {
-        uint8_t byte = USART2->RDR;
-        if (get_buffer_available_space(&uart_ctx.rx) > 0) {
-            put_byte_to_buffer(&uart_ctx.rx, byte);
         }
     }
 }
