@@ -57,6 +57,7 @@ static const struct regions_info regions_info = {
 // Если не объединять в структуру, код работает немного быстрее
 static uint16_t regs[REGMAP_TOTAL_REGS_COUNT] = {};                 // Массив для хранения данных
 static uint32_t written_flags[REGMAP_BIT_ARRAYS_LEN] = {};          // Битовые флаги записи каждого регистра
+static uint32_t read_flags[REGMAP_BIT_ARRAYS_LEN] = {};             // Битовые флаги чтения каждого регистра
 static uint32_t rw_flags[REGMAP_BIT_ARRAYS_LEN] = {};               // Признак того, что в регистр можно записывать данные снаружи
 static uint16_t op_address = 0;                                     // Адрес текущей операции
 static bool is_busy = 0;                                            // Флаг занятости regmap
@@ -127,6 +128,18 @@ static inline bool is_regs_changed(uint16_t r_start, uint16_t r_end)
         }
     }
     return is_changed;
+}
+
+static inline bool is_reg_was_read(uint16_t r_start, uint16_t r_end)
+{
+    bool is_read = 0;
+    for (uint16_t i = r_start; i <= r_end; i++) {
+        if (get_bit_flag(i, read_flags)) {
+            is_read = 1;
+            break;
+        }
+    }
+    return is_read;
 }
 
 void regmap_init(void)
@@ -210,6 +223,27 @@ bool regmap_is_region_changed(enum regmap_region r)
     return ret;
 }
 
+// Проверяет, был ли регион прочитан снаружи
+bool regmap_is_region_was_read(enum regmap_region r)
+{
+    if (r >= REGMAP_REGION_COUNT) {
+        return 0;
+    }
+
+    uint16_t r_start = region_first_reg(r);
+    uint16_t r_end = region_last_reg(r);
+
+    bool ret = 0;
+    ATOMIC {
+        if (!is_busy) {
+            if (is_reg_was_read(r_start, r_end)) {
+                ret = 1;
+            }
+        }
+    }
+    return ret;
+}
+
 // Атомарно сбрасывает флаги изменения региона
 void regmap_clear_changed(enum regmap_region r)
 {
@@ -224,6 +258,25 @@ void regmap_clear_changed(enum regmap_region r)
         if (!is_busy) {
             for (uint16_t i = r_start; i <= r_end; i++) {
                 clear_bit_flag(i, written_flags);
+            }
+        }
+    }
+}
+
+// Атомарно сбрасывает флаги чтения региона
+void regmap_clear_was_read(enum regmap_region r)
+{
+    if (r >= REGMAP_REGION_COUNT) {
+        return;
+    }
+
+    uint16_t r_start = region_first_reg(r);
+    uint16_t r_end = region_last_reg(r);
+
+    ATOMIC {
+        if (!is_busy) {
+            for (uint16_t i = r_start; i <= r_end; i++) {
+                clear_bit_flag(i, read_flags);
             }
         }
     }
@@ -249,6 +302,10 @@ void regmap_ext_end_operation(void)
 // Выполняется в контексте прерывания
 uint16_t regmap_ext_read_reg_autoinc(void)
 {
+    uint16_t rw_bit_addr = addr_to_word_offset(op_address);
+    uint32_t rw_bit_mask = addr_to_bit_mask(op_address);
+    read_flags[rw_bit_addr] |= rw_bit_mask;
+
     uint16_t r = regs[op_address];
     op_address++;
     if (op_address >= REGMAP_TOTAL_REGS_COUNT) {
