@@ -170,27 +170,30 @@ void uart_regmap_do_periodic_work(void)
         regmap_clear_changed(REGMAP_REGION_UART_TX);
     }
 
-    if (regmap_is_region_was_read(REGMAP_REGION_UART_RX)) {
-        set_irq_gpio_inactive();
-        regmap_clear_was_read(REGMAP_REGION_UART_RX);
-    }
-    if (uart_ctx.rx_irq_handled < 0) {
-        uart_ctx.rx_irq_handled++;
-    } else if (uart_ctx.rx_irq_handled == 0) {
-        uint16_t rx_bytes_count = get_buffer_used_space(&uart_ctx.rx);
-        if (rx_bytes_count > 0) {
-            struct REGMAP_UART_RX uart_rx;
-            if (rx_bytes_count > ARRAY_SIZE(uart_rx.read_bytes)) {
-                rx_bytes_count = ARRAY_SIZE(uart_rx.read_bytes);
+    do {
+        static struct REGMAP_UART_RX uart_rx = {};
+
+        if (regmap_is_region_was_read(REGMAP_REGION_UART_RX)) {
+            uart_rx.read_bytes_count = 0;
+            if (regmap_set_region_data(REGMAP_REGION_UART_RX, &uart_rx, sizeof(uart_rx))) {
+                set_irq_gpio_inactive();
+                regmap_clear_was_read(REGMAP_REGION_UART_RX);
             }
-            uart_rx.read_bytes_count = rx_bytes_count;
-            for (size_t i = 0; i < rx_bytes_count; i++) {
-                uart_rx.read_bytes[i] = push_byte_from_buffer(&uart_ctx.rx);
-            }
-            regmap_set_region_data(REGMAP_REGION_UART_RX, &uart_rx, sizeof(uart_rx));
-            set_irq_gpio_active();
         }
-    }
+        if (uart_ctx.rx_irq_handled < 0) {
+            uart_ctx.rx_irq_handled++;
+        } else if (uart_ctx.rx_irq_handled == 0) {
+            while (get_buffer_used_space(&uart_ctx.rx) > 0 && uart_rx.read_bytes_count < ARRAY_SIZE(uart_rx.read_bytes)) {
+                uart_rx.read_bytes[uart_rx.read_bytes_count] = push_byte_from_buffer(&uart_ctx.rx);
+                uart_rx.read_bytes_count++;
+            }
+            if (uart_rx.read_bytes_count > 0) {
+                if (regmap_set_region_data(REGMAP_REGION_UART_RX, &uart_rx, sizeof(uart_rx))) {
+                    set_irq_gpio_active();
+                }
+            }
+        }
+    } while (0);
 
     if (USART2->ISR & USART_ISR_TXE_TXFNF) {
         if (uart_ctx.tx.head != uart_ctx.tx.tail) {
