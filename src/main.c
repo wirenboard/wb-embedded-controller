@@ -70,6 +70,11 @@ int main(void)
     // Errata 2.2.2
     // pwrkey_init();
 
+    struct REGMAP_INFO regmap_info = {
+        .wbec_id = WBEC_ID,
+    };
+    regmap_set_region_data(REGMAP_REGION_INFO, &regmap_info, sizeof(regmap_info));
+
     uart_regmap_init();
 
 
