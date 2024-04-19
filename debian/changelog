@@ -1,9 +1,9 @@
-wb-ec-firmware (1.2.1+wb2) stable; urgency=medium
+wb-ec-firmware (1.2.1+wb3) stable; urgency=medium
 
   * pwrkey short press: disable any reaction
   * pwrkey long press: reset power instead of power off
 
- -- Pavel Gasheev <pavel.gasheev@wirenboard.ru>  Thu, 18 Apr 2024 14:38:17 +0300
+ -- Pavel Gasheev <pavel.gasheev@wirenboard.ru>  Fri, 19 Apr 2024 11:36:59 +0300
 
 wb-ec-firmware (1.2.1) stable; urgency=medium
 
