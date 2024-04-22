@@ -16,6 +16,8 @@
                         uint16_t fwrev[4]; \
                     }; \
         /* 0x06 */  uint16_t poweron_reason; \
+        /* 0x07 */  uint16_t uid[6]; \
+        /* 0x0C */  /* end of uid */ \
     ) \
     /*     Addr     Name            RO/RW */ \
     m(     0x10,    RTC_TIME,       RW, \
