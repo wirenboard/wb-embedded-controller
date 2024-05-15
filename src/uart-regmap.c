@@ -21,7 +21,7 @@ struct circular_buffer {
 struct uart_ctx {
     struct circular_buffer tx;
     struct circular_buffer rx;
-    int rx_irq_handled;
+    int irq_handled;
     struct {
         uint16_t pe;
         uint16_t fe;
@@ -34,7 +34,7 @@ static struct uart_ctx uart_ctx = {};
 
 static inline void set_irq_gpio_active(void)
 {
-    uart_ctx.rx_irq_handled = 1;
+    uart_ctx.irq_handled = 1;
     #ifdef EC_GPIO_INT_ACTIVE_HIGH
         GPIO_S_SET(usart_irq_gpio);
     #else
@@ -44,7 +44,7 @@ static inline void set_irq_gpio_active(void)
 
 static inline void set_irq_gpio_inactive(void)
 {
-    uart_ctx.rx_irq_handled = -10;
+    uart_ctx.irq_handled = -10;
     #ifdef EC_GPIO_INT_ACTIVE_HIGH
         GPIO_S_RESET(usart_irq_gpio);
     #else
@@ -149,51 +149,81 @@ void uart_regmap_init(void)
 void uart_regmap_do_periodic_work(void)
 {
     static struct REGMAP_UART_TX uart_tx = {};
+    static struct REGMAP_UART_RX uart_rx = {};
+    static struct REGMAP_UART_CTRL uart_ctrl = {};
+
+    if (regmap_is_region_changed(REGMAP_REGION_UART_CTRL)) {
+        regmap_get_region_data(REGMAP_REGION_UART_CTRL, &uart_ctrl, sizeof(uart_ctrl));
+
+        if (uart_ctrl.reset) {
+            uart_ctx.tx.head = 0;
+            uart_ctx.tx.tail = 0;
+            uart_ctx.rx.head = 0;
+            uart_ctx.rx.tail = 0;
+            uart_ctx.irq_handled = 0;
+            uart_ctx.errors.pe = 0;
+            uart_ctx.errors.fe = 0;
+            uart_ctx.errors.ne = 0;
+            uart_ctx.errors.ore = 0;
+            USART2->CR1 &= ~USART_CR1_UE;
+            USART2->CR1 |= USART_CR1_UE;
+            uart_ctrl.reset = 0;
+
+            set_irq_gpio_inactive();
+            regmap_clear_changed(REGMAP_REGION_UART_TX);
+        }
+
+        regmap_clear_changed(REGMAP_REGION_UART_CTRL);
+    }
 
     if (regmap_is_region_changed(REGMAP_REGION_UART_TX)) {
+        // Это означает, что TX записали, а из RX всё прочитали за одну транзакцию
         regmap_get_region_data(REGMAP_REGION_UART_TX, &uart_tx, sizeof(uart_tx));
 
-        uint16_t regmap_bytes_count = uart_tx.bytes_to_send_count;
-        uint16_t buffer_free_space = get_buffer_available_space(&uart_ctx.tx);
-
-        if (regmap_bytes_count > buffer_free_space) {
-            regmap_bytes_count = buffer_free_space;
-        }
-        for (size_t i = 0; i < regmap_bytes_count; i++) {
-            put_byte_to_buffer(&uart_ctx.tx, uart_tx.bytes_to_send[i]);
+        if (uart_rx.ready_for_tx && uart_tx.bytes_to_send_count > 0) {
+            for (size_t i = 0; i < uart_tx.bytes_to_send_count; i++) {
+                put_byte_to_buffer(&uart_ctx.tx, uart_tx.bytes_to_send[i]);
+            }
         }
 
-        struct REGMAP_UART_TX_INFO uart_tx_info = {};
-        uart_tx_info.number_of_send_bytes = regmap_bytes_count;
-        regmap_set_region_data(REGMAP_REGION_UART_TX_INFO, &uart_tx_info, sizeof(uart_tx_info));
+        uart_rx.ready_for_tx = 0;
+        uart_rx.read_bytes_count = 0;
 
+        set_irq_gpio_inactive();
         regmap_clear_changed(REGMAP_REGION_UART_TX);
     }
 
-    do {
-        static struct REGMAP_UART_RX uart_rx = {};
+    if (uart_ctx.irq_handled < 0) {
+        uart_ctx.irq_handled++;
+    } else if (uart_ctx.irq_handled == 0) {
+        // Готовы к следующему прерыванию, нужно заполнить регмап
+        bool tx_irq_needed = false;
+        bool rx_irq_needed = false;
 
-        if (regmap_is_region_was_read(REGMAP_REGION_UART_RX)) {
-            uart_rx.read_bytes_count = 0;
-            if (regmap_set_region_data(REGMAP_REGION_UART_RX, &uart_rx, sizeof(uart_rx))) {
-                set_irq_gpio_inactive();
-                regmap_clear_was_read(REGMAP_REGION_UART_RX);
+        if (get_buffer_available_space(&uart_ctx.tx) >= sizeof(uart_tx.bytes_to_send)) {
+            uart_rx.ready_for_tx = 1;
+        }
+
+        while (get_buffer_used_space(&uart_ctx.rx) > 0 && uart_rx.read_bytes_count < ARRAY_SIZE(uart_rx.read_bytes)) {
+            uart_rx.read_bytes[uart_rx.read_bytes_count] = push_byte_from_buffer(&uart_ctx.rx);
+            uart_rx.read_bytes_count++;
+        }
+
+        if (uart_rx.read_bytes_count > 0) {
+            rx_irq_needed = true;
+        }
+
+        if (uart_rx.ready_for_tx && ((uart_tx.bytes_to_send_count > 0) || (uart_ctrl.want_to_tx))) {
+            uart_ctrl.want_to_tx = false;
+            tx_irq_needed = true;
+        }
+
+        if (regmap_set_region_data(REGMAP_REGION_UART_RX, &uart_rx, sizeof(uart_rx))) {
+            if (tx_irq_needed || rx_irq_needed) {
+                set_irq_gpio_active();
             }
         }
-        if (uart_ctx.rx_irq_handled < 0) {
-            uart_ctx.rx_irq_handled++;
-        } else if (uart_ctx.rx_irq_handled == 0) {
-            while (get_buffer_used_space(&uart_ctx.rx) > 0 && uart_rx.read_bytes_count < ARRAY_SIZE(uart_rx.read_bytes)) {
-                uart_rx.read_bytes[uart_rx.read_bytes_count] = push_byte_from_buffer(&uart_ctx.rx);
-                uart_rx.read_bytes_count++;
-            }
-            if (uart_rx.read_bytes_count > 0) {
-                if (regmap_set_region_data(REGMAP_REGION_UART_RX, &uart_rx, sizeof(uart_rx))) {
-                    set_irq_gpio_active();
-                }
-            }
-        }
-    } while (0);
+    }
 
     if (USART2->ISR & USART_ISR_TXE_TXFNF) {
         if (uart_ctx.tx.head != uart_ctx.tx.tail) {
