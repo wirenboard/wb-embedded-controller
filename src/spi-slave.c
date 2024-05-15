@@ -170,7 +170,7 @@ static void spi_irq_handler(void)
         if (spi_tx_pad_words_cnt) {
             w = spi_tx_pad_words_cnt;
             spi_tx_pad_words_cnt--;
-        } else if (spi_op == SPI_SLAVE_TRANSMIT) {
+        } else {
             w = regmap_ext_read_reg_autoinc();
         }
         spi_tx_u16(w);

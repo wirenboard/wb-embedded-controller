@@ -95,18 +95,21 @@
         /* 0xF0 */  uint16_t reset_rtc : 1; \
     ) \
     /*     Addr     Name            RO/RW */ \
-    m(     0x30,   UART_TX_INFO,    RO, \
-        /* 0x30 */ uint16_t number_of_send_bytes; \
-    ) \
-    /*     Addr     Name            RO/RW */ \
-    m(     0x31,   UART_TX,         RW, \
-        /* 0x31 */ uint16_t bytes_to_send_count; \
-        /* 0x32 */ uint8_t bytes_to_send[64]; \
+    m(     0x30,   UART_TX,         RW, \
+        /* 0x30 */ uint8_t bytes_to_send_count; \
+        /* 0x30 */ uint8_t reserved; \
+        /* 0x31 */ uint8_t bytes_to_send[64]; \
     ) \
     /*     Addr     Name            RO/RW */ \
     m(     0x60,   UART_RX,         RO, \
-        /* 0x60 */ uint16_t read_bytes_count; \
+        /* 0x60 */ uint8_t read_bytes_count; \
+        /* 0x60 */ uint8_t ready_for_tx; \
         /* 0x61 */ uint8_t read_bytes[64]; \
+    ) \
+    /*     Addr     Name            RO/RW */ \
+    m(     0xA0,   UART_CTRL,       RW, \
+        /* 0xA0 */ uint16_t reset : 1; \
+        /* 0xA0 */ uint16_t want_to_tx : 1; \
     ) \
 
 // Общее число регистров в адресном пространстве

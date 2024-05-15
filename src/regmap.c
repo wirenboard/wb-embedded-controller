@@ -59,9 +59,11 @@ static uint16_t regs[REGMAP_TOTAL_REGS_COUNT] = {};                 // Масс�
 static uint32_t written_flags[REGMAP_BIT_ARRAYS_LEN] = {};          // Битовые флаги записи каждого регистра
 static uint32_t read_flags[REGMAP_BIT_ARRAYS_LEN] = {};             // Битовые флаги чтения каждого регистра
 static uint32_t rw_flags[REGMAP_BIT_ARRAYS_LEN] = {};               // Признак того, что в регистр можно записывать данные снаружи
-static uint16_t op_address = 0;                                     // Адрес текущей операции
+static uint16_t r_address = 0;                                      // Адрес текущей операции чтения
+static uint16_t w_address = 0;                                      // Адрес текущей операции записи
 static bool is_busy = 0;                                            // Флаг занятости regmap
 
+static_assert(sizeof(struct REGMAP_UART_TX) == sizeof(struct REGMAP_UART_RX), "UART_TX and UART_RX must have the same size");
 
 // Возвращает размер региона в байтах
 static inline uint16_t region_size(enum regmap_region r)
@@ -287,7 +289,12 @@ void regmap_clear_was_read(enum regmap_region r)
 // Выполняется в контексте прерывания
 void regmap_ext_prepare_operation(uint16_t start_addr)
 {
-    op_address = start_addr;
+    w_address = start_addr;
+    if (start_addr == region_first_reg(REGMAP_REGION_UART_TX)) {
+        r_address = region_first_reg(REGMAP_REGION_UART_RX);
+    } else {
+        r_address = start_addr;
+    }
     is_busy = 1;
 }
 
@@ -302,14 +309,14 @@ void regmap_ext_end_operation(void)
 // Выполняется в контексте прерывания
 uint16_t regmap_ext_read_reg_autoinc(void)
 {
-    uint16_t rw_bit_addr = addr_to_word_offset(op_address);
-    uint32_t rw_bit_mask = addr_to_bit_mask(op_address);
+    uint16_t rw_bit_addr = addr_to_word_offset(r_address);
+    uint32_t rw_bit_mask = addr_to_bit_mask(r_address);
     read_flags[rw_bit_addr] |= rw_bit_mask;
 
-    uint16_t r = regs[op_address];
-    op_address++;
-    if (op_address >= REGMAP_TOTAL_REGS_COUNT) {
-        op_address = 0;
+    uint16_t r = regs[r_address];
+    r_address++;
+    if (r_address >= REGMAP_TOTAL_REGS_COUNT) {
+        r_address = 0;
     }
     return r;
 }
@@ -319,15 +326,15 @@ uint16_t regmap_ext_read_reg_autoinc(void)
 void regmap_ext_write_reg_autoinc(uint16_t val)
 {
     // Для ускорения не используем функции, т.к. rw_bit_addr и rw_bit_mask нужны в двух местах
-    uint16_t rw_bit_addr = addr_to_word_offset(op_address);
-    uint32_t rw_bit_mask = addr_to_bit_mask(op_address);
+    uint16_t rw_bit_addr = addr_to_word_offset(w_address);
+    uint32_t rw_bit_mask = addr_to_bit_mask(w_address);
 
     if (rw_flags[rw_bit_addr] & rw_bit_mask) {
-        regs[op_address] = val;
+        regs[w_address] = val;
         written_flags[rw_bit_addr] |= rw_bit_mask;
     }
-    op_address++;
-    if (op_address >= REGMAP_TOTAL_REGS_COUNT) {
-        op_address = 0;
+    w_address++;
+    if (w_address >= REGMAP_TOTAL_REGS_COUNT) {
+        w_address = 0;
     }
 }
