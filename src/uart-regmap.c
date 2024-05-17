@@ -150,9 +150,10 @@ void uart_regmap_do_periodic_work(void)
 {
     static struct REGMAP_UART_TX uart_tx = {};
     static struct REGMAP_UART_RX uart_rx = {};
-    static struct REGMAP_UART_CTRL uart_ctrl = {};
+    static bool want_to_tx = false;
 
     if (regmap_is_region_changed(REGMAP_REGION_UART_CTRL)) {
+        struct REGMAP_UART_CTRL uart_ctrl = {};
         regmap_get_region_data(REGMAP_REGION_UART_CTRL, &uart_ctrl, sizeof(uart_ctrl));
 
         if (uart_ctrl.reset) {
@@ -174,6 +175,19 @@ void uart_regmap_do_periodic_work(void)
         }
 
         regmap_clear_changed(REGMAP_REGION_UART_CTRL);
+    }
+
+    if (regmap_is_region_changed(REGMAP_REGION_UART_TX_START)) {
+        struct REGMAP_UART_TX_START uart_tx_start = {};
+        regmap_get_region_data(REGMAP_REGION_UART_TX_START, &uart_tx_start, sizeof(uart_tx_start));
+
+        for (size_t i = 0; i < uart_tx_start.bytes_to_send_count; i++) {
+            put_byte_to_buffer(&uart_ctx.tx, uart_tx_start.bytes_to_send[i]);
+        }
+
+        want_to_tx = true;
+
+        regmap_clear_changed(REGMAP_REGION_UART_TX_START);
     }
 
     if (regmap_is_region_changed(REGMAP_REGION_UART_TX)) {
@@ -213,8 +227,8 @@ void uart_regmap_do_periodic_work(void)
             rx_irq_needed = true;
         }
 
-        if (uart_rx.ready_for_tx && ((uart_tx.bytes_to_send_count > 0) || (uart_ctrl.want_to_tx))) {
-            uart_ctrl.want_to_tx = false;
+        if (uart_rx.ready_for_tx && ((uart_tx.bytes_to_send_count > 0) || (want_to_tx))) {
+            want_to_tx = false;
             tx_irq_needed = true;
         }
 

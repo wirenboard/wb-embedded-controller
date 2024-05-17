@@ -109,7 +109,12 @@
     /*     Addr     Name            RO/RW */ \
     m(     0xA0,   UART_CTRL,       RW, \
         /* 0xA0 */ uint16_t reset : 1; \
-        /* 0xA0 */ uint16_t want_to_tx : 1; \
+        /* 0xA0 */ /*uint16_t want_to_tx : 1; */ \
+    ) \
+    /*     Addr     Name            RO/RW */ \
+    m(     0xB0,   UART_TX_START,   RW, \
+        /* 0xB0 */ uint16_t bytes_to_send_count; \
+        /* 0xB1 */ uint8_t bytes_to_send[64]; \
     ) \
 
 // Общее число регистров в адресном пространстве
