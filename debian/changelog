@@ -1,3 +1,11 @@
+wb-ec-firmware (2.0.0-rc1) stable; urgency=medium
+
+  * regmap: use 5 pad word between address and data instead of time delay
+  * regmap: add full-duplex support: reading region data while writing
+  * add UARTs support
+
+ -- Pavel Gasheev <pavel.gasheev@wirenboard.ru>  Mon, 20 May 2024 16:45:32 +0300
+
 wb-ec-firmware (1.2.1) stable; urgency=medium
 
   * add Homepage to debian/control (no functional changes)
