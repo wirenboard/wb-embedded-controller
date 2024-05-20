@@ -22,6 +22,7 @@ struct uart_ctx {
     struct circular_buffer tx;
     struct circular_buffer rx;
     int irq_handled;
+    bool tx_in_progress;
     struct {
         uint16_t pe;
         uint16_t fe;
@@ -50,6 +51,20 @@ static inline void set_irq_gpio_inactive(void)
     #else
         GPIO_S_SET(usart_irq_gpio);
     #endif
+}
+
+static inline void enable_txe_irq(void)
+{
+    if (!uart_ctx.tx_in_progress) {
+        USART2->CR1 |= USART_CR1_TXEIE_TXFNFIE;
+        uart_ctx.tx_in_progress = true;
+    }
+}
+
+static inline void disable_txe_irq(void)
+{
+    USART2->CR1 &= ~USART_CR1_TXEIE_TXFNFIE;
+    uart_ctx.tx_in_progress = false;
 }
 
 static inline uint16_t get_buffer_used_space(const struct circular_buffer *buf)
@@ -83,6 +98,14 @@ static void uart_irq_handler(void)
         uint8_t byte = USART2->RDR;
         if (get_buffer_available_space(&uart_ctx.rx) > 0) {
             put_byte_to_buffer(&uart_ctx.rx, byte);
+        }
+    }
+
+    if (USART2->ISR & USART_ISR_TXE_TXFNF) {
+        if (get_buffer_used_space(&uart_ctx.tx) > 0) {
+            USART2->TDR = push_byte_from_buffer(&uart_ctx.tx);
+        } else {
+            disable_txe_irq();
         }
     }
 
@@ -168,6 +191,8 @@ void uart_regmap_do_periodic_work(void)
             uart_ctx.errors.ore = 0;
             uart_ctrl.reset = 0;
 
+            disable_txe_irq();
+
             want_to_tx = false;
 
             uart_rx.ready_for_tx = 0;
@@ -186,11 +211,13 @@ void uart_regmap_do_periodic_work(void)
         struct REGMAP_UART_TX_START uart_tx_start = {};
         regmap_get_region_data(REGMAP_REGION_UART_TX_START, &uart_tx_start, sizeof(uart_tx_start));
 
-        for (size_t i = 0; i < uart_tx_start.bytes_to_send_count; i++) {
-            put_byte_to_buffer(&uart_ctx.tx, uart_tx_start.bytes_to_send[i]);
+        if (uart_tx_start.bytes_to_send_count > 0) {
+            for (size_t i = 0; i < uart_tx_start.bytes_to_send_count; i++) {
+                put_byte_to_buffer(&uart_ctx.tx, uart_tx_start.bytes_to_send[i]);
+            }
+            want_to_tx = true;
+            enable_txe_irq();
         }
-
-        want_to_tx = true;
 
         regmap_clear_changed(REGMAP_REGION_UART_TX_START);
     }
@@ -203,6 +230,7 @@ void uart_regmap_do_periodic_work(void)
             for (size_t i = 0; i < uart_tx.bytes_to_send_count; i++) {
                 put_byte_to_buffer(&uart_ctx.tx, uart_tx.bytes_to_send[i]);
             }
+            enable_txe_irq();
         }
 
         uart_rx.ready_for_tx = 0;
@@ -241,12 +269,6 @@ void uart_regmap_do_periodic_work(void)
             if (tx_irq_needed || rx_irq_needed) {
                 set_irq_gpio_active();
             }
-        }
-    }
-
-    if (USART2->ISR & USART_ISR_TXE_TXFNF) {
-        if (uart_ctx.tx.head != uart_ctx.tx.tail) {
-            USART2->TDR = push_byte_from_buffer(&uart_ctx.tx);
         }
     }
 }
