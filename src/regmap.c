@@ -62,8 +62,6 @@ static uint16_t r_address = 0;                                      // Адре�
 static uint16_t w_address = 0;                                      // Адрес текущей операции записи
 static bool is_busy = 0;                                            // Флаг занятости regmap
 
-static_assert(sizeof(struct REGMAP_UART_TX) == sizeof(struct REGMAP_UART_RX), "UART_TX and UART_RX must have the same size");
-
 // Возвращает размер региона в байтах
 static inline uint16_t region_size(enum regmap_region r)
 {
@@ -237,11 +235,7 @@ void regmap_clear_changed(enum regmap_region r)
 void regmap_ext_prepare_operation(uint16_t start_addr)
 {
     w_address = start_addr;
-    if (start_addr == region_first_reg(REGMAP_REGION_UART_TX)) {
-        r_address = region_first_reg(REGMAP_REGION_UART_RX);
-    } else {
-        r_address = start_addr;
-    }
+    r_address = start_addr;
     is_busy = 1;
 }
 

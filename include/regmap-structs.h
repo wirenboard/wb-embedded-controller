@@ -1,5 +1,6 @@
 #pragma once
 #include <stdint.h>
+#include "uart-regmap.h"
 
 #define REGMAP(m) \
     /*     Addr     Name            RO/RW */ \
@@ -94,27 +95,18 @@
         /* 0xF0 */  uint16_t enable_rtc_out : 1; \
         /* 0xF0 */  uint16_t reset_rtc : 1; \
     ) \
+    /* UARTs */ \
     /*     Addr     Name            RO/RW */ \
-    m(     0x30,   UART_TX,         RW, \
-        /* 0x30 */ uint8_t bytes_to_send_count; \
-        /* 0x30 */ uint8_t reserved; \
-        /* 0x31 */ uint8_t bytes_to_send[64]; \
-    ) \
-    /*     Addr     Name            RO/RW */ \
-    m(     0x60,   UART_RX,         RO, \
-        /* 0x60 */ uint8_t read_bytes_count; \
-        /* 0x60 */ uint8_t ready_for_tx; \
-        /* 0x61 */ uint8_t read_bytes[64]; \
+    m(     0x30,   UART_EXCHANGE,   RW, \
+        /* 0x30 */ union uart_exchange e; \
     ) \
     /*     Addr     Name            RO/RW */ \
     m(     0xA0,   UART_CTRL,       RW, \
         /* 0xA0 */ uint16_t reset : 1; \
-        /* 0xA0 */ /*uint16_t want_to_tx : 1; */ \
     ) \
     /*     Addr     Name            RO/RW */ \
     m(     0xB0,   UART_TX_START,   RW, \
-        /* 0xB0 */ uint16_t bytes_to_send_count; \
-        /* 0xB1 */ uint8_t bytes_to_send[64]; \
+        /* 0xB0 */ struct uart_tx tx_start; \
     ) \
 
 // Общее число регистров в адресном пространстве
