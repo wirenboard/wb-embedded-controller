@@ -166,9 +166,14 @@ void uart_regmap_do_periodic_work(void)
             uart_ctx.errors.fe = 0;
             uart_ctx.errors.ne = 0;
             uart_ctx.errors.ore = 0;
-            USART2->CR1 &= ~USART_CR1_UE;
-            USART2->CR1 |= USART_CR1_UE;
             uart_ctrl.reset = 0;
+
+            want_to_tx = false;
+
+            uart_rx.ready_for_tx = 0;
+            uart_rx.read_bytes_count = 0;
+
+            uart_tx.bytes_to_send_count = 0;
 
             set_irq_gpio_inactive();
             regmap_clear_changed(REGMAP_REGION_UART_TX);
