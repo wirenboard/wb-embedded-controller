@@ -1,5 +1,6 @@
 #pragma once
 #include <stdint.h>
+#include "uart-regmap-types.h"
 
 #define REGMAP(m) \
     /*     Addr     Name            RO/RW */ \
@@ -95,12 +96,25 @@
         /* 0xF0 */  uint16_t enable_rtc_out : 1; \
         /* 0xF0 */  uint16_t reset_rtc : 1; \
     ) \
+    /* UARTs */ \
+    /*     Addr     Name            RO/RW */ \
+    m(     0x100,   UART_EXCHANGE,  RW, \
+        /* 0x100 */ union uart_exchange e; \
+    ) \
+    /*     Addr     Name            RO/RW */ \
+    m(     0x190,   UART_TX_START,  RW, \
+        /* 0x190 */ struct uart_tx tx_start; \
+    ) \
+    /*     Addr     Name            RO/RW */ \
+    m(     0x1E0,   UART_CTRL,      RW, \
+        /* 0x1E0 */ uint16_t reset : 1; \
+    ) \
 
 // Общее число регистров в адресном пространстве
 // Число должно быть больше или равно адресу последнего регистра
 // Должно быть степенью двойки
 // По этому числу происходит циклической автоинкремент адреса
-#define REGMAP_TOTAL_REGS_COUNT         256
+#define REGMAP_TOTAL_REGS_COUNT         512
 
 #define __REGMAP_STRUCTS(addr, name, rw, members)       struct __attribute__((packed)) REGMAP_##name { members };
 
