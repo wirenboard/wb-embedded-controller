@@ -95,6 +95,7 @@ LD_FILES += $(addprefix $(LD_DIR)/, $(LDSCRIPT))
 
 LDFLAGS += $(MCU) $(OPT) $(CC_LD_FLAGS) -nostartfiles -Xlinker --gc-sections -Wl,-Map,"$(BUILD_DIR)/$(TARGET).map"
 LDFLAGS +=  $(addprefix -T, $(LD_FILES)) $(TARGET_DIR)/stack_size.ld
+LDFLAGS += -Wl,--print-memory-usage
 
 #######################################
 # unittests
