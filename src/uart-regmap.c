@@ -7,6 +7,7 @@
 #include "atomic.h"
 #include "config.h"
 #include <assert.h>
+#include <string.h>
 
 /**
  * Модуль реализует мост SPI-UART
@@ -221,22 +222,11 @@ void uart_regmap_do_periodic_work(void)
         regmap_get_region_data(REGMAP_REGION_UART_CTRL, &uart_ctrl, sizeof(uart_ctrl));
 
         if (uart_ctrl.reset) {
-            uart_ctx.tx.head = 0;
-            uart_ctx.tx.tail = 0;
-            uart_ctx.rx.head = 0;
-            uart_ctx.rx.tail = 0;
-            uart_ctx.irq_handled = 0;
-            uart_ctx.errors.pe = 0;
-            uart_ctx.errors.fe = 0;
-            uart_ctx.errors.ne = 0;
-            uart_ctx.errors.ore = 0;
             uart_ctrl.reset = 0;
 
+            memset(&uart_ctx, 0, sizeof(uart_ctx));
+
             disable_txe_irq();
-
-            uart_ctx.ready_for_tx = false;
-            uart_ctx.tx_bytes_count_in_prev_exchange = 0;
-
             set_irq_gpio_inactive();
             regmap_clear_changed(REGMAP_REGION_UART_EXCHANGE);
         }
