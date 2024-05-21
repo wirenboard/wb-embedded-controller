@@ -212,12 +212,6 @@ void uart_regmap_init(void)
     NVIC_EnableIRQ(USART2_IRQn);
     NVIC_SetPriority(USART2_IRQn, 1);
     NVIC_SetHandler(USART2_IRQn, uart_irq_handler);
-
-    // Add test string to tx buffer
-    const char test_string[] = "Hello, World!\r\n";
-    for (size_t i = 0; i < ARRAY_SIZE(test_string); i++) {
-        put_byte_to_buffer(&uart_ctx.tx, test_string[i]);
-    }
 }
 
 void uart_regmap_do_periodic_work(void)
