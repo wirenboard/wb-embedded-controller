@@ -219,13 +219,15 @@ void uart_regmap_do_periodic_work(void)
 {
     if (regmap_is_region_changed(REGMAP_REGION_UART_CTRL)) {
         struct REGMAP_UART_CTRL uart_ctrl = {};
-        regmap_get_region_data(REGMAP_REGION_UART_CTRL, &uart_ctrl, sizeof(uart_ctrl));
-
+        if (regmap_get_region_data(REGMAP_REGION_UART_CTRL, &uart_ctrl, sizeof(uart_ctrl))) {
         if (uart_ctrl.reset) {
             uart_ctrl.reset = 0;
 
             memset(&uart_ctx, 0, sizeof(uart_ctx));
             uart_ctx.ready_for_tx = 1;
+
+                uart_stats.rx_buf_idx = 0;
+                uart_stats.rx_buf_size_max = 0;
 
             disable_txe_irq();
             set_irq_gpio_inactive();
@@ -233,26 +235,27 @@ void uart_regmap_do_periodic_work(void)
         }
 
         regmap_clear_changed(REGMAP_REGION_UART_CTRL);
+        }
     }
 
     if (regmap_is_region_changed(REGMAP_REGION_UART_TX_START)) {
         struct REGMAP_UART_TX_START uart_tx_start;
-        regmap_get_region_data(REGMAP_REGION_UART_TX_START, &uart_tx_start, sizeof(uart_tx_start));
-
+        if (regmap_get_region_data(REGMAP_REGION_UART_TX_START, &uart_tx_start, sizeof(uart_tx_start))) {
         uart_put_tx_data_from_regmap_to_buffer(&uart_tx_start.tx_start);
-
         regmap_clear_changed(REGMAP_REGION_UART_TX_START);
+        }
     }
 
     if (regmap_is_region_changed(REGMAP_REGION_UART_EXCHANGE)) {
         // Это означает, что TX записали, а из RX всё прочитали за одну транзакцию
         union uart_exchange uart_exchange;
-        regmap_get_region_data(REGMAP_REGION_UART_EXCHANGE, &uart_exchange, sizeof(uart_exchange));
+        if (regmap_get_region_data(REGMAP_REGION_UART_EXCHANGE, &uart_exchange, sizeof(uart_exchange))) {
 
         uart_put_tx_data_from_regmap_to_buffer(&uart_exchange.tx);
 
         set_irq_gpio_inactive();
         regmap_clear_changed(REGMAP_REGION_UART_EXCHANGE);
+        }
     }
 
     if (uart_ctx.irq_handled < 0) {
