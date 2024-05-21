@@ -225,6 +225,7 @@ void uart_regmap_do_periodic_work(void)
             uart_ctrl.reset = 0;
 
             memset(&uart_ctx, 0, sizeof(uart_ctx));
+            uart_ctx.ready_for_tx = 1;
 
             disable_txe_irq();
             set_irq_gpio_inactive();
