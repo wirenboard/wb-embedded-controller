@@ -1,6 +1,5 @@
 #pragma once
 #include <stdint.h>
-#include "uart-regmap.h"
 
 #define REGMAP(m) \
     /*     Addr     Name            RO/RW */ \
@@ -20,7 +19,7 @@
         /* 0x07-0x0C */ uint16_t uid[6]; \
     ) \
     /*     Addr     Name            RO/RW */ \
-    m(     0x07,    RTC_TIME,       RW, \
+    m(     0x10,    RTC_TIME,       RW, \
         /* 0x10 */  uint16_t seconds : 8; \
         /* -//- */  uint16_t minutes : 8; \
         /* 0x11 */  uint16_t hours : 8; \
@@ -30,7 +29,7 @@
         /* 0x13 */  uint16_t years; \
     ) \
     /*     Addr     Name            RO/RW */ \
-    m(     0x11,    RTC_ALARM,      RW, \
+    m(     0x20,    RTC_ALARM,      RW, \
         /* 0x20 */  uint16_t seconds : 8; \
         /* -//- */  uint16_t minutes : 8; \
         /* 0x21 */  uint16_t hours : 8; \
@@ -38,11 +37,11 @@
         /* 0x22 */  uint16_t en : 1; \
     ) \
     /*     Addr     Name            RO/RW */ \
-    m(     0x14,    RTC_CFG,        RW, \
+    m(     0x30,    RTC_CFG,        RW, \
         /* 0x30 */  uint16_t offset; \
     ) \
     /*     Addr     Name            RO/RW */ \
-    m(     0x15,    ADC_DATA,       RO, \
+    m(     0x40,    ADC_DATA,       RO, \
         /* 0x40 */  uint16_t v_in; \
         /* 0x41 */  uint16_t v_3_3; \
         /* 0x42 */  uint16_t v_5_0; \
@@ -55,7 +54,7 @@
         /* 0x49 */  uint16_t v_a4; \
     ) \
     /*     Addr     Name            RO/RW */ \
-    m(     0x20,    GPIO,           RW, \
+    m(     0x80,    GPIO,           RW, \
         /* 0x80 */  uint16_t a1 : 1; \
         /* -//- */  uint16_t a2 : 1; \
         /* -//- */  uint16_t a3 : 1; \
@@ -63,58 +62,45 @@
         /* -//- */  uint16_t v_out : 1; \
     ) \
     /*     Addr     Name            RO/RW */ \
-    m(     0x21,    WDT,            RW, \
+    m(     0x90,    WDT,            RW, \
         /* 0x90 */  uint16_t timeout; \
         /* 0x91 */  uint16_t reset : 1; \
     ) \
     /*     Addr     Name            RO/RW */ \
-    m(     0x23,    POWER_CTRL,     RW, \
+    m(     0xA0,    POWER_CTRL,     RW, \
         /* 0xA0 */  uint16_t off : 1; \
         /* -//- */  uint16_t reboot : 1; \
         /* -//- */  uint16_t reset_pmic : 1; \
     ) \
     /*     Addr     Name            RO/RW */ \
-    m(     0x24,    IRQ_FLAGS,      RO, \
+    m(     0xB0,    IRQ_FLAGS,      RO, \
         /* 0xB0 */  uint16_t irqs; \
     ) \
     /*     Addr     Name            RO/RW */ \
-    m(     0x25,    IRQ_MSK,        RW, \
+    m(     0xB2,    IRQ_MSK,        RW, \
         /* 0xB2 */  uint16_t irqs; \
     ) \
     /*     Addr     Name            RO/RW */ \
-    m(     0x26,    IRQ_CLEAR,      RW, \
+    m(     0xB4,    IRQ_CLEAR,      RW, \
         /* 0xB4 */  uint16_t irqs; \
     ) \
     /*     Addr     Name            RO/RW */ \
-    m(     0x27,    PWR_STATUS,     RO, \
+    m(     0xC0,    PWR_STATUS,     RO, \
         /* 0xC0 */  uint16_t powered_from_wbmz : 1; \
         /* 0xC0 */  uint16_t wbmz_enabled : 1; \
     ) \
     /*     Addr     Name            RO/RW */ \
-    m(     0x28,    TEST,           RW, \
+    m(     0xF0,    TEST,           RW, \
         /* 0xF0 */  uint16_t send_test_message : 1; \
         /* 0xF0 */  uint16_t enable_rtc_out : 1; \
         /* 0xF0 */  uint16_t reset_rtc : 1; \
-    ) \
-    /* UARTs */ \
-    /*     Addr     Name            RO/RW */ \
-    m(     0x30,   UART_EXCHANGE,   RW, \
-        /* 0x30 */ union uart_exchange e; \
-    ) \
-    /*     Addr     Name            RO/RW */ \
-    m(     0xA0,   UART_CTRL,       RW, \
-        /* 0xA0 */ uint16_t reset : 1; \
-    ) \
-    /*     Addr     Name            RO/RW */ \
-    m(     0xB0,   UART_TX_START,   RW, \
-        /* 0xB0 */ struct uart_tx tx_start; \
     ) \
 
 // Общее число регистров в адресном пространстве
 // Число должно быть больше или равно адресу последнего регистра
 // Должно быть степенью двойки
 // По этому числу происходит циклической автоинкремент адреса
-#define REGMAP_TOTAL_REGS_COUNT         512
+#define REGMAP_TOTAL_REGS_COUNT         256
 
 #define __REGMAP_STRUCTS(addr, name, rw, members)       struct __attribute__((packed)) REGMAP_##name { members };
 
