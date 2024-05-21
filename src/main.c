@@ -42,62 +42,53 @@ int main(void)
     // Инициализируем АЦП на внутренний VREF и частоту 1 MHz
     // Это нужно для того, чтобы измерить напряжение на линии +5В и решить что делать дальше
     // Измерение проиходит в wbec_init()
-    //adc_init(ADC_CLOCK_NO_DIV, ADC_VREF_INT);
+    adc_init(ADC_CLOCK_NO_DIV, ADC_VREF_INT);
 
     // Первым инициализируется WBEC, т.к. он в начале проверяет причину включения
     // и может заснуть обратно, если решит.
     // И переинициализуется АЦП на внешний VREF
-    // wbec_init();
+    wbec_init();
 
     // Дальше попадаем, только если хотим включаться
     rcc_set_hsi_pll_64mhz_clock();
     systick_init();
-    //adc_init(ADC_CLOCK_DIV_64, ADC_VREF_INT);
+    adc_init(ADC_CLOCK_DIV_64, ADC_VREF_INT);
 
     // Init drivers
-    // gpio_init();
+    gpio_init();
     spi_slave_init();
     regmap_init();
-    // usart_init();
+    usart_init();
 
     // Init subsystems
-    // irq_init();
-    // vmon_init();
+    irq_init();
+    vmon_init();
+
+    uart_regmap_init();
 
     // Кнопка питания инициализируется последней, т.к.
     // при настройке её как источника пробуждения может быть
     // установлен флаг WKUP, а он проверяется в wbec_init()
     // Errata 2.2.2
-    // pwrkey_init();
-
-    struct REGMAP_INFO regmap_info = {
-        .wbec_id = WBEC_ID,
-    };
-    regmap_set_region_data(REGMAP_REGION_INFO, &regmap_info, sizeof(regmap_info));
-
-    uart_regmap_init();
-
-
-    system_led_blink(10, 500);
+    pwrkey_init();
 
     while (1) {
         // Drivers
-        //adc_do_periodic_work();
+        adc_do_periodic_work();
         system_led_do_periodic_work();
-        // pwrkey_do_periodic_work();
-        // wdt_do_periodic_work();
-        // gpio_do_periodic_work();
+        pwrkey_do_periodic_work();
+        wdt_do_periodic_work();
+        gpio_do_periodic_work();
 
         // Sybsystems
-        // rtc_alarm_do_periodic_work();
-        // irq_do_periodic_work();
-        // vmon_do_periodic_work();
-        // test_do_periodic_work();
-
+        rtc_alarm_do_periodic_work();
+        irq_do_periodic_work();
+        vmon_do_periodic_work();
+        test_do_periodic_work();
         uart_regmap_do_periodic_work();
 
         // Main algorithm
-        // linux_cpu_pwr_seq_do_periodic_work();
-        // wbec_do_periodic_work();
+        linux_cpu_pwr_seq_do_periodic_work();
+        wbec_do_periodic_work();
     }
 }
