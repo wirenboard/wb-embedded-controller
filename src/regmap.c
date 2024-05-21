@@ -172,7 +172,7 @@ bool regmap_set_region_data(enum regmap_region r, const void * data, size_t size
 // Получает данные из региона
 // Проверяет размер данных на совпадаение с размером региона
 // Проверяет занятость regmap и атомарно переписывает данные во внешнюю структуру
-void regmap_get_region_data(enum regmap_region r, void * data, size_t size)
+bool regmap_get_region_data(enum regmap_region r, void * data, size_t size)
 {
     if (r >= REGMAP_REGION_COUNT) {
         return;
@@ -182,11 +182,14 @@ void regmap_get_region_data(enum regmap_region r, void * data, size_t size)
     }
 
     uint16_t offset = region_first_reg(r);
+    bool ret = 0;
     ATOMIC {
         if (!is_busy) {
             memcpy(data, &regs[offset], size);
+            ret = 1;
         }
     }
+    return ret;
 }
 
 // Проверяет, изменился ли регион снаружи
@@ -221,11 +224,11 @@ void regmap_clear_changed(enum regmap_region r)
     uint16_t r_end = region_last_reg(r);
 
     ATOMIC {
-        if (!is_busy) {
-            for (uint16_t i = r_start; i <= r_end; i++) {
-                clear_bit_flag(i, written_flags);
-            }
+    //     if (!is_busy) {
+        for (uint16_t i = r_start; i <= r_end; i++) {
+            clear_bit_flag(i, written_flags);
         }
+        // }
     }
 }
 
