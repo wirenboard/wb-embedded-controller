@@ -21,6 +21,16 @@ if [ "$1" = "--help" ]; then
     exit 0
 fi
 
+# Check that this is WB7.4 by reading compatible property from device tree
+if of_machine_match "wirenboard,wirenboard-8xx"; then
+    WBEC_SPIDEV="spi1"
+elif of_machine_match "wirenboard,wirenboard-74x"; then
+    WBEC_SPIDEV="spi2"
+else
+    echo "This Wiren Board has no EC, exiting"
+    exit 255
+fi
+
 FIRMWARE=${1:-$DEFAULT_FIRMWARE}
 
 GPIO_RESET="EC RESET"
@@ -44,7 +54,7 @@ DT_OVERLAY="
     };
 
     fragment-spi-disable {
-        target = <&spi2>;
+        target = <&${WBEC_SPIDEV}>;
         __overlay__ {
             status = \"disabled\";
         };
@@ -76,12 +86,6 @@ remove_overlay_and_start_drivers() {
         systemctl restart watchdog
     fi
 }
-
-# Check that this is WB7.4 by reading compatible property from device tree
-if ! of_machine_match "wirenboard,wirenboard-74x"; then
-    echo "This Wiren Board has no EC, exiting"
-    exit -1
-fi
 
 # Check firmware file exists
 if [ ! -f "$FIRMWARE" ]; then

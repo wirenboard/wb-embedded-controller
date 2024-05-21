@@ -17,6 +17,7 @@
 #include "mcu-pwr.h"
 #include "rcc.h"
 #include "console.h"
+#include <string.h>
 
 #define LINUX_POWERON_REASON(m) \
     m(REASON_POWER_ON,        "Power supply on"        ) \
@@ -322,6 +323,7 @@ void wbec_do_periodic_work(void)
             // EC на данный момент это никак не использует, в линуксе можно получить через sysfs
             // cat /sys/bus/spi/devices/spi0.0/hwrev
             wbec_info.hwrev = fix16_to_int(adc_get_ch_adc_raw(ADC_CHANNEL_ADC_HW_VER));
+            memcpy(wbec_info.uid, (uint8_t *)UID_BASE, sizeof(wbec_info.uid));
             regmap_set_region_data(REGMAP_REGION_INFO, &wbec_info, sizeof(wbec_info));
             // Сбросим счётчик потерь питания
             wbec_ctx.power_loss_cnt = 0;
