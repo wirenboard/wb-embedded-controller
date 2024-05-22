@@ -60,7 +60,9 @@ struct uart_ctx {
     struct circular_buffer rx;
     int irq_handled;
     bool tx_in_progress;
-    bool ready_for_tx;
+    // bool ready_for_tx;
+    // union uart_exchange exchange;
+    struct uart_rx rx_data;
     int tx_bytes_count_in_prev_exchange;
     struct {
         uint16_t pe;
@@ -84,7 +86,7 @@ static inline void set_irq_gpio_active(void)
 
 static inline void set_irq_gpio_inactive(void)
 {
-    uart_ctx.irq_handled = -10;
+    uart_ctx.irq_handled = -1;
     #ifdef EC_GPIO_INT_ACTIVE_HIGH
         GPIO_S_RESET(usart_irq_gpio);
     #else
@@ -133,15 +135,16 @@ static inline uint8_t push_byte_from_buffer(struct circular_buffer *buf)
 
 static void uart_put_tx_data_from_regmap_to_buffer(const struct uart_tx *tx)
 {
-    if ((uart_ctx.ready_for_tx) && (tx->bytes_to_send_count > 0)) {
+    if ((uart_ctx.rx_data.ready_for_tx) && (tx->bytes_to_send_count > 0)) {
+        disable_txe_irq();
         for (size_t i = 0; i < tx->bytes_to_send_count; i++) {
             put_byte_to_buffer(&uart_ctx.tx, tx->bytes_to_send[i]);
         }
+        uart_ctx.rx_data.ready_for_tx = false;
         enable_txe_irq();
     }
 
     uart_ctx.tx_bytes_count_in_prev_exchange = tx->bytes_to_send_count;
-    uart_ctx.ready_for_tx = false;
 }
 
 static void uart_irq_handler(void)
@@ -220,29 +223,25 @@ void uart_regmap_do_periodic_work(void)
     if (regmap_is_region_changed(REGMAP_REGION_UART_CTRL)) {
         struct REGMAP_UART_CTRL uart_ctrl = {};
         if (regmap_get_region_data(REGMAP_REGION_UART_CTRL, &uart_ctrl, sizeof(uart_ctrl))) {
-        if (uart_ctrl.reset) {
-            uart_ctrl.reset = 0;
+            if (uart_ctrl.reset) {
+                uart_ctrl.reset = 0;
 
-            memset(&uart_ctx, 0, sizeof(uart_ctx));
-            uart_ctx.ready_for_tx = 1;
+                memset(&uart_ctx, 0, sizeof(uart_ctx));
 
-                uart_stats.rx_buf_idx = 0;
-                uart_stats.rx_buf_size_max = 0;
+                disable_txe_irq();
+                set_irq_gpio_inactive();
+                regmap_clear_changed(REGMAP_REGION_UART_EXCHANGE);
+            }
 
-            disable_txe_irq();
-            set_irq_gpio_inactive();
-            regmap_clear_changed(REGMAP_REGION_UART_EXCHANGE);
-        }
-
-        regmap_clear_changed(REGMAP_REGION_UART_CTRL);
+            regmap_clear_changed(REGMAP_REGION_UART_CTRL);
         }
     }
 
     if (regmap_is_region_changed(REGMAP_REGION_UART_TX_START)) {
         struct REGMAP_UART_TX_START uart_tx_start;
         if (regmap_get_region_data(REGMAP_REGION_UART_TX_START, &uart_tx_start, sizeof(uart_tx_start))) {
-        uart_put_tx_data_from_regmap_to_buffer(&uart_tx_start.tx_start);
-        regmap_clear_changed(REGMAP_REGION_UART_TX_START);
+            uart_put_tx_data_from_regmap_to_buffer(&uart_tx_start.tx_start);
+            regmap_clear_changed(REGMAP_REGION_UART_TX_START);
         }
     }
 
@@ -251,46 +250,45 @@ void uart_regmap_do_periodic_work(void)
         union uart_exchange uart_exchange;
         if (regmap_get_region_data(REGMAP_REGION_UART_EXCHANGE, &uart_exchange, sizeof(uart_exchange))) {
 
-        uart_put_tx_data_from_regmap_to_buffer(&uart_exchange.tx);
+            uart_put_tx_data_from_regmap_to_buffer(&uart_exchange.tx);
 
-        set_irq_gpio_inactive();
-        regmap_clear_changed(REGMAP_REGION_UART_EXCHANGE);
+            uart_ctx.rx_data.read_bytes_count = 0;
+
+            set_irq_gpio_inactive();
+            regmap_clear_changed(REGMAP_REGION_UART_EXCHANGE);
         }
     }
 
     if (uart_ctx.irq_handled < 0) {
         uart_ctx.irq_handled++;
     } else if (uart_ctx.irq_handled == 0) {
-        // Готовы к следующему прерыванию, нужно заполнить регмап
-        union uart_exchange uart_exchange;
-        uart_exchange.rx.read_bytes_count = 0;
-
         if (get_buffer_available_space(&uart_ctx.tx) >= UART_REGMAP_BUFFER_SIZE) {
-            uart_ctx.ready_for_tx = 1;
+            uart_ctx.rx_data.ready_for_tx = 1;
         }
-        uart_exchange.rx.ready_for_tx = uart_ctx.ready_for_tx;
 
+        USART2->CR1 &= ~USART_CR1_RXNEIE_RXFNEIE;
         while ((get_buffer_used_space(&uart_ctx.rx) > 0) &&
-               (uart_exchange.rx.read_bytes_count < UART_REGMAP_BUFFER_SIZE))
+               (uart_ctx.rx_data.read_bytes_count < UART_REGMAP_BUFFER_SIZE))
         {
-            uart_exchange.rx.read_bytes[uart_exchange.rx.read_bytes_count] = push_byte_from_buffer(&uart_ctx.rx);
-            uart_exchange.rx.read_bytes_count++;
+            uart_ctx.rx_data.read_bytes[uart_ctx.rx_data.read_bytes_count] = push_byte_from_buffer(&uart_ctx.rx);
+            uart_ctx.rx_data.read_bytes_count++;
         }
+        USART2->CR1 |= USART_CR1_RXNEIE_RXFNEIE;
 
         bool tx_irq_needed = false;
         bool rx_irq_needed = false;
 
-        if (uart_exchange.rx.read_bytes_count > 0) {
+        if (uart_ctx.rx_data.read_bytes_count > 0) {
             rx_irq_needed = true;
         }
 
-        if (uart_ctx.ready_for_tx) {
+        if (uart_ctx.rx_data.ready_for_tx) {
             if (uart_ctx.tx_bytes_count_in_prev_exchange > 0) {
                 tx_irq_needed = true;
             }
         }
 
-        if (regmap_set_region_data(REGMAP_REGION_UART_EXCHANGE, &uart_exchange, sizeof(uart_exchange))) {
+        if (regmap_set_region_data(REGMAP_REGION_UART_EXCHANGE, &uart_ctx.rx_data, sizeof(struct uart_rx))) {
             if (tx_irq_needed || rx_irq_needed) {
                 set_irq_gpio_active();
             }
