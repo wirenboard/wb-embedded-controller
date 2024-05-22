@@ -47,7 +47,7 @@ static_assert(sizeof(struct uart_rx) == sizeof(struct uart_tx), "Size of uart_rx
 static const gpio_pin_t usart_tx_gpio = { GPIOA, 2 };
 static const gpio_pin_t usart_rx_gpio = { GPIOA, 15 };
 static const gpio_pin_t usart_rts_gpio = { GPIOA, 1 };
-static const gpio_pin_t usart_irq_gpio = { EC_GPIO_INT };
+static const gpio_pin_t usart_irq_gpio = { EC_GPIO_UART_INT };
 
 struct circular_buffer {
     uint8_t data[512];
@@ -77,21 +77,13 @@ static struct uart_ctx uart_ctx = {};
 static inline void set_irq_gpio_active(void)
 {
     uart_ctx.irq_handled = 1;
-    #ifdef EC_GPIO_INT_ACTIVE_HIGH
-        GPIO_S_SET(usart_irq_gpio);
-    #else
-        GPIO_S_RESET(usart_irq_gpio);
-    #endif
+    GPIO_S_SET(usart_irq_gpio);
 }
 
 static inline void set_irq_gpio_inactive(void)
 {
     uart_ctx.irq_handled = -1;
-    #ifdef EC_GPIO_INT_ACTIVE_HIGH
-        GPIO_S_RESET(usart_irq_gpio);
-    #else
-        GPIO_S_SET(usart_irq_gpio);
-    #endif
+    GPIO_S_RESET(usart_irq_gpio);
 }
 
 static inline void enable_txe_irq(void)
