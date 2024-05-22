@@ -22,34 +22,22 @@
 
 static_assert((sizeof(irq_flags_t) * 8) >= IRQ_COUNT, "IRQ flags not fitted to `irq_flags` type");
 
-static const gpio_pin_t int_gpio = { EC_GPIO_INT };
-
 static irq_flags_t flags = 0;
 static irq_flags_t mask = 0;
 
 static inline void set_int_gpio_active(void)
 {
-    #ifdef EC_GPIO_INT_ACTIVE_HIGH
-        GPIO_S_SET(int_gpio);
-    #else
-        GPIO_S_RESET(int_gpio);
-    #endif
+
 }
 
 static inline void set_int_gpio_inactive(void)
 {
-    #ifdef EC_GPIO_INT_ACTIVE_HIGH
-        GPIO_S_RESET(int_gpio);
-    #else
-        GPIO_S_SET(int_gpio);
-    #endif
+
 }
 
 void irq_init(void)
 {
     set_int_gpio_inactive();
-    GPIO_S_SET_PUSHPULL(int_gpio);
-    GPIO_S_SET_OUTPUT(int_gpio);
 }
 
 irq_flags_t irq_get_flags(void)
