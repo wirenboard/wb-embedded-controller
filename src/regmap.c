@@ -169,33 +169,16 @@ bool regmap_set_region_data(enum regmap_region r, const void * data, size_t size
     return ret;
 }
 
-// Получает данные из региона
+// Проверяет, изменился ли регион снаружи и атомарно переписывает данные во внешнюю структуру
 // Проверяет размер данных на совпадаение с размером региона
-// Проверяет занятость regmap и атомарно переписывает данные во внешнюю структуру
-bool regmap_get_region_data(enum regmap_region r, void * data, size_t size)
+// Атомарно сбрасывает флаги изменения региона
+// Если данные копировать не требуется, то можно передать NULL в data
+bool regmap_is_region_changed(enum regmap_region r, void * data, size_t size)
 {
     if (r >= REGMAP_REGION_COUNT) {
-        return;
+        return 0;
     }
-    if (size != region_size(r)) {
-        return;
-    }
-
-    uint16_t offset = region_first_reg(r);
-    bool ret = 0;
-    ATOMIC {
-        if (!is_busy) {
-            memcpy(data, &regs[offset], size);
-            ret = 1;
-        }
-    }
-    return ret;
-}
-
-// Проверяет, изменился ли регион снаружи
-bool regmap_is_region_changed(enum regmap_region r)
-{
-    if (r >= REGMAP_REGION_COUNT) {
+    if (data && (size != region_size(r))) {
         return 0;
     }
 
@@ -206,30 +189,17 @@ bool regmap_is_region_changed(enum regmap_region r)
     ATOMIC {
         if (!is_busy) {
             if (is_regs_changed(r_start, r_end)) {
+                if (data) {
+                    memcpy(data, &regs[r_start], size);
+                }
+                for (uint16_t i = r_start; i <= r_end; i++) {
+                   clear_bit_flag(i, written_flags);
+                }
                 ret = 1;
             }
         }
     }
     return ret;
-}
-
-// Атомарно сбрасывает флаги изменения региона
-void regmap_clear_changed(enum regmap_region r)
-{
-    if (r >= REGMAP_REGION_COUNT) {
-        return;
-    }
-
-    uint16_t r_start = region_first_reg(r);
-    uint16_t r_end = region_last_reg(r);
-
-    ATOMIC {
-    //     if (!is_busy) {
-        for (uint16_t i = r_start; i <= r_end; i++) {
-            clear_bit_flag(i, written_flags);
-        }
-        // }
-    }
 }
 
 // Подготовка внешней операции с regmap
