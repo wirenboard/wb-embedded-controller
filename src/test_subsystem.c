@@ -17,10 +17,8 @@ static struct test_ctx {
 
 void test_do_periodic_work(void)
 {
-    if (regmap_is_region_changed(REGMAP_REGION_TEST)) {
-        struct REGMAP_TEST test = {};
-        regmap_get_region_data(REGMAP_REGION_TEST, &test, sizeof(test));
-
+    struct REGMAP_TEST test = {};
+    if (regmap_is_region_changed(REGMAP_REGION_TEST, &test, sizeof(test))) {
         if (test.send_test_message) {
             console_print("\r\n");
             console_print_w_prefix("Test message\r\n\n");
@@ -39,8 +37,6 @@ void test_do_periodic_work(void)
             rtc_reset();
             test.reset_rtc = 0;
         }
-
-        regmap_clear_changed(REGMAP_REGION_TEST);
         regmap_set_region_data(REGMAP_REGION_TEST, &test, sizeof(test));
     }
 }
