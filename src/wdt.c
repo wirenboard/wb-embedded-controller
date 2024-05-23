@@ -67,10 +67,8 @@ void wdt_do_periodic_work(void)
         }
     }
 
-    if (regmap_is_region_changed(REGMAP_REGION_WDT)) {
-        struct REGMAP_WDT w;
-        regmap_get_region_data(REGMAP_REGION_WDT, &w, sizeof(w));
-
+    struct REGMAP_WDT w;
+    if (regmap_is_region_changed(REGMAP_REGION_WDT, &w, sizeof(w))) {
         if (w.timeout != wdt_ctx.timeout_s) {
             wdt_set_timeout(w.timeout);
             // После установки нового таймаута нужно сбросить watchdog,
@@ -81,11 +79,8 @@ void wdt_do_periodic_work(void)
         if (w.reset) {
             wdt_start_reset();
         }
-
-        regmap_clear_changed(REGMAP_REGION_WDT);
     }
 
-    struct REGMAP_WDT w;
     w.reset = 0;
     w.timeout = wdt_ctx.timeout_s;
     regmap_set_region_data(REGMAP_REGION_WDT, &w, sizeof(w));

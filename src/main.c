@@ -17,6 +17,7 @@
 #include "rcc.h"
 #include "mcu-pwr.h"
 #include "test_subsystem.h"
+#include "uart-regmap.h"
 
 int main(void)
 {
@@ -63,6 +64,8 @@ int main(void)
     irq_init();
     vmon_init();
 
+    uart_regmap_init();
+
     // Кнопка питания инициализируется последней, т.к.
     // при настройке её как источника пробуждения может быть
     // установлен флаг WKUP, а он проверяется в wbec_init()
@@ -82,6 +85,7 @@ int main(void)
         irq_do_periodic_work();
         vmon_do_periodic_work();
         test_do_periodic_work();
+        uart_regmap_do_periodic_work();
 
         // Main algorithm
         linux_cpu_pwr_seq_do_periodic_work();

@@ -92,14 +92,6 @@ int main(void)
             autoinc++;
         }
         regmap_set_region_data(r, data, r_size);
-
-        // Get data back and compare
-        uint16_t * r_data = malloc(r_size);
-        regmap_get_region_data(r, r_data, r_size);
-        if (memcmp(data, r_data, r_size) != 0) {
-            printf("ERROR: Data corrupted when set/get region\n");
-            return -EBADMSG;
-        }
     }
 
     // Readback data from regs throught all regmap with autoinc
@@ -184,19 +176,18 @@ int main(void)
     // Check is_changed flags
     for (int r = 0; r < REGMAP_REGION_COUNT; r++) {
         if (is_region_rw(r)) {
-            if (!regmap_is_region_changed(r)) {
+            if (!regmap_is_region_changed(r, NULL, 0)) {
                 printf("ERROR: No is_changed flag set for RW region");
                 return -EBADMSG;
             } else {
-                regmap_clear_changed(r);
-                if (regmap_is_region_changed(r)) {
+                if (regmap_is_region_changed(r, NULL, 0)) {
                     printf("ERROR: is_changed flag not cleared");
                     return -EBADMSG;
                 }
 
             }
         } else {
-            if (regmap_is_region_changed(r)) {
+            if (regmap_is_region_changed(r, NULL, 0)) {
                 printf("ERROR: is_changed flag is set for RO region");
                 return -EBADMSG;
             }
