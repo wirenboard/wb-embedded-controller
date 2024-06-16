@@ -3,6 +3,7 @@
 #include "regmap-int.h"
 #include "rtc.h"
 #include "system-led.h"
+#include "buzzer.h"
 #include "adc.h"
 #include "irq-subsystem.h"
 #include "rtc-alarm-subsystem.h"
@@ -62,6 +63,7 @@ int main(void)
     // Init subsystems
     irq_init();
     vmon_init();
+    buzzer_init();
 
     // Кнопка питания инициализируется последней, т.к.
     // при настройке её как источника пробуждения может быть
@@ -82,6 +84,7 @@ int main(void)
         irq_do_periodic_work();
         vmon_do_periodic_work();
         test_do_periodic_work();
+        buzzer_do_periodic_work();
 
         // Main algorithm
         linux_cpu_pwr_seq_do_periodic_work();

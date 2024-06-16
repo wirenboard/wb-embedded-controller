@@ -4,6 +4,7 @@
 #include "irq-subsystem.h"
 #include "wdt.h"
 #include "system-led.h"
+#include "buzzer.h"
 #include "ntc.h"
 #include "adc.h"
 #include "usart_tx.h"
@@ -31,6 +32,10 @@
 
 #define __LINUX_POWERON_REASON_NAME(name, string)           name,
 #define __LINUX_POWERON_REASON_STRING(name, string)         string,
+
+#define BUZZER_VOLUME 50        // %
+#define BUZZER_FREQUENSY 3000   // Hz
+#define BUZZER_DURATION 500     // ms
 
 static const char fwver_chars[] = { FW_VERSION_STRING };
 
@@ -286,6 +291,12 @@ void wbec_do_periodic_work(void)
     regmap_set_region_data(REGMAP_REGION_INFO, &wbec_info, sizeof(wbec_info));
 
     enum linux_powerctrl_req linux_powerctrl_req = get_linux_powerctrl_req();
+
+    // Короткий писк при коротком нажатии кнопки питания
+    // Так как все инициализировано, пищалка не зависит от режима работы ЕС.
+    if (pwrkey_handle_short_press()) {
+        buzzer_start(BUZZER_FREQUENSY, BUZZER_DURATION, BUZZER_VOLUME);
+    }
 
     switch (wbec_ctx.state) {
     case WBEC_STATE_WAIT_STARTUP:
