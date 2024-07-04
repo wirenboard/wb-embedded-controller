@@ -18,6 +18,7 @@
 #include "rcc.h"
 #include "console.h"
 #include <string.h>
+#include "hwrev.h"
 
 #define LINUX_POWERON_REASON(m) \
     m(REASON_POWER_ON,        "Power supply on"        ) \
@@ -178,9 +179,6 @@ void wbec_init(void)
 
     enum mcu_poweron_reason mcu_poweron_reason = mcu_get_poweron_reason();
 
-    // Независимо от причины включения нужно измерить напряжение на линии 5В
-    // Работаем на частоте 1 МГц для снижения потребления
-    while (!adc_get_ready()) {};
     bool vcc_5v_ok = vmon_check_ch_once(VMON_CHANNEL_V50);
     enum mcu_vcc_5v_state vcc_5v_last_state = mcu_get_vcc_5v_last_state();
 
@@ -322,7 +320,7 @@ void wbec_do_periodic_work(void)
             // hwrev определяется делителем на плате между AVCC и GND. Возможные значения: [0, 4095]
             // EC на данный момент это никак не использует, в линуксе можно получить через sysfs
             // cat /sys/bus/spi/devices/spi0.0/hwrev
-            wbec_info.hwrev = fix16_to_int(adc_get_ch_adc_raw(ADC_CHANNEL_ADC_HW_VER));
+            wbec_info.hwrev = hwrev_get_adc_value();
             memcpy(wbec_info.uid, (uint8_t *)UID_BASE, sizeof(wbec_info.uid));
             regmap_set_region_data(REGMAP_REGION_INFO, &wbec_info, sizeof(wbec_info));
             // Сбросим счётчик потерь питания

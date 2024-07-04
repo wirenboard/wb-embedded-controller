@@ -17,6 +17,7 @@
 #include "rcc.h"
 #include "mcu-pwr.h"
 #include "test_subsystem.h"
+#include "hwrev.h"
 
 int main(void)
 {
@@ -42,6 +43,9 @@ int main(void)
     // Это нужно для того, чтобы измерить напряжение на линии +5В и решить что делать дальше
     // Измерение проиходит в wbec_init()
     adc_init(ADC_CLOCK_NO_DIV, ADC_VREF_INT);
+    while (!adc_get_ready()) {};
+
+    hwrev_init();
 
     // Первым инициализируется WBEC, т.к. он в начале проверяет причину включения
     // и может заснуть обратно, если решит.
