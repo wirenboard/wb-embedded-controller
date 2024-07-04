@@ -16,18 +16,20 @@
     (HWREV_ADC_VALUE_CENTER(res_up, res_down) * WBEC_HWREV_DIFF_PERCENT / 100) + \
     WBEC_HWREV_DIFF_ADC
 
-#define __HWREV_DATA(name, code, res_up, res_down) \
+#define __HWREV_DATA(hwrev_name, hwrev_code, res_up, res_down) \
     { \
+        .code = hwrev_code, \
         .adc_min = HWREV_ADC_VALUE_MIN(res_up, res_down), \
         .adc_max = HWREV_ADC_VALUE_MAX(res_up, res_down), \
     },
 
 struct hwrev_desc {
+    uint16_t code;
     int16_t adc_min;
     int16_t adc_max;
 };
 
-static const struct hwrev_desc hwrev_desc[] = {
+static const struct hwrev_desc hwrev_desc[HWREV_COUNT] = {
     WBEC_HWREV_DESC(__HWREV_DATA)
 };
 
@@ -36,10 +38,9 @@ enum hwrev hwrev = HWREV_UNKNOWN;
 
 void hwrev_init(void)
 {
-    const unsigned hwrev_count = ARRAY_SIZE(hwrev_desc);
     hwrev_adc_value = fix16_to_int(adc_get_ch_adc_raw(ADC_CHANNEL_ADC_HW_VER));
 
-    for (int i = 0; i < hwrev_count; i++) {
+    for (int i = 0; i < HWREV_COUNT; i++) {
         if (hwrev_adc_value >= hwrev_desc[i].adc_min &&
             hwrev_adc_value <= hwrev_desc[i].adc_max) {
             hwrev = i;
@@ -51,6 +52,11 @@ void hwrev_init(void)
 enum hwrev hwrev_get(void)
 {
     return hwrev;
+}
+
+uint16_t hwrev_get_code(void)
+{
+    return hwrev_desc[hwrev].code;
 }
 
 uint16_t hwrev_get_adc_value(void)

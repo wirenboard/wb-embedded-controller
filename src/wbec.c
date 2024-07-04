@@ -320,7 +320,7 @@ void wbec_do_periodic_work(void)
             // hwrev определяется делителем на плате между AVCC и GND. Возможные значения: [0, 4095]
             // EC на данный момент это никак не использует, в линуксе можно получить через sysfs
             // cat /sys/bus/spi/devices/spi0.0/hwrev
-            wbec_info.hwrev = hwrev_get();
+            wbec_info.hwrev = hwrev_get_code();
             memcpy(wbec_info.uid, (uint8_t *)UID_BASE, sizeof(wbec_info.uid));
             regmap_set_region_data(REGMAP_REGION_INFO, &wbec_info, sizeof(wbec_info));
             // Сбросим счётчик потерь питания
