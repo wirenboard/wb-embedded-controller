@@ -2,13 +2,12 @@
 #include "config.h"
 
 /* HW revision names generation*/
-#define __HWREV_ENUM(hwrev_name, res_up, res_down)      HWREV_##hwrev_name,
+#define __HWREV_ENUM(name, code, res_up, res_down)          HWREV_##name = code,
 
 enum hwrev {
     WBEC_HWREV_DESC(__HWREV_ENUM)
 
-    HWREV_COUNT,
-    HWREV_UNKNOWN
+    HWREV_UNKNOWN = 0xFFFF
 };
 
 void hwrev_init(void);

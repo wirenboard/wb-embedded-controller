@@ -4,9 +4,9 @@
 /* ====== Аппаратные ревизии ====== */
 
 #define WBEC_HWREV_DESC(macro) \
-        /*    Revesion name          Res up  Res down  */ \
-        macro(WBEC_HWREV_WB74,       100,     0         ) \
-        macro(WBEC_HWREV_WB85,       100,     22        ) \
+        /*    Revesion name          Code   Res up  Res down */ \
+        macro(WBEC_HWREV_WB74,       74,    100,    0         ) \
+        macro(WBEC_HWREV_WB85,       85,    100,    22        ) \
 
 // Допустимое отклонение в процентах от расчетной точки
 // Пример: 100к/22к = 4095 * 22 / 122 = 738 единиц АЦП
