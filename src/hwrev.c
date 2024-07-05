@@ -33,12 +33,11 @@ static const struct hwrev_desc hwrev_desc[HWREV_COUNT] = {
     WBEC_HWREV_DESC(__HWREV_DATA)
 };
 
-static uint16_t hwrev_adc_value = 0;
 enum hwrev hwrev = HWREV_UNKNOWN;
 
 void hwrev_init(void)
 {
-    hwrev_adc_value = fix16_to_int(adc_get_ch_adc_raw(ADC_CHANNEL_ADC_HW_VER));
+    uint16_t hwrev_adc_value = fix16_to_int(adc_get_ch_adc_raw(ADC_CHANNEL_ADC_HW_VER));
 
     for (int i = 0; i < HWREV_COUNT; i++) {
         if (hwrev_adc_value >= hwrev_desc[i].adc_min &&
@@ -57,10 +56,5 @@ enum hwrev hwrev_get(void)
 uint16_t hwrev_get_code(void)
 {
     return hwrev_desc[hwrev].code;
-}
-
-uint16_t hwrev_get_adc_value(void)
-{
-    return hwrev_adc_value;
 }
 
