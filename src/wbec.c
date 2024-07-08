@@ -119,7 +119,9 @@ static inline void collect_adc_data(struct REGMAP_ADC_DATA * adc)
     adc->v_5_0 = adc_get_ch_mv(ADC_CHANNEL_ADC_5V);
     adc->v_3_3 = adc_get_ch_mv(ADC_CHANNEL_ADC_3V3);
     adc->vbus_console = adc_get_ch_mv(ADC_CHANNEL_ADC_VBUS_DEBUG);
-    adc->vbus_network = adc_get_ch_mv(ADC_CHANNEL_ADC_VBUS_NETWORK);
+    #if !defined(EC_USB_HUB_DEBUG_NETWORK)
+        adc->vbus_network = adc_get_ch_mv(ADC_CHANNEL_ADC_VBUS_NETWORK);
+    #endif
 
     if (vmon_get_ch_status(VMON_CHANNEL_V_IN)) {
         adc->v_in = adc_get_ch_mv(ADC_CHANNEL_ADC_V_IN);
@@ -178,9 +180,6 @@ void wbec_init(void)
 
     enum mcu_poweron_reason mcu_poweron_reason = mcu_get_poweron_reason();
 
-    // Независимо от причины включения нужно измерить напряжение на линии 5В
-    // Работаем на частоте 1 МГц для снижения потребления
-    while (!adc_get_ready()) {};
     bool vcc_5v_ok = vmon_check_ch_once(VMON_CHANNEL_V50);
     enum mcu_vcc_5v_state vcc_5v_last_state = mcu_get_vcc_5v_last_state();
 
