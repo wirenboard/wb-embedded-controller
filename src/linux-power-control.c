@@ -91,7 +91,10 @@ static void goto_standby_and_save_5v_status(void)
 
 static void wbmz_control(void)
 {
-    bool usb = vmon_get_ch_status(VMON_CHANNEL_VBUS_DEBUG) || vmon_get_ch_status(VMON_CHANNEL_VBUS_NETWORK);
+    bool usb = vmon_get_ch_status(VMON_CHANNEL_VBUS_DEBUG);
+    #if !defined(EC_USB_HUB_DEBUG_NETWORK)
+        usb = usb || vmon_get_ch_status(VMON_CHANNEL_VBUS_NETWORK);
+    #endif
     bool vin = vmon_get_ch_status(VMON_CHANNEL_V_IN_FOR_WBMZ);
     static systime_t wbmz_disable_filter_ms;
 

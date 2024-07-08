@@ -120,7 +120,9 @@ static inline void collect_adc_data(struct REGMAP_ADC_DATA * adc)
     adc->v_5_0 = adc_get_ch_mv(ADC_CHANNEL_ADC_5V);
     adc->v_3_3 = adc_get_ch_mv(ADC_CHANNEL_ADC_3V3);
     adc->vbus_console = adc_get_ch_mv(ADC_CHANNEL_ADC_VBUS_DEBUG);
-    adc->vbus_network = adc_get_ch_mv(ADC_CHANNEL_ADC_VBUS_NETWORK);
+    #if !defined(EC_USB_HUB_DEBUG_NETWORK)
+        adc->vbus_network = adc_get_ch_mv(ADC_CHANNEL_ADC_VBUS_NETWORK);
+    #endif
 
     if (vmon_get_ch_status(VMON_CHANNEL_V_IN)) {
         adc->v_in = adc_get_ch_mv(ADC_CHANNEL_ADC_V_IN);

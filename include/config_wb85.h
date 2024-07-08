@@ -1,116 +1,75 @@
 #pragma once
 #include <stdint.h>
 
-/* ====== Аппаратные ревизии ====== */
+/* ====== Аппаратная ревизия ====== */
 
-#define WBEC_HWREV_DESC(macro) \
-        /*    Revesion name          Code   Res up  Res down */ \
-        macro(WBEC_HWREV_WB74,       74,    100,    0         ) \
-        macro(WBEC_HWREV_WB85,       85,    100,    22        ) \
-
-// Допустимое отклонение в процентах от расчетной точки
-// Пример: 100к/22к = 4095 * 22 / 122 = 738 единиц АЦП
-// Допустимое отклонение = 3%, т.е. 22 единицы АЦП
-#define WBEC_HWREV_DIFF_PERCENT                 3
-// Также закладываем допустимое отклонение в единицах АЦП (шум самого АЦП)
-#define WBEC_HWREV_DIFF_ADC                     10
-
-/* ====== Параметры работы EC ====== */
-
-#define WBEC_DEBUG_MSG_PREFIX                   "[EC] "
-
-// Таймаут, который устанавливается после включения питания
-// Должен быть больше, чем время загрузки Linux
-#define WBEC_WATCHDOG_INITIAL_TIMEOUT_S         120
-// Максимальный таймаут
-#define WBEC_WATCHDOG_MAX_TIMEOUT_S             600
-
-// ID, лежит в карте регистров как константа
-#define WBEC_ID                                 0x3CD2
-
-// Время, на которое выключается питание при перезагрузке
-#define WBEC_POWER_RESET_TIME_MS                1000
-// Время загрузки Linux и драйверов WBEC
-// До этого времени питание выключается сразу при коротком нажатии
-// После - отправляется запрос в Linux
-#define WBEC_LINUX_BOOT_TIME_MS                 20000
-// Время от короткого нажатия кнопки (запрос в линукс) до сброса флага нажатия
-// Нужно для того, чтобы отличать причину выключения
-#define WBEC_LINUX_POWER_OFF_DELAY_MS           90000
-// Время задержки включения при работе от USB
-#define WBEC_LINUX_POWER_ON_DELAY_FROM_USB      5000
-
-#define WBEC_PERIODIC_WAKEUP_FIRST_TIMEOUT_S    5
-#define WBEC_PERIODIC_WAKEUP_NEXT_TIMEOUT_S     2
-
-// Температура, ниже которой EC не будет включаться
-#define WBEC_MINIMUM_WORKING_TEMPERATURE_C_X100 -4000
-
-// Число попыток перезапуска PMIC при пропадании 3.3В
-// Если за указанное время 3.3В пропадёт больше, чем указанное число раз,
-// то EC выключит питание и уйдёт в спящий режим
-#define WBEC_POWER_LOSS_TIMEOUT_MIN             10
-#define WBEC_POWER_LOSS_ATTEMPTS                2
-
+#define WBEC_HWREV                              WBEC_HWREV_WB85
 
 /* ====== Подключения EC к Wiren Board ====== */
 
 // Линия прерывания от EC в линукс
 // Меняет состояние на активное, если в EC есть флаги событий
-#define EC_GPIO_INT                     GPIOA, 8
+#define EC_GPIO_INT                             GPIOA, 8
 #define EC_GPIO_INT_ACTIVE_HIGH
 
 // Светодиод для индикации режима работы EC
 // Установлен на плате, снаружи не виден
-#define EC_GPIO_LED                     GPIOC, 6
+#define EC_GPIO_LED                             GPIOC, 6
 #define EC_GPIO_LED_ACTIVE_HIGH
 
 // Кнопка включения
-#define EC_GPIO_PWRKEY                  GPIOA, 0
+#define EC_GPIO_PWRKEY                          GPIOA, 0
 #define EC_GPIO_PWRKEY_ACTIVE_LOW
-#define EC_GPIO_PWRKEY_WKUP_NUM         1
+#define EC_GPIO_PWRKEY_WKUP_NUM                 1
 // Для игнорирования случайных нажатий во время открывания/закрывания крышки
 // или случайного прикосновения к корпусу дебаунс нужно делать большим
 // значение 500 мс подобрано экспериментально
-#define PWRKEY_DEBOUNCE_MS              500
-#define PWRKEY_LONG_PRESS_TIME_MS       8000
+#define PWRKEY_DEBOUNCE_MS                      500
+#define PWRKEY_LONG_PRESS_TIME_MS               8000
 
 // Включение V_OUT
-#define EC_GPIO_VOUT_EN                 GPIOA, 15
+#define EC_GPIO_VOUT_EN                         GPIOD, 0
 
 // Модуль WBMZ
 // WBMZ тянет вход вниз, если работает step-up на WBMZ
-#define EC_GPIO_WBMZ_STATUS_BAT         GPIOB, 5
+#define EC_GPIO_WBMZ_STATUS_BAT                 GPIOB, 5
 // В модуле WBMZ сигнал называется OFF и когда нужно отключить WBMZ, его нужно прижать вниз
 // В WB 7.4.1 он подтянут вниз резистором 2к, т.е. по дефолту выключен
 // Чтобы включить WBMZ, нужно выдать 1 на этот пин
-#define EC_GPIO_WBMZ_ON                 GPIOB, 15
+// На WB8.5 уже сделали по-хорошему и надо выдавать сильную "1" чтобы включить WBMZ
+// Итоговая логика на ЕС не изменилась
+#define EC_GPIO_WBMZ_ON                         GPIOB, 15
+// Разрешение заряда WBMZ
+// Зяряд нужно разрешать, когда работаем от Vin (от USB заряд д.б. запрещен)
+#define EC_GPIO_WBMZ_CHARGE_ON                  GPIOB, 4
 
 // Управляет питанием Linux
-#define EC_GPIO_LINUX_POWER             GPIOD, 1
-#define EC_GPIO_LINUX_PMIC_PWRON        GPIOB, 14
-#define EC_GPIO_LINUX_PMIC_RESET_PWROK  GPIOB, 13
+#define EC_GPIO_LINUX_POWER                     GPIOD, 1
+#define EC_GPIO_LINUX_PMIC_PWRON                GPIOD, 3
+#define EC_GPIO_LINUX_PMIC_RESET_PWROK          GPIOB, 3
 
 
 // USART TX - передача сообщений в Debug Console
 // Выводит сообщения в ту же консоль, что и Linux
 // Подключен через диод к DEBUG_TX
 #define EC_DEBUG_USART_USE_USART1
-#define EC_DEBUG_USART_BAUDRATE         115200
-#define EC_DEBUG_USART_GPIO             GPIOA, 9
-#define EC_DEBUG_USART_GPIO_AF          1
+#define EC_DEBUG_USART_BAUDRATE                 115200
+#define EC_DEBUG_USART_GPIO                     GPIOA, 9
+#define EC_DEBUG_USART_GPIO_AF                  1
 
+// Один USB разъем на DEBUG и NETWORK
+#define EC_USB_HUB_DEBUG_NETWORK
 
 
 /* ====== Параметры RTC ====== */
 // 0 - low, 1 - medium low, 2 - medium high, 3 - high
 // Расчеты тут: https://docs.google.com/spreadsheets/d/1k51XYnHdV_j1-fccqVz4aFkKqSe-bGuWVDhoNqGtZ8E/edit#gid=1096674256
-#define RTC_LSE_DRIVE_CAPABILITY        2
+#define RTC_LSE_DRIVE_CAPABILITY                2
 
 // Конфигурация АЦП
-#define ADC_VREF_EXT_MV                 3300
-#define NTC_RES_KOHM                    10
-#define NTC_PULLUP_RES_KOHM             33
+#define ADC_VREF_EXT_MV                         3300
+#define NTC_RES_KOHM                            10
+#define NTC_PULLUP_RES_KOHM                     33
 
 #define ADC_CHANNELS_DESC(macro) \
         /*    Channel name          ADC CH  PORT    PIN     RC      K               Offset, mV  */ \
@@ -120,18 +79,16 @@
         macro(ADC_IN4,              16,     GPIOB,  12,     50,     1,              0           ) \
         macro(ADC_V_IN,             9,      GPIOB,  1,      10,     212.0 / 12.0,   400         ) \
         macro(ADC_5V,               8,      GPIOB,  0,      10,     22.0 / 10.0,    0           ) \
-        macro(ADC_3V3,              7,      GPIOA,  7,      10,     32.0 / 22.0,    0           ) \
-        macro(ADC_NTC,              6,      GPIOA,  6,      50,     1,              0           ) \
+        macro(ADC_3V3,              6,      GPIOA,  6,      10,     32.0 / 22.0,    0           ) \
+        macro(ADC_NTC,              5,      GPIOA,  5,      50,     1,              0           ) \
         macro(ADC_VBUS_DEBUG,       3,      GPIOA,  3,      10,     2.2 / 1.0,      0           ) \
-        macro(ADC_VBUS_NETWORK,     5,      GPIOA,  5,      10,     2.2 / 1.0,      0           ) \
+        macro(ADC_VBAT,             7,      GPIOA,  7,      10,     200.0 / 100.0,  0           ) \
         macro(ADC_HW_VER,           17,     GPIOA,  13,     50,     1,              0           ) \
         macro(ADC_INT_VREF,         13,     0,      0,      50,     1,              0           ) \
 
-// macro(ADC_HW_VER,           17,      GPIOA,  13,     50,     1,              0           )
-
 // Ожидание после старта прошивки и перед опросом напряжений
 // Должно быть около 10RC канала ADC_5V
-#define VOLTAGE_MONITOR_START_DELAY_MS      100
+#define VOLTAGE_MONITOR_START_DELAY_MS          100
 
 /**
  * Особенности моониторинга напряжений:
@@ -151,5 +108,4 @@
     m(V33,              ADC_3V3,            2900,   3400,       2800,   3500  ) \
     m(V50,              ADC_5V,             4000,   5500,       3600,   5800  ) \
     m(VBUS_DEBUG,       ADC_VBUS_DEBUG,     4000,   5500,       3600,   5800  ) \
-    m(VBUS_NETWORK,     ADC_VBUS_NETWORK,   4000,   5500,       3600,   5800  ) \
 
