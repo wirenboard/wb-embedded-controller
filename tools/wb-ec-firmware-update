@@ -2,7 +2,22 @@
 . /usr/lib/wb-utils/wb_env.sh
 wb_source "of"
 
-DEFAULT_FIRMWARE=$(ls /usr/lib/wb-ec-firmware/*.bin | head -1)
+# Check that this is WB7.4 by reading compatible property from device tree
+if of_machine_match "wirenboard,wirenboard-85x"; then
+    FIRMWARE_PREFIX="WB85"
+    WBEC_SPIDEV="spi1"
+elif of_machine_match "wirenboard,wirenboard-84x"; then
+    FIRMWARE_PREFIX="WB74"
+    WBEC_SPIDEV="spi1"
+elif of_machine_match "wirenboard,wirenboard-74x"; then
+    FIRMWARE_PREFIX="WB74"
+    WBEC_SPIDEV="spi2"
+else
+    echo "This Wiren Board has no EC, exiting"
+    exit 255
+fi
+
+DEFAULT_FIRMWARE=$(ls /usr/lib/wb-ec-firmware/"$FIRMWARE_PREFIX"__*.bin | head -1)
 
 if [ "$1" = "--help" ]; then
     echo "Wiren Board Embedded Controller firmware update tool"
@@ -19,16 +34,6 @@ if [ "$1" = "--help" ]; then
 
     echo "Usage: $0"
     exit 0
-fi
-
-# Check that this is WB7.4 by reading compatible property from device tree
-if of_machine_match "wirenboard,wirenboard-8xx"; then
-    WBEC_SPIDEV="spi1"
-elif of_machine_match "wirenboard,wirenboard-74x"; then
-    WBEC_SPIDEV="spi2"
-else
-    echo "This Wiren Board has no EC, exiting"
-    exit 255
 fi
 
 FIRMWARE=${1:-$DEFAULT_FIRMWARE}

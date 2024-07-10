@@ -51,7 +51,7 @@ struct adc_ctx {
     fix16_t int_vref_coeff;
 };
 
-struct adc_ctx adc_ctx = {};
+static struct adc_ctx adc_ctx = {};
 
 #define ADC_CHANNEL_DATA(alias, ch_num, port, pin, rc_factor, k, offset_mv) \
     { ADC_CHSELR_CHSEL##ch_num, port, pin, rc_factor, ADC_CH_FULL_SCALE_MV(k), offset_mv },
@@ -69,7 +69,7 @@ struct adc_config_record {
     int16_t offset_mv;
 };
 
-struct adc_config_record adc_cfg[ADC_CHANNEL_COUNT] = {
+static const struct adc_config_record adc_cfg[ADC_CHANNEL_COUNT] = {
     ADC_CHANNELS_DESC(ADC_CHANNEL_DATA)
 };
 
