@@ -3,6 +3,7 @@
 #include "gpio.h"
 #include "systick.h"
 #include "assert.h"
+#include "buzzer.h"
 
 /**
  * Модуль ловит события с кнопки включения питания:
@@ -179,6 +180,7 @@ bool pwrkey_handle_short_press(void)
 {
     bool ret = logic_ctx.short_pressed_flag;
     if (ret) {
+        buzzer_beep(1000, 300);
         logic_ctx.short_pressed_flag = 0;
     }
     return ret;
@@ -188,6 +190,7 @@ bool pwrkey_handle_long_press(void)
 {
     bool ret = logic_ctx.long_pressed_flag;
     if (ret) {
+        buzzer_beep(1000, 1000);
         logic_ctx.long_pressed_flag = 0;
     }
     return ret;
