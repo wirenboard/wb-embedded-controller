@@ -2,14 +2,16 @@
 # MODEL defines list
 #######################################
 
-MODEL_LIST = MODEL_WB74
+MODEL_LIST = \
+MODEL_WB74 \
+MODEL_WB85
 
 #######################################
 # variabes
 #######################################
 
 SRC_DIR = src
-INCLUDE_DIR = include system/common
+INCLUDE_DIR = include
 SUBMODULES_DIR = libfixmath/libfixmath
 
 #order important
