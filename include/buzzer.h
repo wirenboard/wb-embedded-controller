@@ -10,7 +10,11 @@ void buzzer_subsystem_do_periodic_work(void);
 #else
 
 static inline void buzzer_init(void) {}
-static inline void buzzer_beep(uint16_t freq, uint16_t duration_ms) {}
 static inline void buzzer_subsystem_do_periodic_work(void) {}
+static inline void buzzer_beep(uint16_t freq, uint16_t duration_ms)
+{
+    (void)freq;
+    (void)duration_ms;
+}
 
 #endif

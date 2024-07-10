@@ -1,4 +1,7 @@
 #include "buzzer.h"
+
+#if defined EC_GPIO_BUZZER
+
 #include "wbmcu_system.h"
 #include "gpio.h"
 #include "systick.h"
@@ -79,3 +82,5 @@ void buzzer_subsystem_do_periodic_work(void)
         }
     }
 }
+
+#endif
