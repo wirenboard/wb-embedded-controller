@@ -94,7 +94,6 @@
         /* 0xD0 */  uint16_t freq_hz; \
         /* 0xD1 */  uint16_t duty_percent; \
         /* 0xD2 */  uint16_t enabled : 1; \
-        /* 0xD2 */  uint16_t inverted : 1; \
     ) \
     /*     Addr     Name            RO/RW */ \
     m(     0xF0,    TEST,           RW, \
