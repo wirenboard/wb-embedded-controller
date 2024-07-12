@@ -53,6 +53,10 @@
 #define EC_DEBUG_USART_GPIO                     GPIOA, 9
 #define EC_DEBUG_USART_GPIO_AF                  1
 
+// Пищалка
+// Поддерживается только GPIOC, 7!
+#define EC_GPIO_BUZZER                          GPIOC, 7
+
 // Один USB разъем на DEBUG и NETWORK
 #define EC_USB_HUB_DEBUG_NETWORK
 
