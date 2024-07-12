@@ -145,9 +145,8 @@ static inline enum linux_powerctrl_req get_linux_powerctrl_req(void)
 {
     enum linux_powerctrl_req ret = LINUX_POWERCTRL_NO_ACTION;
 
-    if (regmap_is_region_changed(REGMAP_REGION_POWER_CTRL)) {
-        struct REGMAP_POWER_CTRL p;
-        regmap_get_region_data(REGMAP_REGION_POWER_CTRL, &p, sizeof(p));
+    struct REGMAP_POWER_CTRL p;
+    if (regmap_is_region_changed(REGMAP_REGION_POWER_CTRL, &p, sizeof(p))) {
         // Linux is ready to power off
         if (p.off) {
             p.off = 0;
@@ -160,7 +159,6 @@ static inline enum linux_powerctrl_req get_linux_powerctrl_req(void)
             ret = LINUX_POWERCTRL_PMIC_RESET;
         }
 
-        regmap_clear_changed(REGMAP_REGION_POWER_CTRL);
         regmap_set_region_data(REGMAP_REGION_POWER_CTRL, &p, sizeof(p));
     }
 
@@ -322,7 +320,7 @@ void wbec_do_periodic_work(void)
             // hwrev определяется делителем на плате между AVCC и GND. Возможные значения: [0, 4095]
             // EC на данный момент это никак не использует, в линуксе можно получить через sysfs
             // cat /sys/bus/spi/devices/spi0.0/hwrev
-            wbec_info.hwrev = fix16_to_int(adc_get_ch_adc_raw(ADC_CHANNEL_ADC_HW_VER));
+            // wbec_info.hwrev = fix16_to_int(adc_get_ch_adc_raw(ADC_CHANNEL_ADC_HW_VER));
             memcpy(wbec_info.uid, (uint8_t *)UID_BASE, sizeof(wbec_info.uid));
             regmap_set_region_data(REGMAP_REGION_INFO, &wbec_info, sizeof(wbec_info));
             // Сбросим счётчик потерь питания
