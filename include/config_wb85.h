@@ -56,6 +56,10 @@
 // Пищалка
 // Поддерживается только GPIOC, 7!
 #define EC_GPIO_BUZZER                          GPIOC, 7
+#define EC_BUZZER_BEEP_FREQ                     1000
+#define EC_BUZZER_BEEP_POWERON_MS               100
+#define EC_BUZZER_BEEP_SHORT_PRESS_MS           300
+#define EC_BUZZER_BEEP_LONG_PRESS_MS            1000
 
 // Один USB разъем на DEBUG и NETWORK
 #define EC_USB_HUB_DEBUG_NETWORK

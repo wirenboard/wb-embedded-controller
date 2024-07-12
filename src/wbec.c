@@ -87,13 +87,13 @@ static void new_state(enum wbec_state s)
     wbec_ctx.timestamp = systick_get_system_time_ms();
 
     switch (wbec_ctx.state) {
-    case WBEC_STATE_WAIT_STARTUP:               system_led_blink(5,   100);                             break;
-    case WBEC_STATE_VOLTAGE_CHECK:              system_led_blink(5,   100);                             break;
-    case WBEC_STATE_TEMP_CHECK_LOOP:            system_led_blink(5,   100);                             break;
-    case WBEC_STATE_POWER_ON_SEQUENCE_WAIT:     system_led_blink(50,  50);                              break;
-    case WBEC_STATE_WORKING:                    system_led_blink(500, 1000);   buzzer_beep(1000, 100);  break;
-    case WBEC_STATE_POWER_OFF_SEQUENCE_WAIT:    system_led_blink(50,  50);                              break;
-    default:                                    system_led_enable();                                    break;
+    case WBEC_STATE_WAIT_STARTUP:               system_led_blink(5,   100);     break;
+    case WBEC_STATE_VOLTAGE_CHECK:              system_led_blink(5,   100);     break;
+    case WBEC_STATE_TEMP_CHECK_LOOP:            system_led_blink(5,   100);     break;
+    case WBEC_STATE_POWER_ON_SEQUENCE_WAIT:     system_led_blink(50,  50);      break;
+    case WBEC_STATE_WORKING:                    system_led_blink(500, 1000); buzzer_beep(EC_BUZZER_BEEP_FREQ, EC_BUZZER_BEEP_POWERON_MS);  break;
+    case WBEC_STATE_POWER_OFF_SEQUENCE_WAIT:    system_led_blink(50,  50);      break;
+    default:                                    system_led_enable();            break;
     }
 }
 
