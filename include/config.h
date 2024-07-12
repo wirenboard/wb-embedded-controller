@@ -40,6 +40,11 @@
 #define WBEC_POWER_LOSS_TIMEOUT_MIN             10
 #define WBEC_POWER_LOSS_ATTEMPTS                2
 
+// Пищалка
+#define EC_BUZZER_BEEP_FREQ                     1000
+#define EC_BUZZER_BEEP_POWERON_MS               100
+#define EC_BUZZER_BEEP_SHORT_PRESS_MS           300
+#define EC_BUZZER_BEEP_LONG_PRESS_MS            1000
 
 /* ====== Специфичные для моделей параметры ====== */
 
