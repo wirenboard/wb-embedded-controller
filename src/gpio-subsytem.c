@@ -48,7 +48,7 @@ void gpio_do_periodic_work(void)
     regmap_set_region_data(REGMAP_REGION_GPIO, &gpio_ctx, sizeof(gpio_ctx));
 
     struct REGMAP_GPIO g;
-    if (regmap_is_region_changed(REGMAP_REGION_GPIO, &g, sizeof(g))) {
+    if (regmap_get_data_if_region_changed(REGMAP_REGION_GPIO, &g, sizeof(g))) {
         gpio_ctx.v_out = g.v_out;
     }
 }

@@ -68,7 +68,7 @@ void wdt_do_periodic_work(void)
     }
 
     struct REGMAP_WDT w;
-    if (regmap_is_region_changed(REGMAP_REGION_WDT, &w, sizeof(w))) {
+    if (regmap_get_data_if_region_changed(REGMAP_REGION_WDT, &w, sizeof(w))) {
         if (w.timeout != wdt_ctx.timeout_s) {
             wdt_set_timeout(w.timeout);
             // После установки нового таймаута нужно сбросить watchdog,

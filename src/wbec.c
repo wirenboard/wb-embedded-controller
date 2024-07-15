@@ -146,7 +146,7 @@ static inline enum linux_powerctrl_req get_linux_powerctrl_req(void)
     enum linux_powerctrl_req ret = LINUX_POWERCTRL_NO_ACTION;
 
     struct REGMAP_POWER_CTRL p;
-    if (regmap_is_region_changed(REGMAP_REGION_POWER_CTRL, &p, sizeof(p))) {
+    if (regmap_get_data_if_region_changed(REGMAP_REGION_POWER_CTRL, &p, sizeof(p))) {
         // Linux is ready to power off
         if (p.off) {
             p.off = 0;

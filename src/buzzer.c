@@ -63,7 +63,7 @@ void buzzer_beep(uint16_t freq, uint16_t duration_ms)
 void buzzer_subsystem_do_periodic_work(void)
 {
     struct REGMAP_BUZZER_CTRL buzzer_ctrl;
-    if (regmap_is_region_changed(REGMAP_REGION_BUZZER_CTRL, &buzzer_ctrl, sizeof(buzzer_ctrl))) {
+    if (regmap_get_data_if_region_changed(REGMAP_REGION_BUZZER_CTRL, &buzzer_ctrl, sizeof(buzzer_ctrl))) {
         if (buzzer_ctrl.enabled) {
             buzzer_enable(buzzer_ctrl.freq_hz, buzzer_ctrl.duty_percent);
         } else {

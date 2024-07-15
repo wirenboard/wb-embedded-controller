@@ -86,12 +86,12 @@ void irq_do_periodic_work(void)
     regmap_set_region_data(REGMAP_REGION_IRQ_FLAGS, &f, sizeof(f));
 
     struct REGMAP_IRQ_MSK m;
-    if (regmap_is_region_changed(REGMAP_REGION_IRQ_MSK, &m, sizeof(m))) {
+    if (regmap_get_data_if_region_changed(REGMAP_REGION_IRQ_MSK, &m, sizeof(m))) {
         irq_set_mask(m.irqs);
     }
 
     struct REGMAP_IRQ_CLEAR c;
-    if (regmap_is_region_changed(REGMAP_REGION_IRQ_CLEAR, &c, sizeof(c))) {
+    if (regmap_get_data_if_region_changed(REGMAP_REGION_IRQ_CLEAR, &c, sizeof(c))) {
         irq_clear_flags(c.irqs);
     }
 }

@@ -173,7 +173,7 @@ bool regmap_set_region_data(enum regmap_region r, const void * data, size_t size
 // Проверяет размер данных на совпадаение с размером региона
 // Атомарно сбрасывает флаги изменения региона
 // Если данные копировать не требуется, то можно передать NULL в data
-bool regmap_is_region_changed(enum regmap_region r, void * data, size_t size)
+bool regmap_get_data_if_region_changed(enum regmap_region r, void * data, size_t size)
 {
     if (r >= REGMAP_REGION_COUNT) {
         return 0;

@@ -176,18 +176,18 @@ int main(void)
     // Check is_changed flags
     for (int r = 0; r < REGMAP_REGION_COUNT; r++) {
         if (is_region_rw(r)) {
-            if (!regmap_is_region_changed(r, NULL, 0)) {
+            if (!regmap_get_data_if_region_changed(r, NULL, 0)) {
                 printf("ERROR: No is_changed flag set for RW region");
                 return -EBADMSG;
             } else {
-                if (regmap_is_region_changed(r, NULL, 0)) {
+                if (regmap_get_data_if_region_changed(r, NULL, 0)) {
                     printf("ERROR: is_changed flag not cleared");
                     return -EBADMSG;
                 }
 
             }
         } else {
-            if (regmap_is_region_changed(r, NULL, 0)) {
+            if (regmap_get_data_if_region_changed(r, NULL, 0)) {
                 printf("ERROR: is_changed flag is set for RO region");
                 return -EBADMSG;
             }
