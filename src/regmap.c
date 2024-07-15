@@ -58,6 +58,10 @@ static const struct regions_info regions_info = {
 static uint16_t regs[REGMAP_TOTAL_REGS_COUNT] = {};                 // Массив для хранения данных
 static uint32_t written_flags[REGMAP_BIT_ARRAYS_LEN] = {};          // Битовые флаги записи каждого регистра
 static uint32_t rw_flags[REGMAP_BIT_ARRAYS_LEN] = {};               // Признак того, что в регистр можно записывать данные снаружи
+
+// Два разных указателя на чтение и запись позволяют реализовать полнодуплексный обмен данными
+// т.е. при записи данных в регион, по miso возвращается текущие данные из этого региона.
+// При этом сначала происходит чтение, а затем запись и данные не перетираются.
 static uint16_t r_address = 0;                                      // Адрес текущей операции чтения
 static uint16_t w_address = 0;                                      // Адрес текущей операции записи
 static bool is_busy = 0;                                            // Флаг занятости regmap
