@@ -57,11 +57,9 @@ void rtc_alarm_do_periodic_work(void)
         alarm_enabled = rtc_alarm.enabled;
     }
 
-    if (regmap_is_region_changed(REGMAP_REGION_RTC_TIME)) {
+    struct REGMAP_RTC_TIME regmap_time;
+    if (regmap_get_data_if_region_changed(REGMAP_REGION_RTC_TIME, &regmap_time, sizeof(regmap_time))) {
         struct rtc_time rtc_time;
-        struct REGMAP_RTC_TIME regmap_time;
-
-        regmap_get_region_data(REGMAP_REGION_RTC_TIME, &regmap_time, sizeof(regmap_time));
 
         rtc_time.seconds = BIN_TO_BCD(regmap_time.seconds);
         rtc_time.minutes = BIN_TO_BCD(regmap_time.minutes);
@@ -72,15 +70,11 @@ void rtc_alarm_do_periodic_work(void)
         rtc_time.weekdays = regmap_time.weekdays;
 
         rtc_set_datetime(&rtc_time);
-
-        regmap_clear_changed(REGMAP_REGION_RTC_TIME);
     }
 
-    if (regmap_is_region_changed(REGMAP_REGION_RTC_ALARM)) {
+    struct REGMAP_RTC_ALARM regmap_alarm;
+    if (regmap_get_data_if_region_changed(REGMAP_REGION_RTC_ALARM, &regmap_alarm, sizeof(regmap_alarm))) {
         struct rtc_alarm rtc_alarm;
-        struct REGMAP_RTC_ALARM regmap_alarm;
-
-        regmap_get_region_data(REGMAP_REGION_RTC_ALARM, &regmap_alarm, sizeof(regmap_alarm));
 
         rtc_alarm.enabled = regmap_alarm.en;
         rtc_alarm.flag = 0;
@@ -90,16 +84,11 @@ void rtc_alarm_do_periodic_work(void)
         rtc_alarm.days = BIN_TO_BCD(regmap_alarm.days);
 
         rtc_set_alarm(&rtc_alarm);
-        regmap_clear_changed(REGMAP_REGION_RTC_ALARM);
     }
 
-    if (regmap_is_region_changed(REGMAP_REGION_RTC_CFG)) {
-        struct REGMAP_RTC_CFG cfg;
-        regmap_get_region_data(REGMAP_REGION_RTC_CFG, &cfg, sizeof(cfg));
-
+    struct REGMAP_RTC_CFG cfg;
+    if (regmap_get_data_if_region_changed(REGMAP_REGION_RTC_CFG, &cfg, sizeof(cfg))) {
         rtc_set_offset(cfg.offset);
-
-        regmap_clear_changed(REGMAP_REGION_RTC_CFG);
     }
 }
 

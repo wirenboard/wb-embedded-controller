@@ -58,9 +58,13 @@ static const struct regions_info regions_info = {
 static uint16_t regs[REGMAP_TOTAL_REGS_COUNT] = {};                 // Массив для хранения данных
 static uint32_t written_flags[REGMAP_BIT_ARRAYS_LEN] = {};          // Битовые флаги записи каждого регистра
 static uint32_t rw_flags[REGMAP_BIT_ARRAYS_LEN] = {};               // Признак того, что в регистр можно записывать данные снаружи
-static uint16_t op_address = 0;                                     // Адрес текущей операции
-static bool is_busy = 0;                                            // Флаг занятости regmap
 
+// Два разных указателя на чтение и запись позволяют реализовать полнодуплексный обмен данными
+// т.е. при записи данных в регион, по miso возвращается текущие данные из этого региона.
+// При этом сначала происходит чтение, а затем запись и данные не перетираются.
+static uint16_t r_address = 0;                                      // Адрес текущей операции чтения
+static uint16_t w_address = 0;                                      // Адрес текущей операции записи
+static bool is_busy = 0;                                            // Флаг занятости regmap
 
 // Возвращает размер региона в байтах
 static inline uint16_t region_size(enum regmap_region r)
@@ -169,30 +173,16 @@ bool regmap_set_region_data(enum regmap_region r, const void * data, size_t size
     return ret;
 }
 
-// Получает данные из региона
+// Проверяет, изменился ли регион снаружи и атомарно переписывает данные во внешнюю структуру
 // Проверяет размер данных на совпадаение с размером региона
-// Проверяет занятость regmap и атомарно переписывает данные во внешнюю структуру
-void regmap_get_region_data(enum regmap_region r, void * data, size_t size)
+// Атомарно сбрасывает флаги изменения региона
+// Если данные копировать не требуется, то можно передать NULL в data
+bool regmap_get_data_if_region_changed(enum regmap_region r, void * data, size_t size)
 {
     if (r >= REGMAP_REGION_COUNT) {
-        return;
+        return 0;
     }
-    if (size != region_size(r)) {
-        return;
-    }
-
-    uint16_t offset = region_first_reg(r);
-    ATOMIC {
-        if (!is_busy) {
-            memcpy(data, &regs[offset], size);
-        }
-    }
-}
-
-// Проверяет, изменился ли регион снаружи
-bool regmap_is_region_changed(enum regmap_region r)
-{
-    if (r >= REGMAP_REGION_COUNT) {
+    if (data && (size != region_size(r))) {
         return 0;
     }
 
@@ -203,6 +193,12 @@ bool regmap_is_region_changed(enum regmap_region r)
     ATOMIC {
         if (!is_busy) {
             if (is_regs_changed(r_start, r_end)) {
+                if (data) {
+                    memcpy(data, &regs[r_start], size);
+                }
+                for (uint16_t i = r_start; i <= r_end; i++) {
+                   clear_bit_flag(i, written_flags);
+                }
                 ret = 1;
             }
         }
@@ -210,31 +206,13 @@ bool regmap_is_region_changed(enum regmap_region r)
     return ret;
 }
 
-// Атомарно сбрасывает флаги изменения региона
-void regmap_clear_changed(enum regmap_region r)
-{
-    if (r >= REGMAP_REGION_COUNT) {
-        return;
-    }
-
-    uint16_t r_start = region_first_reg(r);
-    uint16_t r_end = region_last_reg(r);
-
-    ATOMIC {
-        if (!is_busy) {
-            for (uint16_t i = r_start; i <= r_end; i++) {
-                clear_bit_flag(i, written_flags);
-            }
-        }
-    }
-}
-
 // Подготовка внешней операции с regmap
 // Устанавливает начальный адрес и флаг занятости
 // Выполняется в контексте прерывания
 void regmap_ext_prepare_operation(uint16_t start_addr)
 {
-    op_address = start_addr;
+    w_address = start_addr;
+    r_address = start_addr;
     is_busy = 1;
 }
 
@@ -249,10 +227,10 @@ void regmap_ext_end_operation(void)
 // Выполняется в контексте прерывания
 uint16_t regmap_ext_read_reg_autoinc(void)
 {
-    uint16_t r = regs[op_address];
-    op_address++;
-    if (op_address >= REGMAP_TOTAL_REGS_COUNT) {
-        op_address = 0;
+    uint16_t r = regs[r_address];
+    r_address++;
+    if (r_address >= REGMAP_TOTAL_REGS_COUNT) {
+        r_address = 0;
     }
     return r;
 }
@@ -262,15 +240,15 @@ uint16_t regmap_ext_read_reg_autoinc(void)
 void regmap_ext_write_reg_autoinc(uint16_t val)
 {
     // Для ускорения не используем функции, т.к. rw_bit_addr и rw_bit_mask нужны в двух местах
-    uint16_t rw_bit_addr = addr_to_word_offset(op_address);
-    uint32_t rw_bit_mask = addr_to_bit_mask(op_address);
+    uint16_t rw_bit_addr = addr_to_word_offset(w_address);
+    uint32_t rw_bit_mask = addr_to_bit_mask(w_address);
 
     if (rw_flags[rw_bit_addr] & rw_bit_mask) {
-        regs[op_address] = val;
+        regs[w_address] = val;
         written_flags[rw_bit_addr] |= rw_bit_mask;
     }
-    op_address++;
-    if (op_address >= REGMAP_TOTAL_REGS_COUNT) {
-        op_address = 0;
+    w_address++;
+    if (w_address >= REGMAP_TOTAL_REGS_COUNT) {
+        w_address = 0;
     }
 }
