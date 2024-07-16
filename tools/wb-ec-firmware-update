@@ -163,6 +163,8 @@ stm32flash -w - -S 0x1FFF7800:4 -a$BOOTLOADER_I2C_ADDR $I2C_BUS < <(echo -n -e \
     remove_overlay_and_start_drivers
     exit -1
 }
+# Need to sleep here, because MCU is rebooted after option bytes written
+sleep 0.1
 # Update firmware
 stm32flash -w $FIRMWARE -a$BOOTLOADER_I2C_ADDR $I2C_BUS || {
     echo "Can't write firmware"
