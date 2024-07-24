@@ -100,6 +100,7 @@
         /* 0xF0 */  uint16_t send_test_message : 1; \
         /* 0xF0 */  uint16_t enable_rtc_out : 1; \
         /* 0xF0 */  uint16_t reset_rtc : 1; \
+        /* 0xF0 */  uint16_t heater_force_enable : 1; \
     ) \
 
 // Общее число регистров в адресном пространстве
