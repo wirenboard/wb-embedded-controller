@@ -2,6 +2,7 @@
 #include "regmap-int.h"
 #include "console.h"
 #include "rtc.h"
+#include "temperature-control.h"
 
 /**
  * Выполняет разные тестовые функции, в обычной работе не участвует.
@@ -37,6 +38,10 @@ void test_do_periodic_work(void)
             rtc_reset();
             test.reset_rtc = 0;
         }
+
+        temperature_control_heater_force_control(test.heater_force_enable);
+        test.heater_force_enable = 0;
+
         regmap_set_region_data(REGMAP_REGION_TEST, &test, sizeof(test));
     }
 }
