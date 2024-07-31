@@ -70,6 +70,11 @@
 // Один USB разъем на DEBUG и NETWORK
 #define EC_USB_HUB_DEBUG_NETWORK
 
+// WBMZ6
+#define WBEC_WBMZ6_SUPPORT
+//                                                    name     freq    sda        scl
+#define SOFTWARE_I2C_DESC(macro)                macro(WBMZ6,   100000, GPIOF, 1,  GPIOF, 0)
+
 
 /* ====== Параметры RTC ====== */
 // 0 - low, 1 - medium low, 2 - medium high, 3 - high
