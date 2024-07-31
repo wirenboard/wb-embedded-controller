@@ -1,12 +1,14 @@
+#include "software_i2c.h"
+
+#if defined (SOFTWARE_I2C_DESC)
+
 #include <stdbool.h>
 #include "wbmcu_system.h"
-#include "software_i2c.h"
 #include "rcc.h"
 #include "gpio.h"
 // #include "failure_panic.h"
 #include "array_size.h"
 
-#if defined (SOFTWARE_I2C_DESC)
 
 #define I2C_BUS_RESET_MAX_PERIODS                           100
 #define I2C_BUS_WAIT_STRETCHING_TIMES                       1000
@@ -16,11 +18,11 @@
 
 struct software_i2c_context {
     __IO uint32_t * sda_bsrr;
-    __IO uint16_t * sda_idr;
+    __IO uint32_t * sda_idr;
     uint32_t sda_set;
     uint32_t sda_reset;
     __IO uint32_t * scl_bsrr;
-    __IO uint16_t * scl_idr;
+    __IO uint32_t * scl_idr;
     uint32_t scl_set;
     uint32_t scl_reset;
 };
@@ -197,6 +199,9 @@ static void software_i2c_delay_configure(uint32_t f)
 
     default:
         // failure_panic(FAIL_COMMON);
+        // TODO: remove failure_panic
+        // TODO: calc delays
+        delay = &delay_1M_48MHz;
         break;
     }
 }
