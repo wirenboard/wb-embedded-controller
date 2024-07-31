@@ -1,10 +1,3 @@
-/*
- * software_i2c.h
- *
- *  Created on: Jan 31, 2017
- *      Author: pavel
- */
-
 #pragma once
 #include <stdint.h>
 #include "config.h"
@@ -41,8 +34,6 @@ typedef enum {
 
 void software_i2c_init(void);
 
-// Updates I2C delays to new CPU clock frequency
-void software_i2c_update_f_cpu(uint32_t new_f_cpu);
 software_i2c_status_t software_i2c_transaction(enum software_i2c_ports p, uint8_t slaveid, const uint8_t * txbuf, uint16_t txlen, uint8_t * rxbuf, uint16_t rxlen);
 
 // helpers for transaction with separated address and data buffers. addres send msb first.

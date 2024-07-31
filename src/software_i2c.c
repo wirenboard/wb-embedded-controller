@@ -1,16 +1,9 @@
-/*
- * software_i2c.c
- *
- *  Created on: Jan 30, 2017
- *      Author: Pavel Poglazov
- */
-
-#include "stdbool.h"
+#include <stdbool.h>
 #include "wbmcu_system.h"
 #include "software_i2c.h"
-#include "wb_rcc.h"
+#include "rcc.h"
 #include "gpio.h"
-#include "failure_panic.h"
+// #include "failure_panic.h"
 #include "array_size.h"
 
 #if defined (SOFTWARE_I2C_DESC)
@@ -38,8 +31,6 @@ struct software_i2c_delay {
     void (*wl)(void);
     void (*wh)(void);
 };
-
-static uint32_t f_cpu = F_CPU;
 
 // delay functions
 static void software_i2c_bit_delay_nop_0(void)
@@ -126,172 +117,103 @@ static const struct software_i2c_delay delay_100K_8MHz = {
 
 // init structures and context switcher
 
-#if defined (SOFTWARE_I2C_SINGLE_BUS)
 
-    #define SOFTWARE_I2C_DESC_FREQ(name, freq, sda_port, sda_pin, scl_port, scl_pin) \
-        freq
-
-    #define SOFTWARE_I2C_SDA_PORT_PIN(name, freq, sda_port, sda_pin, scl_port, scl_pin) \
-        sda_port, sda_pin
-
-    #define SOFTWARE_I2C_SCL_PORT_PIN(name, freq, sda_port, sda_pin, scl_port, scl_pin) \
-        scl_port, scl_pin
-
-    #define SOFTWARE_I2C_CONST_CONTEXT(name, freq, sda_port, sda_pin, scl_port, scl_pin) \
-        .sda_bsrr = &sda_port->BSRR, \
-        .sda_idr = &sda_port->IDR, \
-        .sda_set = 1 << (sda_pin + 0), \
-        .sda_reset = 1 << (sda_pin + 16), \
-        .scl_bsrr = &scl_port->BSRR, \
-        .scl_idr = &scl_port->IDR, \
-        .scl_set = 1 << (scl_pin + 0), \
-        .scl_reset = 1 << (scl_pin + 16)
-
-    static const struct software_i2c_context context = {
-        SOFTWARE_I2C_DESC(SOFTWARE_I2C_CONST_CONTEXT)
-    };
-
-    void software_i2c_init(void)
-    {
-        GPIO_SET_OD(SOFTWARE_I2C_DESC(SOFTWARE_I2C_SDA_PORT_PIN));
-        GPIO_SET_PULLUP(SOFTWARE_I2C_DESC(SOFTWARE_I2C_SDA_PORT_PIN));
-        GPIO_SET(SOFTWARE_I2C_DESC(SOFTWARE_I2C_SDA_PORT_PIN));
-        GPIO_SET_SPEED_HIGH(SOFTWARE_I2C_DESC(SOFTWARE_I2C_SDA_PORT_PIN));
-        GPIO_SET_OUTPUT(SOFTWARE_I2C_DESC(SOFTWARE_I2C_SDA_PORT_PIN));
-
-        GPIO_SET_OD(SOFTWARE_I2C_DESC(SOFTWARE_I2C_SCL_PORT_PIN));
-        GPIO_SET_PULLUP(SOFTWARE_I2C_DESC(SOFTWARE_I2C_SCL_PORT_PIN));
-        GPIO_SET(SOFTWARE_I2C_DESC(SOFTWARE_I2C_SCL_PORT_PIN));
-        GPIO_SET_SPEED_HIGH(SOFTWARE_I2C_DESC(SOFTWARE_I2C_SCL_PORT_PIN));
-        GPIO_SET_OUTPUT(SOFTWARE_I2C_DESC(SOFTWARE_I2C_SCL_PORT_PIN));
+#define SOFTWARE_I2C_STRUCT(name, freq, sda_port, sda_pin, scl_port, scl_pin) \
+    { \
+        {sda_port, sda_pin}, \
+        {scl_port, scl_pin}, \
+        freq, \
     }
 
-    #if (F_CPU == 48000000)
-        #if (SOFTWARE_I2C_DESC(SOFTWARE_I2C_DESC_FREQ) == 1000000)
-            static const struct software_i2c_delay const * delay = delay_1M_48MHz;
-        #elif (SOFTWARE_I2C_DESC(SOFTWARE_I2C_DESC_FREQ) == 400000)
-            static const struct software_i2c_delay const * delay = delay_400K_48MHz;
-        #elif (SOFTWARE_I2C_DESC(SOFTWARE_I2C_DESC_FREQ) == 100000)
-            static const struct software_i2c_delay const * delay = delay_100K_48MHz;
-        #endif
-    #elif (F_CPU == 8000000)
-        #if (SOFTWARE_I2C_DESC(SOFTWARE_I2C_DESC_FREQ) == 400000)
-            static const struct software_i2c_delay const * delay = delay_400K_8MHz;
-        #elif (SOFTWARE_I2C_DESC(SOFTWARE_I2C_DESC_FREQ) == 100000)
-            static const struct software_i2c_delay const * delay = delay_100K_8MHz;
-        #endif
-    #else
-        #error not supported cpu clock setup. use 8 or 48 MHz
-    #endif
+struct software_i2c_desc {
+    gpio_pin_t sda;
+    gpio_pin_t scl;
+    uint32_t freq;
+};
 
-    static inline void software_i2c_set_context(enum software_i2c_ports p) {};
-    static void software_i2c_delay_configure(uint32_t f) {};
-
-#else
-
-    #define SOFTWARE_I2C_STRUCT(name, freq, sda_port, sda_pin, scl_port, scl_pin) \
-        { \
-            {sda_port, sda_pin}, \
-            {scl_port, scl_pin}, \
-            freq, \
-        }
-
-    struct software_i2c_desc {
-        gpio_pin_t sda;
-        gpio_pin_t scl;
-        uint32_t freq;
-    };
-
-    static struct software_i2c_context context;
+static struct software_i2c_context context;
 
 
-    static const struct software_i2c_desc i2c_desc[] = {
-        SOFTWARE_I2C_DESC(SOFTWARE_I2C_STRUCT)
-    };
+static const struct software_i2c_desc i2c_desc[] = {
+    SOFTWARE_I2C_DESC(SOFTWARE_I2C_STRUCT)
+};
 
-    void software_i2c_init(void)
-    {
-        for (uint8_t i = 0; i < ARRAY_SIZE(i2c_desc); i++) {
-            /**
-             * Пины PA13 и PA14 по дефолту находятся в режиме SWD.
-             * Для работы software_i2c их нужно переключить в режим GPIO open-drain output pull-up.
-             *
-             * Но оказалось, что порядок переключения очень важен: сначала нужно переключить GPIO из AF в OUTPUT
-             * и только потом менять остальные настройки, такие как open-drain, pull-up и т.д.
-             * Если нарушить порядок, на GD32 наблюдались случаи зависания микроконтроллера. Причём из зависшего состояния
-             * МК не выводится даже через RESET.
-             * Предположение, что переходные процессы на линиях SWD при смене настроек переводят модуль SWD в некорректное состояние,
-             * что вызывает зависание МК.
-             * Также добавление небольшой ёмкости на линии SWD помогает устранить зависания, что в какой-то мере подтверждает предположение.
-             */
+void software_i2c_init(void)
+{
+    for (uint8_t i = 0; i < ARRAY_SIZE(i2c_desc); i++) {
+        /**
+         * Пины PA13 и PA14 по дефолту находятся в режиме SWD.
+         * Для работы software_i2c их нужно переключить в режим GPIO open-drain output pull-up.
+         *
+         * Но оказалось, что порядок переключения очень важен: сначала нужно переключить GPIO из AF в OUTPUT
+         * и только потом менять остальные настройки, такие как open-drain, pull-up и т.д.
+         * Если нарушить порядок, на GD32 наблюдались случаи зависания микроконтроллера. Причём из зависшего состояния
+         * МК не выводится даже через RESET.
+         * Предположение, что переходные процессы на линиях SWD при смене настроек переводят модуль SWD в некорректное состояние,
+         * что вызывает зависание МК.
+         * Также добавление небольшой ёмкости на линии SWD помогает устранить зависания, что в какой-то мере подтверждает предположение.
+         */
 
-            GPIO_S_SET_OUTPUT(i2c_desc[i].sda);
-            GPIO_S_SET_OD(i2c_desc[i].sda);
-            GPIO_S_SET_PULLUP(i2c_desc[i].sda);
-            GPIO_S_SET(i2c_desc[i].sda);
-            GPIO_S_SET_SPEED_HIGH(i2c_desc[i].sda);
+        GPIO_S_SET_OUTPUT(i2c_desc[i].sda);
+        GPIO_S_SET_OD(i2c_desc[i].sda);
+        GPIO_S_SET_PULLUP(i2c_desc[i].sda);
+        GPIO_S_SET(i2c_desc[i].sda);
+        GPIO_S_SET_SPEED_HIGH(i2c_desc[i].sda);
 
-            GPIO_S_SET_OUTPUT(i2c_desc[i].scl);
-            GPIO_S_SET_OD(i2c_desc[i].scl);
-            GPIO_S_SET_PULLUP(i2c_desc[i].scl);
-            GPIO_S_SET(i2c_desc[i].scl);
-            GPIO_S_SET_SPEED_HIGH(i2c_desc[i].scl);
-        }
+        GPIO_S_SET_OUTPUT(i2c_desc[i].scl);
+        GPIO_S_SET_OD(i2c_desc[i].scl);
+        GPIO_S_SET_PULLUP(i2c_desc[i].scl);
+        GPIO_S_SET(i2c_desc[i].scl);
+        GPIO_S_SET_SPEED_HIGH(i2c_desc[i].scl);
     }
+}
 
-    static const struct software_i2c_delay * delay;
+static const struct software_i2c_delay * delay;
 
-    static void software_i2c_delay_configure(uint32_t f)
-    {
-        switch (f_cpu) {
-        case 48000000:
-            if (f == 1000000) {
-                delay = &delay_1M_48MHz;
-            } else if (f == 400000) {
-                delay = &delay_400K_48MHz;
-            } else if (f == 100000) {
-                delay = &delay_100K_48MHz;
-            } else {
-                failure_panic(FAIL_COMMON);
-            }
-            break;
-
-        case 8000000:
-            if (f == 400000) {
-                delay = &delay_400K_8MHz;
-            } else if (f == 100000) {
-                delay = &delay_100K_8MHz;
-            } else {
-                failure_panic(FAIL_COMMON);
-            }
+static void software_i2c_delay_configure(uint32_t f)
+{
+    switch (SystemCoreClock) {
+    case 48000000:
+        if (f == 1000000) {
+            delay = &delay_1M_48MHz;
+        } else if (f == 400000) {
+            delay = &delay_400K_48MHz;
+        } else if (f == 100000) {
+            delay = &delay_100K_48MHz;
+        } else {
+            // failure_panic(FAIL_COMMON);
+        }
         break;
 
-        default:
-            failure_panic(FAIL_COMMON);
-            break;
+    case 8000000:
+        if (f == 400000) {
+            delay = &delay_400K_8MHz;
+        } else if (f == 100000) {
+            delay = &delay_100K_8MHz;
+        } else {
+            // failure_panic(FAIL_COMMON);
         }
+    break;
+
+    default:
+        // failure_panic(FAIL_COMMON);
+        break;
     }
+}
 
-    static inline void software_i2c_set_context(enum software_i2c_ports p)
-    {
-        context.sda_bsrr = &i2c_desc[p].sda.port->BSRR;
-        context.sda_idr = &i2c_desc[p].sda.port->IDR;
-        context.sda_set = 1 << (i2c_desc[p].sda.pin + 0);
-        context.sda_reset = 1 << (i2c_desc[p].sda.pin + 16);
-
-        context.scl_bsrr = &i2c_desc[p].scl.port->BSRR;
-        context.scl_idr = &i2c_desc[p].scl.port->IDR;
-        context.scl_set = 1 << (i2c_desc[p].scl.pin + 0);
-        context.scl_reset = 1 << (i2c_desc[p].scl.pin + 16);
-
-        software_i2c_delay_configure(i2c_desc[p].freq);
-    }
-
-#endif
-
-void software_i2c_update_f_cpu(uint32_t new_f_cpu)
+static inline void software_i2c_set_context(enum software_i2c_ports p)
 {
-    f_cpu = new_f_cpu;
+    context.sda_bsrr = &i2c_desc[p].sda.port->BSRR;
+    context.sda_idr = &i2c_desc[p].sda.port->IDR;
+    context.sda_set = 1 << (i2c_desc[p].sda.pin + 0);
+    context.sda_reset = 1 << (i2c_desc[p].sda.pin + 16);
+
+    context.scl_bsrr = &i2c_desc[p].scl.port->BSRR;
+    context.scl_idr = &i2c_desc[p].scl.port->IDR;
+    context.scl_set = 1 << (i2c_desc[p].scl.pin + 0);
+    context.scl_reset = 1 << (i2c_desc[p].scl.pin + 16);
+
+    software_i2c_delay_configure(i2c_desc[p].freq);
 }
 
 __attribute__((always_inline)) static inline unsigned software_i2c_get_sda(void) { return *context.sda_idr & context.sda_set; };
