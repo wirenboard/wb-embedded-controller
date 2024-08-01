@@ -19,6 +19,8 @@
 #include "test_subsystem.h"
 #include "buzzer.h"
 #include "temperature-control.h"
+#include "wbmz-common.h"
+#include "wbmz-subsystem.h"
 
 int main(void)
 {
@@ -44,6 +46,9 @@ int main(void)
     // Это нужно для того, чтобы измерить напряжение на линии +5В и решить что делать дальше
     // Измерение проиходит в wbec_init()
     adc_init(ADC_CLOCK_NO_DIV, ADC_VREF_INT);
+
+    // WBMZ нужно инициализировать до wbec_init, т.к. возможно что нужно будет включаться от WBMZ
+    wbmz_init();
 
     // Первым инициализируется WBEC, т.к. он в начале проверяет причину включения
     // и может заснуть обратно, если решит.
@@ -87,6 +92,7 @@ int main(void)
         vmon_do_periodic_work();
         test_do_periodic_work();
         buzzer_subsystem_do_periodic_work();
+        wbmz_subsystem_do_periodic_work();
 
         // Main algorithm
         linux_cpu_pwr_seq_do_periodic_work();
