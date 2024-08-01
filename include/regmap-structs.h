@@ -87,7 +87,21 @@
     /*     Addr     Name            RO/RW */ \
     m(     0xC0,    PWR_STATUS,     RO, \
         /* 0xC0 */  uint16_t powered_from_wbmz : 1; \
-        /* 0xC0 */  uint16_t wbmz_enabled : 1; \
+        /* 0xC0 */  uint16_t wbmz_stepup_enabled : 1; \
+        /* 0xC0 */  uint16_t wbmz_charging_enabled : 1; \
+        /* 0xC0 */  uint16_t wbmz_battery_present : 1; \
+        /* 0xC0 */  uint16_t wbmz_supercap_present : 1; \
+        /* 0xC0 */  uint16_t wbmz_discharging : 1; \
+        /* 0xC0 */  uint16_t wbmz_charging : 1; \
+        /* 0xC1 */  uint16_t wbmz_full_design_capacity; \
+        /* 0xC2 */  uint16_t wbmz_voltage_min_design; \
+        /* 0xC3 */  uint16_t wbmz_voltage_max_design; \
+        /* 0xC4 */  uint16_t wbmz_constant_charge_current; \
+        /* 0xC4 */  uint16_t wbmz_constant_charge_voltage; \
+        /* 0xC5 */  uint16_t wbmz_voltage_now; \
+        /* 0xC6 */  int16_t wbmz_current_now; \
+        /* 0xC7 */  uint16_t wbmz_capacity_percent; \
+        /* 0xC7 */  int16_t wbmz_temperature; \
     ) \
     /*     Addr     Name            RO/RW */ \
     m(     0xD0,    BUZZER_CTRL,    RW, \

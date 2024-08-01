@@ -34,15 +34,24 @@
 // Модуль WBMZ
 // WBMZ тянет вход вниз, если работает step-up на WBMZ
 #define EC_GPIO_WBMZ_STATUS_BAT                 GPIOB, 5
-// В модуле WBMZ сигнал называется OFF и когда нужно отключить WBMZ, его нужно прижать вниз
-// В WB 7.4.1 он подтянут вниз резистором 2к, т.е. по дефолту выключен
-// Чтобы включить WBMZ, нужно выдать 1 на этот пин
-// На WB8.5 уже сделали по-хорошему и надо выдавать сильную "1" чтобы включить WBMZ
-// Итоговая логика на ЕС не изменилась
-#define EC_GPIO_WBMZ_ON                         GPIOB, 15
+// Включение повышающего преобразователя на WBMZ
+#define EC_GPIO_WBMZ_STEPUP_ENABLE              GPIOB, 15
 // Разрешение заряда WBMZ
 // Зяряд нужно разрешать, когда работаем от Vin (от USB заряд д.б. запрещен)
-#define EC_GPIO_WBMZ_CHARGE_ON                  GPIOB, 4
+#define WBEC_GPIO_WBMZ_CHARGE_ENABLE            GPIOB, 4
+// WBMZ6-BATTERY имеет на борту свой собственный PMIC для контроля заряда и других параметров
+#define WBEC_WBMZ6_SUPPORT
+// Параметры WBMZ6-BATTERY
+#define WBEC_WBMZ6_BATTERY_CHARGE_CURRENT_MA            600
+#define WBEC_WBMZ6_BATTERY_FULL_DESING_CAPACITY_MAH     2600
+#define WBEC_WBMZ6_BATTERY_VOLTAGE_MIN_MV               2900
+#define WBEC_WBMZ6_BATTERY_VOLTAGE_MAX_MV               4100
+#define WBEC_WBMZ6_BATTERY_HIGH_TEMP_CHARGE_LIMIT       40.0
+#define WBEC_WBMZ6_BATTERY_NTC_RES_KOHM                 10
+// Параметры WBMZ6-SUPERCAP
+#define WBEC_WBMZ6_SUPERCAP_VOLTAGE_MAX_MV              4600
+#define WBEC_WBMZ6_SUPERCAP_VOLTAGE_MIN_MV              1700
+#define WBEC_WBMZ6_SUPERCAP_DESING_CAPACITY_UWH         86800   // microwatt-hours
 
 // Управляет питанием Linux
 #define EC_GPIO_LINUX_POWER                     GPIOD, 1
@@ -70,8 +79,6 @@
 // Один USB разъем на DEBUG и NETWORK
 #define EC_USB_HUB_DEBUG_NETWORK
 
-// WBMZ6
-#define WBEC_WBMZ6_SUPPORT
 //                                                    name     freq    sda        scl
 #define SOFTWARE_I2C_DESC(macro)                macro(WBMZ6,   100000, GPIOF, 1,  GPIOF, 0)
 
