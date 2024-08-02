@@ -6,6 +6,7 @@
 #include "regmap-structs.h"
 #include "regmap-int.h"
 #include "wbmcu_system.h"
+#include <string.h>
 
 #define HWREV_ADC_VALUE_CENTER(res_up, res_down) \
     ((res_down) * 4096 / ((res_up) + (res_down)))
@@ -61,13 +62,20 @@ enum hwrev hwrev_get(void)
 
 void hwrev_put_hw_info_to_regmap(void)
 {
-    struct REGMAP_HW_INFO hw_info = {
+    struct REGMAP_HW_INFO_PART1 hw_info_1 = {
         .wbec_id = WBEC_ID,
         .hwrev = 0,
         .fwrev = { FW_VERSION_NUMBERS },
     };
+    struct REGMAP_HW_INFO_PART2 hw_info_2 = {};
 
-    hw_info.hwrev = hwrev_code;
-    regmap_set_region_data(REGMAP_REGION_HW_INFO, &hw_info, sizeof(hw_info));
-    regmap_set_region_data(REGMAP_REGION_MCU_UID, (uint8_t *)UID_BASE, sizeof(struct REGMAP_MCU_UID));
+    hw_info_1.hwrev = hwrev_code;
+    memcpy(hw_info_2.uid, (uint8_t *)UID_BASE, sizeof(hw_info_2.uid));
+
+    if (hwrev == WBEC_HWREV) {
+        hw_info_2.hwrev_ok = WBEC_ID;
+    }
+
+    regmap_set_region_data(REGMAP_REGION_HW_INFO_PART1, &hw_info_1, sizeof(hw_info_1));
+    regmap_set_region_data(REGMAP_REGION_HW_INFO_PART2, &hw_info_2, sizeof(hw_info_2));
 }
