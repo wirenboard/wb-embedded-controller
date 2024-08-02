@@ -13,7 +13,4 @@ void axp221s_set_battery_voltage_max(uint16_t voltage_mv);
 uint16_t axp221s_get_battery_voltage_now(void);
 int16_t axp221s_get_battery_current_now(void);
 uint16_t axp221s_get_battery_capacity_percent(void);
-uint16_t axp221s_get_battery_current(void);
 uint16_t axp221s_get_battery_temperature(void);
-uint16_t axp221s_get_battery_level(void);
-
