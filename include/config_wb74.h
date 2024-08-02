@@ -2,7 +2,7 @@
 
 /* ====== Аппаратная ревизия ====== */
 
-#define WBEC_HWREV                              WBEC_HWREV_WB74
+#define WBEC_HWREV                              HWREV_WB74
 
 /* ====== Подключения EC к Wiren Board ====== */
 
@@ -10,11 +10,6 @@
 // Меняет состояние на активное, если в EC есть флаги событий
 #define EC_GPIO_INT                             GPIOA, 8
 #define EC_GPIO_INT_ACTIVE_HIGH
-
-// Светодиод для индикации режима работы EC
-// Установлен на плате, снаружи не виден
-#define EC_GPIO_LED                             GPIOC, 6
-#define EC_GPIO_LED_ACTIVE_HIGH
 
 // Кнопка включения
 #define EC_GPIO_PWRKEY                          GPIOA, 0
