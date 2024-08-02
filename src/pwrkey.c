@@ -3,6 +3,7 @@
 #include "gpio.h"
 #include "systick.h"
 #include "assert.h"
+#include "buzzer.h"
 
 /**
  * Модуль ловит события с кнопки включения питания:
@@ -106,6 +107,7 @@ static inline void handle_presses(enum pwrkey_state gpio_debounced_state)
             // If button pressed - save timestamp
             logic_ctx.timestamp = systick_get_system_time_ms();
             logic_ctx.press_state = PRESS_STATE_PRESS_BEGIN;
+            buzzer_beep(EC_BUZZER_BEEP_FREQ, EC_BUZZER_BEEP_SHORT_PRESS_MS);
         }
 
         // Отпускание кнопки - это смена состояния с PWRKEY_PRESSED на PWRKEY_RELEASED
@@ -133,6 +135,7 @@ static inline void handle_presses(enum pwrkey_state gpio_debounced_state)
         if (held_time > PWRKEY_LONG_PRESS_TIME_MS) {
             logic_ctx.press_state = PRESS_STATE_LONG_PRESS;
             logic_ctx.long_pressed_flag = 1;
+            buzzer_beep(EC_BUZZER_BEEP_FREQ, EC_BUZZER_BEEP_LONG_PRESS_MS);
         }
     }
 }

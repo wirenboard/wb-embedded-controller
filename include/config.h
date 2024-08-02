@@ -46,15 +46,17 @@
 #define WBEC_PERIODIC_WAKEUP_FIRST_TIMEOUT_S    5
 #define WBEC_PERIODIC_WAKEUP_NEXT_TIMEOUT_S     2
 
-// Температура, ниже которой EC не будет включаться
-#define WBEC_MINIMUM_WORKING_TEMPERATURE_C_X100 -4000
-
 // Число попыток перезапуска PMIC при пропадании 3.3В
 // Если за указанное время 3.3В пропадёт больше, чем указанное число раз,
 // то EC выключит питание и уйдёт в спящий режим
 #define WBEC_POWER_LOSS_TIMEOUT_MIN             10
 #define WBEC_POWER_LOSS_ATTEMPTS                2
 
+// Пищалка
+#define EC_BUZZER_BEEP_FREQ                     1000
+#define EC_BUZZER_BEEP_POWERON_MS               100
+#define EC_BUZZER_BEEP_SHORT_PRESS_MS           300
+#define EC_BUZZER_BEEP_LONG_PRESS_MS            1000
 
 /* ====== Специфичные для моделей параметры ====== */
 

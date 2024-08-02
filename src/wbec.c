@@ -4,7 +4,6 @@
 #include "irq-subsystem.h"
 #include "wdt.h"
 #include "system-led.h"
-#include "ntc.h"
 #include "adc.h"
 #include "usart_tx.h"
 #include "systick.h"
@@ -19,6 +18,8 @@
 #include "console.h"
 #include <string.h>
 #include "hwrev.h"
+#include "buzzer.h"
+#include "temperature-control.h"
 
 #define LINUX_POWERON_REASON(m) \
     m(REASON_POWER_ON,        "Power supply on"        ) \
@@ -91,7 +92,7 @@ static void new_state(enum wbec_state s)
     case WBEC_STATE_VOLTAGE_CHECK:              system_led_blink(5,   100);     break;
     case WBEC_STATE_TEMP_CHECK_LOOP:            system_led_blink(5,   100);     break;
     case WBEC_STATE_POWER_ON_SEQUENCE_WAIT:     system_led_blink(50,  50);      break;
-    case WBEC_STATE_WORKING:                    system_led_blink(500, 1000);    break;
+    case WBEC_STATE_WORKING:                    system_led_blink(500, 1000); buzzer_beep(EC_BUZZER_BEEP_FREQ, EC_BUZZER_BEEP_POWERON_MS);  break;
     case WBEC_STATE_POWER_OFF_SEQUENCE_WAIT:    system_led_blink(50,  50);      break;
     default:                                    system_led_enable();            break;
     }
@@ -130,24 +131,15 @@ static inline void collect_adc_data(struct REGMAP_ADC_DATA * adc)
         adc->v_in = 0;
     }
 
-    // Calc NTC temp
-    fix16_t ntc_raw = adc_get_ch_adc_raw(ADC_CHANNEL_ADC_NTC);
-    // Convert to x100 *C
-    adc->temp = fix16_to_int(
-        fix16_mul(
-            ntc_convert_adc_raw_to_temp(ntc_raw),
-            F16(100)
-        )
-    );
+    adc->temp = temperature_control_get_temperature_c_x100();
 }
 
 static inline enum linux_powerctrl_req get_linux_powerctrl_req(void)
 {
     enum linux_powerctrl_req ret = LINUX_POWERCTRL_NO_ACTION;
 
-    if (regmap_is_region_changed(REGMAP_REGION_POWER_CTRL)) {
-        struct REGMAP_POWER_CTRL p;
-        regmap_get_region_data(REGMAP_REGION_POWER_CTRL, &p, sizeof(p));
+    struct REGMAP_POWER_CTRL p;
+    if (regmap_get_data_if_region_changed(REGMAP_REGION_POWER_CTRL, &p, sizeof(p))) {
         // Linux is ready to power off
         if (p.off) {
             p.off = 0;
@@ -160,7 +152,6 @@ static inline enum linux_powerctrl_req get_linux_powerctrl_req(void)
             ret = LINUX_POWERCTRL_PMIC_RESET;
         }
 
-        regmap_clear_changed(REGMAP_REGION_POWER_CTRL);
         regmap_set_region_data(REGMAP_REGION_POWER_CTRL, &p, sizeof(p));
     }
 
@@ -391,14 +382,14 @@ void wbec_do_periodic_work(void)
         console_print_fixed_point(adc.vbus_console / 100, 1);
         console_print("V\r\n");
 
-        if (adc.temp < WBEC_MINIMUM_WORKING_TEMPERATURE_C_X100) {
-            console_print_w_prefix("WARNING: Board temperature is too low!\r\n");
-            new_state(WBEC_STATE_TEMP_CHECK_LOOP);
-        } else {
+        if (temperature_control_is_temperature_ready()) {
             console_print_w_prefix("Turning on the main CPU; all future debug messages will originate from the CPU.\r\n\n\n");
             // После отправки данных включаем линукс
             linux_cpu_pwr_seq_on();
             new_state(WBEC_STATE_POWER_ON_SEQUENCE_WAIT);
+        } else {
+            console_print_w_prefix("WARNING: Board temperature is too low!\r\n");
+            new_state(WBEC_STATE_TEMP_CHECK_LOOP);
         }
 
         break;
@@ -407,14 +398,14 @@ void wbec_do_periodic_work(void)
         // В этом состоянии линукс выключен, проверяем температуру
         // Сидим тут до тех пор, пока температура не станет выше -40
         if (in_state_time_ms() > 5000) {
-            if (adc.temp < WBEC_MINIMUM_WORKING_TEMPERATURE_C_X100) {
-                console_print_w_prefix("Board temperature is below -40°C! Rechecking in 5 seconds\r\n");
-                new_state(WBEC_STATE_TEMP_CHECK_LOOP);
-            } else {
+            if (temperature_control_is_temperature_ready()) {
                 console_print_w_prefix("Temperature is OK!\r\n");
                 console_print_w_prefix("Turning on the main CPU; all future debug messages will originate from the CPU\r\n\n\n");
                 linux_cpu_pwr_seq_on();
                 new_state(WBEC_STATE_POWER_ON_SEQUENCE_WAIT);
+            } else {
+                console_print_w_prefix("Board temperature is below -40°C! Rechecking in 5 seconds\r\n");
+                new_state(WBEC_STATE_TEMP_CHECK_LOOP);
             }
         }
         break;

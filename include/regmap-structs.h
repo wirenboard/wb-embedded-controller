@@ -90,10 +90,17 @@
         /* 0xC0 */  uint16_t wbmz_enabled : 1; \
     ) \
     /*     Addr     Name            RO/RW */ \
+    m(     0xD0,    BUZZER_CTRL,    RW, \
+        /* 0xD0 */  uint16_t freq_hz; \
+        /* 0xD1 */  uint16_t duty_percent; \
+        /* 0xD2 */  uint16_t enabled : 1; \
+    ) \
+    /*     Addr     Name            RO/RW */ \
     m(     0xF0,    TEST,           RW, \
         /* 0xF0 */  uint16_t send_test_message : 1; \
         /* 0xF0 */  uint16_t enable_rtc_out : 1; \
         /* 0xF0 */  uint16_t reset_rtc : 1; \
+        /* 0xF0 */  uint16_t heater_force_enable : 1; \
     ) \
 
 // Общее число регистров в адресном пространстве
