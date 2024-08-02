@@ -3,7 +3,7 @@
 
 #define REGMAP(m) \
     /*     Addr     Name            RO/RW */ \
-    m(     0x00,    INFO,           RO, \
+    m(     0x00,    HW_INFO,        RO, \
         /* 0x00 */  uint16_t wbec_id; \
         /* 0x01 */  uint16_t hwrev; \
                     union { \
@@ -15,7 +15,13 @@
                         }; \
                         uint16_t fwrev[4]; \
                     }; \
+    ) \
+    /*     Addr     Name            RO/RW */ \
+    m(     0x06,    POWERON_REASON, RO, \
         /* 0x06 */  uint16_t poweron_reason; \
+    ) \
+    /*     Addr     Name            RO/RW */ \
+    m(     0x07,    MCU_UID,        RO, \
         /* 0x07-0x0C */ uint16_t uid[6]; \
     ) \
     /*     Addr     Name            RO/RW */ \
