@@ -55,6 +55,7 @@ int main(void)
         // Инициализируем только системный светодиод, spi и regmap
         // Чтобы из линукса можно было прочитать код железа и понять какую прошивку заливать
         rcc_set_hsi_pll_64mhz_clock();
+        systick_init();
         spi_slave_init();
         regmap_init();
         hwrev_put_hw_info_to_regmap();
