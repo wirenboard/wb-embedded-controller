@@ -37,16 +37,18 @@ static const struct hwrev_desc hwrev_desc[HWREV_COUNT] = {
     WBEC_HWREV_DESC(__HWREV_DATA)
 };
 
-enum hwrev hwrev = HWREV_UNKNOWN;
+static enum hwrev hwrev = HWREV_UNKNOWN;
+static uint16_t hwrev_code = HWREV_UNKNOWN;
 
 void hwrev_init(void)
 {
-    uint16_t hwrev_adc_value = fix16_to_int(adc_get_ch_adc_raw(ADC_CHANNEL_ADC_HW_VER));
+    int16_t hwrev_adc_value = fix16_to_int(adc_get_ch_adc_raw(ADC_CHANNEL_ADC_HW_VER));
 
     for (int i = 0; i < HWREV_COUNT; i++) {
         if (hwrev_adc_value >= hwrev_desc[i].adc_min &&
             hwrev_adc_value <= hwrev_desc[i].adc_max) {
             hwrev = i;
+            hwrev_code = hwrev_desc[i].code;
             break;
         }
     }
@@ -59,13 +61,13 @@ enum hwrev hwrev_get(void)
 
 void hwrev_put_hw_info_to_regmap(void)
 {
-    static struct REGMAP_HW_INFO hw_info = {
+    struct REGMAP_HW_INFO hw_info = {
         .wbec_id = WBEC_ID,
         .hwrev = 0,
         .fwrev = { FW_VERSION_NUMBERS },
     };
 
-    hw_info.hwrev = hwrev_desc[hwrev].code;
+    hw_info.hwrev = hwrev_code;
     regmap_set_region_data(REGMAP_REGION_HW_INFO, &hw_info, sizeof(hw_info));
     regmap_set_region_data(REGMAP_REGION_MCU_UID, (uint8_t *)UID_BASE, sizeof(struct REGMAP_MCU_UID));
 }
