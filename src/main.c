@@ -60,7 +60,7 @@ int main(void)
         regmap_init();
         hwrev_put_hw_info_to_regmap();
         // Редко мигаем светодиодом, чтобы понять что прошивка не совместима
-        system_led_blink(100, 2900);
+        system_led_blink(25, 25);
         while (1) {
             system_led_do_periodic_work();
         }
