@@ -13,4 +13,4 @@ enum hwrev {
 
 void hwrev_init(void);
 enum hwrev hwrev_get(void);
-uint16_t hwrev_get_code(void);
+void hwrev_put_hw_info_to_regmap(void);

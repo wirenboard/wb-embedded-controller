@@ -1,7 +1,11 @@
 #include "hwrev.h"
+#include "config.h"
 #include "adc.h"
 #include "fix16.h"
 #include "array_size.h"
+#include "regmap-structs.h"
+#include "regmap-int.h"
+#include "wbmcu_system.h"
 
 #define HWREV_ADC_VALUE_CENTER(res_up, res_down) \
     ((res_down) * 4096 / ((res_up) + (res_down)))
@@ -53,8 +57,15 @@ enum hwrev hwrev_get(void)
     return hwrev;
 }
 
-uint16_t hwrev_get_code(void)
+void hwrev_put_hw_info_to_regmap(void)
 {
-    return hwrev_desc[hwrev].code;
-}
+    static struct REGMAP_HW_INFO hw_info = {
+        .wbec_id = WBEC_ID,
+        .hwrev = 0,
+        .fwrev = { FW_VERSION_NUMBERS },
+    };
 
+    hw_info.hwrev = hwrev_desc[hwrev].code;
+    regmap_set_region_data(REGMAP_REGION_HW_INFO, &hw_info, sizeof(hw_info));
+    regmap_set_region_data(REGMAP_REGION_MCU_UID, (uint8_t *)UID_BASE, sizeof(struct REGMAP_MCU_UID));
+}
