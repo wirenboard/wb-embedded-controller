@@ -1,19 +1,16 @@
 #!/bin/bash
-. /usr/lib/wb-utils/wb_env.sh
-wb_source "of"
 
-# Check that this is WB7.4 by reading compatible property from device tree
-if of_machine_match "wirenboard,wirenboard-85x"; then
+if grep -q "wirenboard,wirenboard-85x" /proc/device-tree/compatible; then
+    WBEC_SPIDEV="spi1"
     FIRMWARE_PREFIX="WB85"
-    WBEC_SPIDEV="spi1"
-elif of_machine_match "wirenboard,wirenboard-84x"; then
-    FIRMWARE_PREFIX="WB74"
-    WBEC_SPIDEV="spi1"
-elif of_machine_match "wirenboard,wirenboard-74x"; then
-    FIRMWARE_PREFIX="WB74"
+elif grep -q "wirenboard,wirenboard-84x" /proc/device-tree/compatible; then
     WBEC_SPIDEV="spi2"
+    FIRMWARE_PREFIX="WB74"
+elif grep -q "wirenboard,wirenboard-74x" /proc/device-tree/compatible; then
+    WBEC_SPIDEV="spi2"
+    FIRMWARE_PREFIX="WB74"
 else
-    echo "This Wiren Board has no EC, exiting"
+    echo "This Wiren Board has no EC (check, DTS is a proper one), exiting"
     exit 255
 fi
 
@@ -76,8 +73,12 @@ DT_OVERLAY="
 };
 "
 
+remove_overlay() {
+    rmdir $DT_OVERLAY_DIR 2>/dev/null || true
+}
+
 remove_overlay_and_start_drivers() {
-    rmdir $DT_OVERLAY_DIR
+    remove_overlay
 
     # This script may be called from bootlet in chroot
     # where we can't manage services and kernel modules,
@@ -124,6 +125,8 @@ if ! ischroot; then
     systemctl stop watchdog
 fi
 
+trap remove_overlay_and_start_drivers EXIT
+
 # Apply overlay to disable spi and enable i2c
 rmdir $DT_OVERLAY_DIR 2> /dev/null
 mkdir $DT_OVERLAY_DIR
@@ -133,14 +136,12 @@ sleep 1.0
 # Check that overlay is applied by status property
 if ! grep -q applied $DT_OVERLAY_DIR/status; then
     echo "Can't apply overlay"
-    remove_overlay_and_start_drivers
     exit -1
 fi
 
 # Find i2c bus with name i2c_wbec
 I2C_BUS=/dev/$(i2cdetect -l | grep i2c_wbec | cut -f 1 -d$'\t') || {
     echo "I2C bus not found"
-    remove_overlay_and_start_drivers
     exit -1
 }
 echo "I2C bus: $I2C_BUS"
@@ -158,30 +159,24 @@ gpioset $GPIO_BOOT0_NUM=0
 # Check that bootloader is running
 stm32flash $I2C_BUS -a$BOOTLOADER_I2C_ADDR || {
     echo "Bootloader not found"
-    remove_overlay_and_start_drivers
     exit -1
 }
 
 # Write option bytes for stay in bootloader forever
-stm32flash -w - -S 0x1FFF7800:4 -a$BOOTLOADER_I2C_ADDR $I2C_BUS < <(echo -n -e \\xAA\\xE1\\xFF\\xDB) || {
+echo -n -e \\xAA\\xE1\\xFF\\xDB | stm32flash -w - -S 0x1FFF7800:4 -a$BOOTLOADER_I2C_ADDR $I2C_BUS || {
     echo "Can't write option bytes before firmware"
-    remove_overlay_and_start_drivers
     exit -1
 }
 # Update firmware
 stm32flash -w $FIRMWARE -a$BOOTLOADER_I2C_ADDR $I2C_BUS || {
     echo "Can't write firmware"
-    remove_overlay_and_start_drivers
     exit -1
 }
 # Restore option bytes, go to main app
-stm32flash -w - -S 0x1FFF7800:4 -a$BOOTLOADER_I2C_ADDR $I2C_BUS < <(echo -n -e \\xAA\\xE1\\xFF\\xDA) || {
+echo -n -e \\xAA\\xE1\\xFF\\xDA | stm32flash -w - -S 0x1FFF7800:4 -a$BOOTLOADER_I2C_ADDR $I2C_BUS || {
     echo "Can't write option bytes after firmware"
-    remove_overlay_and_start_drivers
     exit -1
 }
 
 # For start firmware
 sleep 1.0
-
-remove_overlay_and_start_drivers
