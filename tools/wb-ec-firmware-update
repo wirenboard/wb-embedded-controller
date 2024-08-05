@@ -78,7 +78,7 @@ remove_overlay_and_start_drivers() {
     # This script may be called from bootlet in chroot
     # where we can't manage services and kernel modules,
     # so this check will suppress error messages.
-    if ! (ischroot || true); then
+    if [[ -x "$(which ischroot)" ]] && ! ischroot; then
         modprobe pwrkey-wbec
 
         systemctl restart wb-mqtt-gpio
@@ -106,7 +106,7 @@ GPIO_BOOT0_NUM=$(gpiofind "$GPIO_BOOT0") || {
 # This script may be called from bootlet in chroot
 # where we can't manage services and kernel modules,
 # so this check will suppress error messages.
-if ! (ischroot || true); then
+if [[ -x "$(which ischroot)" ]] && ! ischroot; then
     # Remove pwrkey driver
     modprobe -r pwrkey-wbec
 
