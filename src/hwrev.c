@@ -75,6 +75,7 @@ void hwrev_put_hw_info_to_regmap(void)
 
     if (hwrev == WBEC_HWREV) {
         hw_info_2.hwrev_ok = WBEC_ID;
+    } else {
         hw_info_1.hwrev_error_flag = 0b1010;
     }
 
