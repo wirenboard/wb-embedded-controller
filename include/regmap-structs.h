@@ -5,7 +5,8 @@
     /*     Addr     Name            RO/RW */ \
     m(     0x00,    HW_INFO_PART1,  RO, \
         /* 0x00 */  uint16_t wbec_id; \
-        /* 0x01 */  uint16_t hwrev; \
+        /* 0x01 */  uint16_t hwrev_code : 12; \
+        /* 0x01 */  uint16_t hwrev_error_flag : 4; \
                     union { \
                         struct { \
         /* 0x02 */          uint16_t fwrev_major; \
