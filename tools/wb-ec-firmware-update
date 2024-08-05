@@ -90,7 +90,17 @@ remove_overlay_and_start_drivers() {
 
 is_wbec_running() {
     remove_overlay
-    grep -q "0d: 3cd2" /sys/kernel/debug/regmap/spi0.0/registers 2>/dev/null
+    local rc=1
+    if [[ -d /sys/bus/spi/drivers/wbec/spi0.0/ ]]; then
+        hwrev=$(cat /sys/bus/spi/drivers/wbec/spi0.0/hwrev)
+        # 4 msb: 0b1010 are set in case of incorrect firmware
+        /bin/bash -c "(( ($hwrev >> 12) == 10 ))" && rc=1 || rc=0
+    else
+        # fallback way: debugfs may not be enabled in old factory-fits
+        grep -q "0d: 3cd2" /sys/kernel/debug/regmap/spi0.0/registers 2>/dev/null
+        rc=$?
+    fi
+    [ $rc -eq "0" ] && true || false
 }
 
 # Try to find GPIO
