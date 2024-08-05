@@ -3,7 +3,7 @@
 #include <stdbool.h>
 
 void axp221s_init(void);
-bool axp221s_is_present(void);
+bool axp221s_is_1present(void);
 
 void axp221s_set_battery_full_desing_capacity(uint16_t capacity_mah);
 void axp221s_set_battery_charging_current_max(uint16_t current_ma);
