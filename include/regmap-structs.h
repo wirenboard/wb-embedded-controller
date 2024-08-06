@@ -3,9 +3,10 @@
 
 #define REGMAP(m) \
     /*     Addr     Name            RO/RW */ \
-    m(     0x00,    INFO,           RO, \
+    m(     0x00,    HW_INFO_PART1,  RO, \
         /* 0x00 */  uint16_t wbec_id; \
-        /* 0x01 */  uint16_t hwrev; \
+        /* 0x01 */  uint16_t hwrev_code : 12; \
+        /* 0x01 */  uint16_t hwrev_error_flag : 4; \
                     union { \
                         struct { \
         /* 0x02 */          uint16_t fwrev_major; \
@@ -15,8 +16,15 @@
                         }; \
                         uint16_t fwrev[4]; \
                     }; \
+    ) \
+    /*     Addr     Name            RO/RW */ \
+    m(     0x06,    POWERON_REASON, RO, \
         /* 0x06 */  uint16_t poweron_reason; \
+    ) \
+    /*     Addr     Name            RO/RW */ \
+    m(     0x07,    HW_INFO_PART2,  RO, \
         /* 0x07-0x0C */ uint16_t uid[6]; \
+        /* 0x0D */  uint16_t hwrev_ok; \
     ) \
     /*     Addr     Name            RO/RW */ \
     m(     0x10,    RTC_TIME,       RW, \
