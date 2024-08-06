@@ -58,11 +58,7 @@ static const uint8_t wbmz6_init_sequence[][2] = {
     }
 };
 
-enum wbmz6_device {
-    WBMZ6_DEVICE_NONE,
-    WBMZ6_DEVICE_BATTERY,
-    WBMZ6_DEVICE_SUPERCAP,
-};
+
 
 static inline bool axp221s_is_present(void)
 {
@@ -100,22 +96,6 @@ static inline uint16_t axp221s_read_u16(uint8_t reg)
     uint8_t buf[2];
     software_i2c_read_after_write(I2C_PORT_WBMZ6, AXP221S_ADDR, &reg, 1, buf, 2);
     return buf[0] | (buf[1] << 8);
-}
-
-static enum wbmz6_device wmbz6_detect_device(void)
-{
-    enum wbmz6_device ret = WBMZ6_DEVICE_NONE;
-
-    if (axp221s_is_present()) {
-        ret = WBMZ6_DEVICE_BATTERY;
-    } else {
-        uint16_t supercap_mv = adc_get_ch_mv(ADC_CHANNEL_ADC_VBAT);
-        if (supercap_mv > WBEC_WBMZ6_SUPERCAP_VOLTAGE_MIN_MV) {
-            ret = WBMZ6_DEVICE_SUPERCAP;
-        }
-    }
-
-    return ret;
 }
 
 bool wbmz6_battery_is_present(void)

@@ -41,6 +41,7 @@
 #define WBEC_GPIO_WBMZ_CHARGE_ENABLE            GPIOB, 4
 // WBMZ6-BATTERY имеет на борту свой собственный PMIC для контроля заряда и других параметров
 #define WBEC_WBMZ6_SUPPORT
+#define WBEC_WBMZ6_POLL_PERIOD_MS                       100
 // Параметры WBMZ6-BATTERY
 #define WBEC_WBMZ6_BATTERY_CHARGE_CURRENT_MA            600
 #define WBEC_WBMZ6_BATTERY_FULL_DESIGN_CAPACITY_MAH     2600

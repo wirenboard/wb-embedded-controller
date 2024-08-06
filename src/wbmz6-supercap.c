@@ -5,7 +5,6 @@
 #include "wbmz6-supercap.h"
 #include "adc.h"
 
-
 bool wbmz6_supercap_is_present(void)
 {
     uint16_t supercap_mv = adc_get_ch_mv(ADC_CHANNEL_ADC_VBAT);
@@ -15,6 +14,10 @@ bool wbmz6_supercap_is_present(void)
     return false;
 }
 
+void wbmz6_supercap_init(void)
+{
+
+}
 
 void wbmz6_supercap_update_params(struct wbmz6_params *params)
 {
