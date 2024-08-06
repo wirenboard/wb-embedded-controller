@@ -8,17 +8,17 @@
 #include "wbmcu_system.h"
 #include <string.h>
 
-#define HWREV_ADC_VALUE_CENTER(res_up, res_down) \
+#define HWREV_ADC_VALUE_EXPECTED(res_up, res_down) \
     ((res_down) * 4096 / ((res_up) + (res_down)))
 
 #define HWREV_ADC_VALUE_MIN(res_up, res_down) \
-    HWREV_ADC_VALUE_CENTER(res_up, res_down) - \
-    (HWREV_ADC_VALUE_CENTER(res_up, res_down) * WBEC_HWREV_DIFF_PERCENT / 100) - \
+    HWREV_ADC_VALUE_EXPECTED(res_up, res_down) - \
+    (HWREV_ADC_VALUE_EXPECTED(res_up, res_down) * WBEC_HWREV_DIFF_PERCENT / 100) - \
     WBEC_HWREV_DIFF_ADC
 
 #define HWREV_ADC_VALUE_MAX(res_up, res_down) \
-    HWREV_ADC_VALUE_CENTER(res_up, res_down) + \
-    (HWREV_ADC_VALUE_CENTER(res_up, res_down) * WBEC_HWREV_DIFF_PERCENT / 100) + \
+    HWREV_ADC_VALUE_EXPECTED(res_up, res_down) + \
+    (HWREV_ADC_VALUE_EXPECTED(res_up, res_down) * WBEC_HWREV_DIFF_PERCENT / 100) + \
     WBEC_HWREV_DIFF_ADC
 
 #define __HWREV_DATA(hwrev_name, hwrev_code, res_up, res_down) \
