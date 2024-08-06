@@ -64,16 +64,19 @@ void hwrev_put_hw_info_to_regmap(void)
 {
     struct REGMAP_HW_INFO_PART1 hw_info_1 = {
         .wbec_id = WBEC_ID,
-        .hwrev = 0,
+        .hwrev_code = 0,
+        .hwrev_error_flag = 0,
         .fwrev = { FW_VERSION_NUMBERS },
     };
     struct REGMAP_HW_INFO_PART2 hw_info_2 = {};
 
-    hw_info_1.hwrev = hwrev_code;
+    hw_info_1.hwrev_code = hwrev_code;
     memcpy(hw_info_2.uid, (uint8_t *)UID_BASE, sizeof(hw_info_2.uid));
 
     if (hwrev == WBEC_HWREV) {
         hw_info_2.hwrev_ok = WBEC_ID;
+    } else {
+        hw_info_1.hwrev_error_flag = 0b1010;
     }
 
     regmap_set_region_data(REGMAP_REGION_HW_INFO_PART1, &hw_info_1, sizeof(hw_info_1));
