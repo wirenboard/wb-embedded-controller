@@ -31,7 +31,6 @@ void wbmz6_supercap_update_params(struct wbmz6_params *params)
 void wbmz6_supercap_update_status(struct wbmz6_status *status)
 {
     status->voltage_now_mv = adc_get_ch_mv(ADC_CHANNEL_ADC_VBAT);
-    status->current_now_ma = 0;
     status->capacity_percent = 100;
     status->temperature = 0;
 }
