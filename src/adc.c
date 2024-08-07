@@ -193,7 +193,14 @@ void adc_init(enum adc_clock clock_divider, enum adc_vref vref)
     for (uint8_t i = 0; i < ADC_CHANNEL_COUNT; i++) {
         // Configure ADC GPIOs
         if (adc_cfg[i].port != ADC_NO_GPIO_PIN) {
-            GPIO_SET_ANALOG(adc_cfg[i].port, adc_cfg[i].pin);
+            #if defined DEBUG
+                if (i != ADC_CHANNEL_ADC_HW_VER) {
+                    // ADC_HW_VER connected to GPIOA, 13 (SWDIO) and can't be used in debug mode
+                    GPIO_SET_ANALOG(adc_cfg[i].port, adc_cfg[i].pin);
+                }
+            #else
+                GPIO_SET_ANALOG(adc_cfg[i].port, adc_cfg[i].pin);
+            #endif
         }
         // Enable all ADC channels
         ADC1->CHSELR |= adc_cfg[i].channel;
