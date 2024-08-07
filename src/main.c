@@ -17,6 +17,7 @@
 #include "rcc.h"
 #include "mcu-pwr.h"
 #include "test_subsystem.h"
+#include "hwrev.h"
 #include "buzzer.h"
 #include "temperature-control.h"
 #include "wbmz-common.h"
@@ -46,6 +47,26 @@ int main(void)
     // Это нужно для того, чтобы измерить напряжение на линии +5В и решить что делать дальше
     // Измерение проиходит в wbec_init()
     adc_init(ADC_CLOCK_NO_DIV, ADC_VREF_INT);
+    while (!adc_get_ready()) {};
+
+    // Прежде чем инициализировать всё остальное, нужно проверить совместимость железа и прошивки
+    hwrev_init();
+    if (hwrev_get() != WBEC_HWREV) {
+        // Прошивка несовместима с железом
+        // Дальше что-то делать смысла нет, т.к. мы не знаем что за железо и какие gpio чем управляют
+        // Инициализируем только системный светодиод, spi и regmap
+        // Чтобы из линукса можно было прочитать код железа и понять какую прошивку заливать
+        rcc_set_hsi_pll_64mhz_clock();
+        systick_init();
+        spi_slave_init();
+        regmap_init();
+        hwrev_put_hw_info_to_regmap();
+        // Редко мигаем светодиодом, чтобы понять что прошивка несовместима
+        system_led_blink(25, 25);
+        while (1) {
+            system_led_do_periodic_work();
+        }
+    }
 
     // WBMZ нужно инициализировать до wbec_init, т.к. возможно что нужно будет включаться от WBMZ
     wbmz_init();
@@ -65,6 +86,8 @@ int main(void)
     spi_slave_init();
     regmap_init();
     usart_init();
+
+    hwrev_put_hw_info_to_regmap();
 
     // Init subsystems
     irq_init();
