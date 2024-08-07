@@ -1,7 +1,6 @@
 #include "config.h"
 
 #if defined WBEC_WBMZ6_SUPPORT
-#include "axp221s.h"
 #include "adc.h"
 #include "software_i2c.h"
 #include <assert.h>
