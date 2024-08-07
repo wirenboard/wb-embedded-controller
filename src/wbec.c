@@ -561,7 +561,7 @@ void wbec_do_periodic_work(void)
                 } else {
                     console_print_w_prefix("3.3V is lost, try to reset power\r\n");
                     console_print_w_prefix("Enable WBMZ to prevent power loss under load\r\n");
-                    wbec_info.poweron_reason = REASON_PMIC_OFF;
+                    wbec_ctx.poweron_reason = REASON_PMIC_OFF;
                     wbmz_enable_stepup();
                     linux_cpu_pwr_seq_hard_reset();
                     new_state(WBEC_STATE_POWER_ON_SEQUENCE_WAIT);
