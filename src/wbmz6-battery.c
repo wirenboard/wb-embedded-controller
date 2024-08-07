@@ -11,7 +11,7 @@ static_assert(WBEC_WBMZ6_BATTERY_VOLTAGE_MIN_MV == 2900, "Only 2900 mV min volta
 static_assert(WBEC_WBMZ6_BATTERY_VOLTAGE_MAX_MV == 4100, "Only 4100 mV max voltage supported");
 static_assert(WBEC_WBMZ6_BATTERY_CHARGE_CURRENT_MA == 600, "Only 600 mA charge current supported");
 
-#define AXP221S_ADDR                                0x68
+#define AXP221S_ADDR                                0x34
 
 #define AXP221S_REG_ADC_ENABLE                      0x82
 #define AXP221S_REG_ADC_ADC_RATE                    0x84
