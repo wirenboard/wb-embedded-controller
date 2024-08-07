@@ -201,7 +201,7 @@ static void software_i2c_delay_configure(uint32_t f)
         // failure_panic(FAIL_COMMON);
         // TODO: remove failure_panic
         // TODO: calc delays
-        delay = &delay_1M_48MHz;
+        delay = &delay_100K_48MHz;
         break;
     }
 }
