@@ -1,9 +1,14 @@
 #pragma once
 #include <stdint.h>
+#include <stdbool.h>
 
 struct wbmz6_status {
+    bool is_charging;
+    bool is_dead;
+    bool is_inserted;
     uint16_t voltage_now_mv;
-    int16_t current_now_ma;
+    uint16_t charging_current_ma;
+    uint16_t discharging_current_ma;
     uint16_t capacity_percent;
     uint16_t temperature;
 };
