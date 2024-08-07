@@ -157,16 +157,16 @@ void software_i2c_init(void)
          */
 
         GPIO_S_SET_OUTPUT(i2c_desc[i].sda);
-        GPIO_S_SET_OD(i2c_desc[i].sda);
-        GPIO_S_SET_PULLUP(i2c_desc[i].sda);
         GPIO_S_SET(i2c_desc[i].sda);
+        GPIO_S_SET_PULLUP(i2c_desc[i].sda);
         GPIO_S_SET_SPEED_HIGH(i2c_desc[i].sda);
+        GPIO_S_SET_OD(i2c_desc[i].sda);
 
         GPIO_S_SET_OUTPUT(i2c_desc[i].scl);
-        GPIO_S_SET_OD(i2c_desc[i].scl);
-        GPIO_S_SET_PULLUP(i2c_desc[i].scl);
         GPIO_S_SET(i2c_desc[i].scl);
+        GPIO_S_SET_PULLUP(i2c_desc[i].scl);
         GPIO_S_SET_SPEED_HIGH(i2c_desc[i].scl);
+        GPIO_S_SET_OD(i2c_desc[i].scl);
     }
 }
 
