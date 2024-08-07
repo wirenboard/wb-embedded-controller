@@ -192,40 +192,4 @@ void wbmz6_battery_update_status(struct wbmz6_status *status)
     status->is_inserted = (buf[1] & 0x10) ? true : false;
 }
 
-void wbmz6_do_periodic_work(void)
-{
-    // enum wbmz6_device device_found = wmbz6_detect_device();
-
-    // if (device_found != wbmz6_ctx.device) {
-    //     wbmz6_ctx.device = device_found;
-    //     switch (device_found) {
-    //     case WBMZ6_DEVICE_BATTERY:
-    //         // Init battery
-
-    //         wbmz6_ctx.full_design_capacity_mah = WBEC_WBMZ6_BATTERY_FULL_DESIGN_CAPACITY_MAH;
-    //         wbmz6_ctx.voltage_min_mv = WBEC_WBMZ6_BATTERY_VOLTAGE_MIN_MV;
-    //         wbmz6_ctx.voltage_max_mv = WBEC_WBMZ6_BATTERY_VOLTAGE_MAX_MV;
-    //         wbmz6_ctx.charge_current_ma = WBEC_WBMZ6_BATTERY_CHARGE_CURRENT_MA;
-
-    //         axp221s_init();
-    //         axp221s_set_battery_full_desing_capacity(wbmz6_ctx.full_design_capacity_mah);
-    //         axp221s_set_battery_voltage_min(wbmz6_ctx.voltage_min_mv);
-    //         axp221s_set_battery_voltage_max(wbmz6_ctx.voltage_max_mv);
-    //         axp221s_set_battery_charging_current_max(wbmz6_ctx.charge_current_ma);
-
-    //         break;
-
-    //     case WBMZ6_DEVICE_SUPERCAP:
-    //         // Init supercap
-
-    //         break;
-
-    //     default:
-    //         break;
-
-    //     }
-    // }
-
-}
-
 #endif
