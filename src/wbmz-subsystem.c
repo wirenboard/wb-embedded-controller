@@ -44,6 +44,7 @@ static bool wbmz6_init_device(enum wbmz6_device device)
             wbmz6_battery_update_params(&wbmz6_params);
             return true;
         }
+        return false;
 
     case WBMZ6_DEVICE_SUPERCAP:
         wbmz6_supercap_init();
