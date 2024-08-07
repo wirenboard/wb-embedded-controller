@@ -26,11 +26,11 @@
     {
         bool vin_ok = vmon_get_ch_status(VMON_CHANNEL_V_IN);
         if (charge_enabled) {
-            if (!vin_ok) {
+            if ((!vin_ok) || wbmz_is_powered_from_wbmz()) {
                 wbmz_disable_charge();
             }
         } else {
-            if (vin_ok) {
+            if (vin_ok && (!wbmz_is_powered_from_wbmz())) {
                 wbmz_enable_charge();
             }
         }
