@@ -123,10 +123,14 @@ void wbmz_subsystem_do_periodic_work(void)
         p.wbmz_voltage_max_design = wbmz6_params.voltage_max_mv;
         p.wbmz_constant_charge_current = wbmz6_params.charge_current_ma;
 
-        p.wbmz_voltage_now = wbmz6_status.voltage_now_mv;
-        p.wbmz_current_now = wbmz6_status.current_now_ma;
+        p.wbmz_battery_voltage = wbmz6_status.voltage_now_mv;
+        p.wbmz_charging_current = wbmz6_status.charging_current_ma;
+        p.wbmz_discharging_current = wbmz6_status.discharging_current_ma;
         p.wbmz_capacity_percent = wbmz6_status.capacity_percent;
         p.wbmz_temperature = wbmz6_status.temperature;
+        p.wbmz_is_charging = wbmz6_status.is_charging;
+        p.wbmz_is_dead = wbmz6_status.is_dead;
+        p.wbmz_is_inserted = wbmz6_status.is_inserted;
 
     #endif
 
