@@ -107,10 +107,10 @@
         /* 0xC3 */  uint16_t wbmz_voltage_max_design; \
         /* 0xC4 */  uint16_t wbmz_constant_charge_current; \
         /* 0xC5 */  uint16_t wbmz_battery_voltage; \
-        /* 0xC6 */  int16_t wbmz_charging_current; \
-        /* 0xC6 */  int16_t wbmz_discharging_current; \
-        /* 0xC7 */  uint16_t wbmz_capacity_percent; \
-        /* 0xC8 */  int16_t wbmz_temperature; \
+        /* 0xC6 */  uint16_t wbmz_charging_current; \
+        /* 0xC7 */  uint16_t wbmz_discharging_current; \
+        /* 0xC8 */  uint16_t wbmz_capacity_percent; \
+        /* 0xC9 */  int16_t wbmz_temperature; \
     ) \
     /*     Addr     Name            RO/RW */ \
     m(     0xD0,    BUZZER_CTRL,    RW, \

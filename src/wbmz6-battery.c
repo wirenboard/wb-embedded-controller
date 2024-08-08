@@ -138,7 +138,7 @@ bool wbmz6_battery_init(void)
 {
     // 0x8000 - total battery capacity is configured
     // 1 lsb = 1.456 mAh
-    const uint16_t bat_capacity_reg_value = 0x8000 | (uint16_t)(WBEC_WBMZ6_BATTERY_FULL_DESIGN_CAPACITY_MAH / 1.456);
+    static const uint16_t bat_capacity_reg_value = 0x8000 | (uint16_t)(WBEC_WBMZ6_BATTERY_FULL_DESIGN_CAPACITY_MAH / 1.456);
     if (!axp221s_write_u16(AXP221S_REG_TOTAL_BAT_CAPACITY_1, bat_capacity_reg_value)) {
         return false;
     }
