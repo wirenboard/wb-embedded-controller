@@ -189,7 +189,8 @@ void wbmz6_battery_update_status(struct wbmz6_status *status)
     axp221s_read_buf(AXP221S_POWER_STATUS, buf, 2);
     status->is_charging = (buf[0] & 0x04) ? true : false;
     status->is_dead = (buf[1] & 0x08) ? true : false;
-    status->is_inserted = (buf[1] & 0x10) ? true : false;
+    // бит presence status indication почему-то всегда 1, используем напряжение чтобы понять что батарея вставлена
+    status->is_inserted = (v > 0) ? true : false;
 }
 
 #endif
