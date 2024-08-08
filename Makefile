@@ -35,4 +35,10 @@ LDFLAGS=
 # Use debian/changelog to get version
 VERSION_STRING = $(shell cat debian/changelog | head -n 1 | cut -d' ' -f2 | sed 's/.*[(]\(.*\)[)].*/\1/' | cut -d'~' -f1)
 
+# set SWD_DEBUG=1 to enable debug build and able to use SWD debugger
+ifeq ($(SWD_DEBUG),1)
+	CFLAGS=-g
+	DEFS += DEBUG
+endif
+
 include system/build_common.mk

@@ -20,6 +20,9 @@
 #include "hwrev.h"
 #include "buzzer.h"
 #include "temperature-control.h"
+#include "wbmz-common.h"
+#include "wbmz-subsystem.h"
+#include "software_i2c.h"
 
 int main(void)
 {
@@ -28,6 +31,7 @@ int main(void)
     RCC->IOPENR |= RCC_IOPENR_GPIOBEN;
     RCC->IOPENR |= RCC_IOPENR_GPIOCEN;
     RCC->IOPENR |= RCC_IOPENR_GPIODEN;
+    RCC->IOPENR |= RCC_IOPENR_GPIOFEN;
     system_led_init();
 
     // При включении начинаем всегда с low power run
@@ -66,6 +70,9 @@ int main(void)
         }
     }
 
+    // WBMZ нужно инициализировать до wbec_init, т.к. возможно что нужно будет включаться от WBMZ
+    wbmz_init();
+
     // Первым инициализируется WBEC, т.к. он в начале проверяет причину включения
     // и может заснуть обратно, если решит.
     wbec_init();
@@ -81,6 +88,10 @@ int main(void)
     spi_slave_init();
     regmap_init();
     usart_init();
+
+    #if defined WBEC_WBMZ6_SUPPORT
+        software_i2c_init();
+    #endif
 
     hwrev_put_hw_info_to_regmap();
 
@@ -110,6 +121,7 @@ int main(void)
         vmon_do_periodic_work();
         test_do_periodic_work();
         buzzer_subsystem_do_periodic_work();
+        wbmz_subsystem_do_periodic_work();
 
         // Main algorithm
         linux_cpu_pwr_seq_do_periodic_work();

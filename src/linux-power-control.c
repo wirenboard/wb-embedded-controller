@@ -10,12 +10,11 @@
 #include "system-led.h"
 #include "console.h"
 #include "regmap-int.h"
+#include "wbmz-common.h"
 
 static const gpio_pin_t gpio_linux_power = { EC_GPIO_LINUX_POWER };
 static const gpio_pin_t gpio_pmic_pwron = { EC_GPIO_LINUX_PMIC_PWRON };
 static const gpio_pin_t gpio_pmic_reset_pwrok = { EC_GPIO_LINUX_PMIC_RESET_PWROK };
-static const gpio_pin_t gpio_wbmz_status_bat = { EC_GPIO_WBMZ_STATUS_BAT };
-static const gpio_pin_t gpio_wbmz_on = { EC_GPIO_WBMZ_ON };
 
 enum pwr_state {
     PS_INIT_OFF,                        // Выключенное состояние после подачи питания и перед включением линукса
@@ -37,7 +36,6 @@ struct pwr_ctx {
     enum pwr_state state;
     systime_t timestamp;
     unsigned attempt;
-    bool wbmz_enabled;
     bool initialized;
     bool reset_flag;
 };
@@ -52,9 +50,6 @@ static inline void pmic_pwron_gpio_on(void)         { GPIO_S_SET(gpio_pmic_pwron
 static inline void pmic_pwron_gpio_off(void)        { GPIO_S_RESET(gpio_pmic_pwron); }
 static inline void pmic_reset_gpio_on(void)         { GPIO_S_SET(gpio_pmic_reset_pwrok); }
 static inline void pmic_reset_gpio_off(void)        { GPIO_S_RESET(gpio_pmic_reset_pwrok); }
-static inline void wbmz_on(void)                    { GPIO_S_SET(gpio_wbmz_on); }
-static inline void wbmz_off(void)                   { GPIO_S_RESET(gpio_wbmz_on); }
-static inline bool wbmz_working(void)               { return (!GPIO_S_TEST(gpio_wbmz_status_bat)); }
 
 static inline void new_state(enum pwr_state s)
 {
@@ -67,14 +62,6 @@ static inline systime_t in_state_time_ms(void)
     return systick_get_time_since_timestamp(pwr_ctx.timestamp);
 }
 
-static void put_power_status_to_regmap(void)
-{
-    struct REGMAP_PWR_STATUS p = {};
-    p.powered_from_wbmz = linux_cpu_pwr_seq_is_powered_from_wbmz();
-    p.wbmz_enabled = pwr_ctx.wbmz_enabled;
-
-    regmap_set_region_data(REGMAP_REGION_PWR_STATUS, &p, sizeof(p));
-}
 
 static void goto_standby_and_save_5v_status(void)
 {
@@ -89,48 +76,7 @@ static void goto_standby_and_save_5v_status(void)
     linux_cpu_pwr_seq_off_and_goto_standby(WBEC_PERIODIC_WAKEUP_FIRST_TIMEOUT_S);
 }
 
-static void wbmz_control(void)
-{
-    bool usb = vmon_get_ch_status(VMON_CHANNEL_VBUS_DEBUG);
-    #if !defined(EC_USB_HUB_DEBUG_NETWORK)
-        usb = usb || vmon_get_ch_status(VMON_CHANNEL_VBUS_NETWORK);
-    #endif
-    bool vin = vmon_get_ch_status(VMON_CHANNEL_V_IN_FOR_WBMZ);
-    static systime_t wbmz_disable_filter_ms;
 
-    // Управление питанием WBMZ
-    if (pwr_ctx.wbmz_enabled) {
-        // Если WBMZ работает - работаем от батареи до тех пор, пока она не разрядится
-        if ((!vin) && (!wbmz_working())) {
-            // Факт разряда батареи - совпадение условий
-            // - WBMZ включен
-            // - нет достаточного (11.5В) напряжения на Vin
-            // - нет сигнала STATUS_BAT
-            // Нужно выключить WBMZ для того, чтобы не уходить в цикл заряда-разряда
-            // Если 5В при этом пропадет - перейдем в standby
-            // Если останется - продолжим работать
-            if (systick_get_time_since_timestamp(wbmz_disable_filter_ms) > 500) {
-                // Этот фильтр нужен, т.к. сигналы имеют разную природу
-                // STATUS_BAT - это GPIO, остальное - АЦП.
-                // Нужно время, чтобы убедиться что они все возникли одновременно
-                // и исключить переходные процессы
-                pwr_ctx.wbmz_enabled = 0;
-                wbmz_off();
-            }
-        } else {
-            wbmz_disable_filter_ms = systick_get_system_time_ms();
-        }
-    } else {
-        // Если Vin превысило порог включения WBMZ - включим его
-        // Но только если нет USB, т.к. в этом случае WBMZ будет всегда разряжаться
-        // Требование такое: если работаем от USB, не нужно включать батарейку
-        // Однако если хотим чтоб WBMZ работал при подключенном USB, надо
-        // сначала включить контроллер кнопкой, а потом подключать USB
-        if (vin && (!usb)) {
-            linux_cpu_pwr_seq_enable_wbmz();
-        }
-    }
-}
 
 /**
  * @brief Инициализирует GPIO управления питанием как выходы.
@@ -155,10 +101,6 @@ void linux_cpu_pwr_seq_init(bool on)
     pmic_reset_gpio_off();
     GPIO_S_SET_OUTPUT(gpio_pmic_reset_pwrok);
     GPIO_S_SET_OUTPUT(gpio_pmic_pwron);
-
-    // STATUS_BAT это вход, который WBMZ тянет к земле открытым коллектором
-    // Подтянут снаружи к V_EC
-    GPIO_S_SET_INPUT(gpio_wbmz_status_bat);
 
     pwr_ctx.initialized = true;
 }
@@ -248,34 +190,18 @@ bool linux_cpu_pwr_seq_is_busy(void)
     );
 }
 
-void linux_cpu_pwr_seq_enable_wbmz(void)
-{
-    // Вызывается только один раз либо в wbec_init, либо в linux_cpu_pwr_seq_do_periodic_work
-    // Однажны включившийся WBMZ более не выключается
-    wbmz_on();
-    GPIO_S_SET_OUTPUT(gpio_wbmz_on);
-    pwr_ctx.wbmz_enabled = 1;
-}
-
-bool linux_cpu_pwr_seq_is_powered_from_wbmz(void)
-{
-    return wbmz_working();
-}
-
 void linux_cpu_pwr_seq_do_periodic_work(void)
 {
     if (!vmon_ready() || !pwr_ctx.initialized) {
         return;
     }
 
-    put_power_status_to_regmap();
-
     if (pwrkey_handle_long_press()) {
         linux_cpu_pwr_5v_gpio_off();
         console_print("\r\n\n");
         console_print_w_prefix("Power off after power key long press detected.\r\n");
         system_led_disable();
-        wbmz_off();
+        wbmz_disable_stepup();
         // Ждём отпускания кнопки
         while (pwrkey_pressed()) {
             pwrkey_do_periodic_work();
@@ -298,15 +224,14 @@ void linux_cpu_pwr_seq_do_periodic_work(void)
         break;
 
     case PS_ON_COMPLETE:
-        wbmz_control();
+        wbmz_do_periodic_work();
         break;
 
     case PS_OFF_COMPLETE:
         // Если алгоритм выключил питание - нужно отключить WBMZ и проверить,
         // осталось ли напряжение на +5В. Это может быть USB или Vin < 11.5V
-        if (pwr_ctx.wbmz_enabled) {
-            wbmz_off();
-            pwr_ctx.wbmz_enabled = 0;
+        if (wbmz_is_stepup_enabled()) {
+            wbmz_disable_stepup();
         }
         if (in_state_time_ms() > 200) {
             goto_standby_and_save_5v_status();

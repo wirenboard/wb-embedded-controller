@@ -20,6 +20,7 @@
 #include "hwrev.h"
 #include "buzzer.h"
 #include "temperature-control.h"
+#include "wbmz-common.h"
 
 #define LINUX_POWERON_REASON(m) \
     m(REASON_POWER_ON,        "Power supply on"        ) \
@@ -256,7 +257,7 @@ void wbec_init(void)
         // WBMZ включится отдельным алторитмом, если Vin будет более 11.5 В
     } else {
         // Питания нет - включаем WBMZ
-        linux_cpu_pwr_seq_enable_wbmz();
+        wbmz_enable_stepup();
     }
 
     // Если дошли до этого места, надо включиться в обычном режиме
@@ -463,7 +464,7 @@ void wbec_do_periodic_work(void)
             // Это была выполнена команда `poweroff` или `rtcwake -m off`
             console_print("\r\n\n");
             console_print_w_prefix("Power off request from Linux.\r\n");
-            bool wbmz = linux_cpu_pwr_seq_is_powered_from_wbmz();
+            bool wbmz = wbmz_is_powered_from_wbmz();
             bool alarm = rtc_alarm_is_alarm_enabled();
             bool btn = wbec_ctx.pwrkey_pressed;
 
@@ -561,7 +562,7 @@ void wbec_do_periodic_work(void)
                     console_print_w_prefix("3.3V is lost, try to reset power\r\n");
                     console_print_w_prefix("Enable WBMZ to prevent power loss under load\r\n");
                     wbec_ctx.poweron_reason = REASON_PMIC_OFF;
-                    linux_cpu_pwr_seq_enable_wbmz();
+                    wbmz_enable_stepup();
                     linux_cpu_pwr_seq_hard_reset();
                     new_state(WBEC_STATE_POWER_ON_SEQUENCE_WAIT);
                 }
