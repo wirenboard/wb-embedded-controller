@@ -3,3 +3,4 @@ release/
 release_internal/
 build/
 *.svd
+unittests/regmap_test
