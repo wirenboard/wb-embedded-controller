@@ -43,6 +43,14 @@ static uint16_t hwrev_code = HWREV_UNKNOWN;
 
 void hwrev_init(void)
 {
+    #if defined DEBUG
+        // При отладке через SWD мы не можем понять какая аппаратная ревизия
+        // поэтому считаем, что это WBEC_HWREV (всегда правильная ревизия)
+        hwrev = WBEC_HWREV;
+        hwrev_code = hwrev_desc[WBEC_HWREV].code;
+        return;
+    #endif
+
     int16_t hwrev_adc_value = fix16_to_int(adc_get_ch_adc_raw(ADC_CHANNEL_ADC_HW_VER));
 
     for (int i = 0; i < HWREV_COUNT; i++) {
