@@ -44,6 +44,8 @@ static uint16_t hwrev_code = HWREV_UNKNOWN;
 void hwrev_init(void)
 {
     #if defined DEBUG
+        // При отладке через SWD мы не можем понять какая аппаратная ревизия
+        // поэтому считаем, что это WBEC_HWREV (всегда правильная ревизия)
         hwrev = WBEC_HWREV;
         hwrev_code = hwrev_desc[WBEC_HWREV].code;
         return;
