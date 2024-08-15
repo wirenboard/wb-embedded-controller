@@ -19,7 +19,7 @@ enum wbmz6_device {
 static enum wbmz6_device wbmz6_device = WBMZ6_DEVICE_NONE;
 static struct wbmz6_params wbmz6_params = {};
 static struct wbmz6_status wbmz6_status = {};
-systime_t wbmz6_last_poll_time;
+static systime_t wbmz6_last_poll_time;
 
 static enum wbmz6_device wmbz6_detect_device(void)
 {
@@ -28,8 +28,6 @@ static enum wbmz6_device wmbz6_detect_device(void)
     }
 
     if (wbmz6_supercap_is_present()) {
-        wbmz6_supercap_init();
-        wbmz6_battery_update_params(&wbmz6_params);
         return WBMZ6_DEVICE_SUPERCAP;
     }
 

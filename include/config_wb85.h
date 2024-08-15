@@ -38,10 +38,12 @@
 // Разрешение заряда WBMZ
 // Зяряд нужно разрешать, когда работаем от Vin (от USB заряд д.б. запрещен)
 #define WBEC_GPIO_WBMZ_CHARGE_ENABLE            GPIOB, 4
+
 // WBMZ6-BATTERY имеет на борту свой собственный PMIC для контроля заряда и других параметров
 #define WBEC_WBMZ6_SUPPORT
 #define WBEC_WBMZ6_POLL_PERIOD_MS                       100
 // Параметры WBMZ6-BATTERY
+#define WBEC_WBMZ6_BATTERY_POLL_PERIOD_MS               100
 #define WBEC_WBMZ6_BATTERY_CHARGE_CURRENT_MA            600
 #define WBEC_WBMZ6_BATTERY_FULL_DESIGN_CAPACITY_MAH     2600
 #define WBEC_WBMZ6_BATTERY_VOLTAGE_MIN_MV               2900
@@ -49,9 +51,13 @@
 #define WBEC_WBMZ6_BATTERY_HIGH_TEMP_CHARGE_LIMIT       40.0
 #define WBEC_WBMZ6_BATTERY_NTC_RES_KOHM                 10
 // Параметры WBMZ6-SUPERCAP
-#define WBEC_WBMZ6_SUPERCAP_VOLTAGE_MAX_MV              4600
+#define WBEC_WBMZ6_SUPERCAP_DETECT_VOLTAGE_MV           500
+#define WBEC_WBMZ6_SUPERCAP_VOLTAGE_MAX_MV              4950
 #define WBEC_WBMZ6_SUPERCAP_VOLTAGE_MIN_MV              1700
-#define WBEC_WBMZ6_SUPERCAP_FULL_DESIGN_CAPACITY_UWH    86800   // microwatt-hours
+#define WBEC_WBMZ6_SUPERCAP_CAPACITY_MF                 25000   // 25 Farad = 2 series 50F capacitors
+#define WBEC_WBMZ6_SUPERCAP_CHARGE_CURRENT_MA           230
+// Ток, по модулю меньший этого значения, будет зануляться
+#define WBEC_WBMZ6_SUPERCAP_CURRENT_ZEROING_MA          80
 
 // Управляет питанием Linux
 #define EC_GPIO_LINUX_POWER                     GPIOD, 1
