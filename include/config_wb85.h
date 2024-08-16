@@ -84,6 +84,9 @@
 // Один USB разъем на DEBUG и NETWORK
 #define EC_USB_HUB_DEBUG_NETWORK
 
+// Поддержка spi-uart
+#define EC_UART_REGMAP_SUPPORT
+
 //                                                    name     freq    sda        scl
 #define SOFTWARE_I2C_DESC(macro)                macro(WBMZ6,   100000, GPIOF, 1,  GPIOF, 0)
 

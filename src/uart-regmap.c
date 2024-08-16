@@ -1,3 +1,7 @@
+#include "config.h"
+
+#if defined EC_UART_REGMAP_SUPPORT
+
 #include "regmap-int.h"
 #include "regmap-structs.h"
 #include "wbmcu_system.h"
@@ -5,7 +9,6 @@
 #include "rcc.h"
 #include "array_size.h"
 #include "atomic.h"
-#include "config.h"
 #include <assert.h>
 #include <string.h>
 
@@ -213,7 +216,7 @@ void uart_regmap_init(void)
 void uart_regmap_do_periodic_work(void)
 {
     struct REGMAP_UART_CTRL uart_ctrl = {};
-    if (regmap_is_region_changed(REGMAP_REGION_UART_CTRL, &uart_ctrl, sizeof(uart_ctrl))) {
+    if (regmap_get_data_if_region_changed(REGMAP_REGION_UART_CTRL, &uart_ctrl, sizeof(uart_ctrl))) {
         if (uart_ctrl.reset) {
             uart_ctrl.reset = 0;
 
@@ -225,12 +228,12 @@ void uart_regmap_do_periodic_work(void)
     }
 
     struct REGMAP_UART_TX_START uart_tx_start;
-    if (regmap_is_region_changed(REGMAP_REGION_UART_TX_START, &uart_tx_start, sizeof(uart_tx_start))) {
+    if (regmap_get_data_if_region_changed(REGMAP_REGION_UART_TX_START, &uart_tx_start, sizeof(uart_tx_start))) {
         uart_put_tx_data_from_regmap_to_buffer(&uart_tx_start.tx_start);
     }
 
     union uart_exchange uart_exchange;
-    if (regmap_is_region_changed(REGMAP_REGION_UART_EXCHANGE, &uart_exchange, sizeof(uart_exchange))) {
+    if (regmap_get_data_if_region_changed(REGMAP_REGION_UART_EXCHANGE, &uart_exchange, sizeof(uart_exchange))) {
         // Это означает, что TX записали, а из RX всё прочитали за одну транзакцию
         uart_put_tx_data_from_regmap_to_buffer(&uart_exchange.tx);
 
@@ -275,3 +278,5 @@ void uart_regmap_do_periodic_work(void)
         }
     }
 }
+
+#endif
