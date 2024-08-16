@@ -13,9 +13,8 @@
 /* ====== Подключения EC к Wiren Board ====== */
 
 // Линия прерывания от EC в линукс
-// Меняет состояние на активное, если в EC есть флаги событий
-#define EC_GPIO_INT                             GPIOA, 8
-#define EC_GPIO_INT_ACTIVE_HIGH
+// Используется только для работы UART-ов
+#define EC_GPIO_UART_INT                        GPIOA, 8
 
 // Кнопка включения
 #define EC_GPIO_PWRKEY                          GPIOA, 0
