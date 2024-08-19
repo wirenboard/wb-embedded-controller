@@ -5,6 +5,49 @@
 #include "gpio.h"
 #include "systick.h"
 
+#if defined WBEC_GPIO_WBMZ_CHARGE_ENABLE
+    static const gpio_pin_t charge_enable_gpio = { WBEC_GPIO_WBMZ_CHARGE_ENABLE };
+
+    static bool charge_enabled;
+
+    static inline void wbmz_enable_charge(void)
+    {
+        GPIO_S_SET(charge_enable_gpio);
+        charge_enabled = true;
+    }
+
+    static inline void wbmz_disable_charge(void)
+    {
+        GPIO_S_RESET(charge_enable_gpio);
+        charge_enabled = false;
+    }
+
+    static void wbmz_charging_control(void)
+    {
+        bool vin_ok = vmon_get_ch_status(VMON_CHANNEL_V_IN);
+        if (charge_enabled) {
+            if ((!vin_ok) || wbmz_is_powered_from_wbmz()) {
+                wbmz_disable_charge();
+            }
+        } else {
+            if (vin_ok && (!wbmz_is_powered_from_wbmz())) {
+                wbmz_enable_charge();
+            }
+        }
+    }
+
+    bool wbmz_is_charging_enabled(void)
+    {
+        return charge_enabled;
+    }
+#else
+    static void wbmz_charging_control(void) {}
+    bool wbmz_is_charging_enabled(void) {
+        // Если нет управления зарядом, то заряд всегда включен схемотехникой
+        return true;
+    }
+#endif
+
 static const gpio_pin_t wbmz_stepup_enable_gpio = { EC_GPIO_WBMZ_STEPUP_ENABLE };
 static const gpio_pin_t wbmz_status_bat_gpio = { EC_GPIO_WBMZ_STATUS_BAT };
 
@@ -54,6 +97,10 @@ static void wbmz_stepup_control(void)
 
 void wbmz_init(void)
 {
+    #if defined WBEC_GPIO_WBMZ_CHARGE_ENABLE
+        wbmz_disable_charge();
+        GPIO_S_SET_OUTPUT(charge_enable_gpio);
+    #endif
     wbmz_disable_stepup();
     GPIO_S_SET_OUTPUT(wbmz_stepup_enable_gpio);
 
@@ -64,6 +111,7 @@ void wbmz_init(void)
 
 void wbmz_do_periodic_work(void)
 {
+    wbmz_charging_control();
     wbmz_stepup_control();
 }
 

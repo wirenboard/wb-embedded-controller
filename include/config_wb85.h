@@ -37,7 +37,7 @@
 #define EC_GPIO_WBMZ_STEPUP_ENABLE              GPIOB, 15
 // Разрешение заряда WBMZ
 // Зяряд нужно разрешать, когда работаем от Vin (от USB заряд д.б. запрещен)
-#define EC_GPIO_WBMZ_CHARGE_ON                  GPIOB, 4
+#define WBEC_GPIO_WBMZ_CHARGE_ENABLE            GPIOB, 4
 
 // Управляет питанием Linux
 #define EC_GPIO_LINUX_POWER                     GPIOD, 1
