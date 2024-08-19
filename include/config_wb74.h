@@ -35,7 +35,7 @@
 // В модуле WBMZ сигнал называется OFF и когда нужно отключить WBMZ, его нужно прижать вниз
 // В WB 7.4.1 он подтянут вниз резистором 2к, т.е. по дефолту выключен
 // Чтобы включить WBMZ, нужно выдать 1 на этот пин
-#define EC_GPIO_WBMZ_ON                         GPIOB, 15
+#define EC_GPIO_WBMZ_STEPUP_ENABLE              GPIOB, 15
 
 // Управляет питанием Linux
 #define EC_GPIO_LINUX_POWER                     GPIOD, 1
