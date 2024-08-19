@@ -95,7 +95,7 @@
     /*     Addr     Name            RO/RW */ \
     m(     0xC0,    PWR_STATUS,     RO, \
         /* 0xC0 */  uint16_t powered_from_wbmz : 1; \
-        /* 0xC0 */  uint16_t wbmz_enabled : 1; \
+        /* 0xC0 */  uint16_t wbmz_stepup_enabled : 1; \
     ) \
     /*     Addr     Name            RO/RW */ \
     m(     0xD0,    BUZZER_CTRL,    RW, \
