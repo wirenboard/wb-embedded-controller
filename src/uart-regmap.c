@@ -63,6 +63,7 @@ struct uart_ctx {
     struct circular_buffer rx;
     int irq_handled;
     bool tx_in_progress;
+    uint8_t ready;
     // bool ready_for_tx;
     // union uart_exchange exchange;
     struct uart_rx rx_data;
@@ -94,6 +95,7 @@ static inline void enable_txe_irq(void)
     if (!uart_ctx.tx_in_progress) {
         USART2->CR1 |= USART_CR1_TXEIE_TXFNFIE;
         uart_ctx.tx_in_progress = true;
+        USART2->CR1 &= ~USART_CR1_RE;
     }
 }
 
@@ -144,6 +146,11 @@ static void uart_put_tx_data_from_regmap_to_buffer(const struct uart_tx *tx)
 
 static void uart_irq_handler(void)
 {
+    if (USART2->ISR & USART_ISR_TC) {
+        USART2->ICR = USART_ICR_TCCF;
+        USART2->CR1 |= USART_CR1_RE;
+    }
+
     if (USART2->ISR & USART_ISR_RXNE_RXFNE) {
         uint8_t byte = USART2->RDR;
         if (get_buffer_available_space(&uart_ctx.rx) > 0) {
@@ -153,27 +160,29 @@ static void uart_irq_handler(void)
 
     if (USART2->ISR & USART_ISR_TXE_TXFNF) {
         if (get_buffer_used_space(&uart_ctx.tx) > 0) {
+            // also clears TXFNF flag
             USART2->TDR = push_byte_from_buffer(&uart_ctx.tx);
         } else {
+            USART2->ICR = USART_ICR_TXFECF;
             disable_txe_irq();
         }
     }
 
     if (USART2->ISR & USART_ISR_PE) {
         uart_ctx.errors.pe++;
-        USART2->ICR |= USART_ICR_PECF;
+        USART2->ICR = USART_ICR_PECF;
     }
     if (USART2->ISR & USART_ISR_FE) {
         uart_ctx.errors.fe++;
-        USART2->ICR |= USART_ICR_FECF;
+        USART2->ICR = USART_ICR_FECF;
     }
     if (USART2->ISR & USART_ISR_NE) {
         uart_ctx.errors.ne++;
-        USART2->ICR |= USART_ICR_NECF;
+        USART2->ICR = USART_ICR_NECF;
     }
     if (USART2->ISR & USART_ISR_ORE) {
         uart_ctx.errors.ore++;
-        USART2->ICR |= USART_ICR_ORECF;
+        USART2->ICR = USART_ICR_ORECF;
     }
 }
 
@@ -201,16 +210,16 @@ void uart_regmap_init(void)
     RCC->APBRSTR1 |= RCC_APBRSTR1_USART2RST;
     RCC->APBRSTR1 &= ~RCC_APBRSTR1_USART2RST;
 
+    NVIC_EnableIRQ(USART2_IRQn);
+    NVIC_SetPriority(USART2_IRQn, 1);
+    NVIC_SetHandler(USART2_IRQn, uart_irq_handler);
+
     // Init USART
     USART2->BRR = SystemCoreClock / 115200;
     USART2->CR1 |= 0x08 << 21 | 0x08 << 16;     // driver enable assert and de-assert time;
     USART2->CR3 |= USART_CR3_DEM;               // activate external transceiver control through the DE (Driver Enable) signal
     USART2->CR3 |= USART_CR3_EIE;               // error interrupt enable
-    USART2->CR1 |= USART_CR1_TE | USART_CR1_UE | USART_CR1_RE | USART_CR1_RXNEIE_RXFNEIE | USART_CR1_PEIE;
-
-    NVIC_EnableIRQ(USART2_IRQn);
-    NVIC_SetPriority(USART2_IRQn, 1);
-    NVIC_SetHandler(USART2_IRQn, uart_irq_handler);
+    USART2->CR1 |= USART_CR1_TE | USART_CR1_UE | USART_CR1_RE | USART_CR1_RXNEIE_RXFNEIE | USART_CR1_PEIE | USART_CR1_TCIE;
 }
 
 void uart_regmap_do_periodic_work(void)
@@ -224,7 +233,19 @@ void uart_regmap_do_periodic_work(void)
 
             disable_txe_irq();
             set_irq_gpio_inactive();
+
+            uart_ctx.ready = 1;
         }
+    }
+
+    if (uart_ctx.ready == 1) {
+        if (regmap_set_region_data(REGMAP_REGION_UART_CTRL, &uart_ctrl, sizeof(uart_ctrl))) {
+            uart_ctx.ready = 2;
+        }
+    }
+
+    if (uart_ctx.ready != 2) {
+        return;
     }
 
     struct REGMAP_UART_TX_START uart_tx_start;
