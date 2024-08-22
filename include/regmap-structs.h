@@ -128,16 +128,16 @@
     ) \
     /* UARTs */ \
     /*     Addr     Name            RO/RW */ \
-    m(     0x100,   UART_EXCHANGE,  RW, \
-        /* 0x100 */ union uart_exchange e; \
+    m(     0x100,   UART_CTRL,      RW, \
+        /* 0x100 */ uint16_t reset : 1; \
     ) \
     /*     Addr     Name            RO/RW */ \
-    m(     0x190,   UART_TX_START,  RW, \
-        /* 0x190 */ struct uart_tx tx_start; \
+    m(     0x110,   UART_EXCHANGE,  RW, \
+        /* 0x110 */ union uart_exchange e; \
     ) \
     /*     Addr     Name            RO/RW */ \
-    m(     0x1E0,   UART_CTRL,      RW, \
-        /* 0x1E0 */ uint16_t reset : 1; \
+    m(     0x1A0,   UART_TX_START,  RW, \
+        /* 0x1A0 */ struct uart_tx tx_start; \
     ) \
 
 // Общее число регистров в адресном пространстве
