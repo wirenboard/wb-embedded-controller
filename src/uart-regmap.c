@@ -201,7 +201,7 @@ void uart_regmap_init(void)
     GPIO_S_SET_AF(usart_rts_gpio, 1);
     GPIO_S_SET_AF(usart_rx_gpio, 1);
 
-    GPIO_S_SET_PUSHPULL(usart_tx_gpio);
+    GPIO_S_SET_PUSHPULL(usart_irq_gpio);
     GPIO_S_SET_OUTPUT(usart_irq_gpio);
 
     RCC->APBENR1 |= RCC_APBENR1_USART2EN;
