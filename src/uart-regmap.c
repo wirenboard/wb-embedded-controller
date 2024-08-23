@@ -234,6 +234,7 @@ void uart_regmap_do_periodic_work(void)
             disable_txe_irq();
             set_irq_gpio_inactive();
 
+            uart_ctx.rx_data.ready_for_tx = 1;
             uart_ctx.ready = 1;
         }
     }
