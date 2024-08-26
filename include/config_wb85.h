@@ -50,6 +50,13 @@
 #define WBEC_WBMZ6_BATTERY_VOLTAGE_MAX_MV               4100
 #define WBEC_WBMZ6_BATTERY_HIGH_TEMP_CHARGE_LIMIT       40.0
 #define WBEC_WBMZ6_BATTERY_NTC_RES_KOHM                 10
+// Температурные пороги
+// При расчете следует учитывать сопротивление резистора последовательно с NTC
+// Посчитать можно тут: https://docs.google.com/spreadsheets/d/1fvdiSBb0WEPnSeek40awh9ejFEPKrPeAPRvstHpcSgI/edit?gid=0#gid=0
+// VLTF-charge - дефолтное значение 3.9 °C
+// VHTF-charge - дефолтное значение 59.5 °C
+// VLTF-discharge - дефолтное значение 5.6 °C
+#define WBEC_WBMZ6_BATTERY_VHTF_DISCHARGE_VADC_MV       499     // 48.5 °C
 // Параметры WBMZ6-SUPERCAP
 #define WBEC_WBMZ6_SUPERCAP_DETECT_VOLTAGE_MV           500
 #define WBEC_WBMZ6_SUPERCAP_VOLTAGE_MAX_MV              4950

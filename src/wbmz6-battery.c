@@ -21,6 +21,11 @@ static_assert(WBEC_WBMZ6_BATTERY_CHARGE_CURRENT_MA == 600, "Only 600 mA charge c
 #define AXP221S_REG_TOTAL_BAT_CAPACITY_1            0xE0
 #define AXP221S_REG_TOTAL_BAT_CAPACITY_2            0xE1
 
+#define AXP221S_REG_VLTF_CHARGE                     0x38
+#define AXP221S_REG_VHTF_CHARGE                     0x39
+#define AXP221S_REG_VLTF_DISCHARGE                  0x3C
+#define AXP221S_REG_VHTF_DISCHARGE                  0x3D
+
 #define AXP221S_POWER_STATUS                        0x00
 #define AXP221S_OP_MODE                             0x01
 #define AXP221S_TS_PIN_ADC_DATA                     0x58
@@ -28,6 +33,8 @@ static_assert(WBEC_WBMZ6_BATTERY_CHARGE_CURRENT_MA == 600, "Only 600 mA charge c
 #define AXP221S_REG_BATTERY_CHARGE_CURRENT          0x7A
 #define AXP221S_REG_BATTERY_DISCHARGE_CURRENT       0x7C
 #define AXP221S_REG_BATTERY_LEVEL                   0xB9
+
+#define AXP221S_TEMPERATURE_LIMIT_MV_TO_VAL(mv)     ((mv) / 16.0 / 0.8)
 
 static const uint8_t wbmz6_init_sequence[][2] = {
     {
@@ -58,6 +65,11 @@ static const uint8_t wbmz6_init_sequence[][2] = {
         // Charge current 600mA
         // End charging when the charging current is less than 10% of the set value
         0x82
+    },
+    {
+        AXP221S_REG_VHTF_DISCHARGE,
+        // High temperature discharge threshold
+        AXP221S_TEMPERATURE_LIMIT_MV_TO_VAL(WBEC_WBMZ6_BATTERY_VHTF_DISCHARGE_VADC_MV)
     }
 };
 
