@@ -26,6 +26,7 @@ Wiren Board Embedded Controller (EC) — это микроконтроллер S
 ```bash
 git clone git@github.com:wirenboard/wb-embedded-controller.git
 cd wb-embedded-controller
+git submodule update --init --recursive
 make
 ```
 
