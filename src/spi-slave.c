@@ -37,9 +37,9 @@
 // Слово, которое передается в ответ на запись адреса
 #define SPI_SLAVE_ADDR_WRITE_ANSWER              0x0000
 // Количество незначащих слов между записью адреса и началом передачи данных. Нужно, чтобы подготовить данные
-// Для совместимости со старым протоколом используется только с адреса 0x100 (для UART-ов)
+// Для совместимости со старым протоколом используется только с адреса 0x137 (для UART-ов)
 #define SPI_SLAVE_PAD_WORDS_COUNT                5
-#define SPI_SLAVE_USE_PAD_WORDS_SINCE_ADDR       0x110
+#define SPI_SLAVE_USE_PAD_WORDS_SINCE_ADDR       0x137
 
 static const struct spi_pins {
     gpio_pin_t miso;
