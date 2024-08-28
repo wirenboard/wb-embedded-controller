@@ -128,16 +128,31 @@
     ) \
     /* UARTs */ \
     /*     Addr     Name            RO/RW */ \
-    m(     0x100,   UART_CTRL,      RW, \
-        /* 0x100 */ uint16_t reset : 1; \
+    m(     0x100,   UART_CTRL_MOD1, RW, \
+        /* 0x100 */ struct uart_ctrl ctrl; \
     ) \
     /*     Addr     Name            RO/RW */ \
-    m(     0x110,   UART_EXCHANGE,  RW, \
-        /* 0x110 */ union uart_exchange e; \
+    m(     0x108,   UART_CTRL_MOD2, RW, \
+        /* 0x108 */ struct uart_ctrl ctrl; \
     ) \
     /*     Addr     Name            RO/RW */ \
-    m(     0x1A0,   UART_TX_START,  RW, \
-        /* 0x1A0 */ struct uart_tx tx_start; \
+    m(     0x110,   UART_STATUS_MOD1, RO, \
+        /* 0x110 */ struct uart_status status; \
+    ) \
+    /*     Addr     Name            RO/RW */ \
+    m(     0x118,   UART_STATUS_MOD2, RO, \
+        /* 0x118 */ struct uart_status status; \
+    ) \
+    /*     Addr     Name            RO/RW */ \
+    m(     0x137,   UART_TX_START,  RW, \
+        /* 0x137 */ uint16_t port_num; \
+        /* 0x138 */ struct uart_tx tx; \
+        /* 0x17A    end of the region */ \
+    ) \
+    /*     Addr     Name            RO/RW */ \
+    m(     0x17B,   UART_EXCHANGE,  RW, \
+        /* 0x17B */ union uart_exchange e[2]; \
+        /* 0x1FF    end of the region */ \
     ) \
 
 // Общее число регистров в адресном пространстве
