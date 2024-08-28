@@ -23,7 +23,7 @@
 #include "wbmz-common.h"
 #include "wbmz-subsystem.h"
 #include "software_i2c.h"
-#include "uart-regmap.h"
+#include "uart-regmap-subsystem.h"
 
 int main(void)
 {
@@ -91,7 +91,7 @@ int main(void)
     usart_init();
 
     #if defined EC_UART_REGMAP_SUPPORT
-        uart_regmap_init();
+        uart_regmap_subsystem_init();
     #endif
 
     #if defined WBEC_WBMZ6_SUPPORT
@@ -119,7 +119,6 @@ int main(void)
         wdt_do_periodic_work();
         gpio_do_periodic_work();
         temperature_control_do_periodic_work();
-        uart_regmap_do_periodic_work();
 
         // Sybsystems
         rtc_alarm_do_periodic_work();
@@ -128,6 +127,7 @@ int main(void)
         test_do_periodic_work();
         buzzer_subsystem_do_periodic_work();
         wbmz_subsystem_do_periodic_work();
+        uart_regmap_subsystem_do_periodic_work();
 
         // Main algorithm
         linux_cpu_pwr_seq_do_periodic_work();
