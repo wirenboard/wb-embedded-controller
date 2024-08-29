@@ -85,6 +85,9 @@ static void new_state(enum wbec_state s)
     wbec_ctx.state = s;
     wbec_ctx.timestamp = systick_get_system_time_ms();
 
+    /* При любом изменении состояния переключаем управление диодом на себя: */
+    system_led_set_control_from_ec();
+
     switch (wbec_ctx.state) {
     case WBEC_STATE_WAIT_STARTUP:               system_led_blink(5,   100);     break;
     case WBEC_STATE_VOLTAGE_CHECK:              system_led_blink(5,   100);     break;
