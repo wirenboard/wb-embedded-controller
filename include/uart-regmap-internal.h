@@ -29,6 +29,8 @@ struct uart_descr {
     void (*uart_hw_deinit)(void);
     enum regmap_region ctrl_region;
     enum regmap_region status_region;
+    enum regmap_region start_tx_region;
+    enum regmap_region exchange_region;
     struct uart_ctx *ctx;
 };
 

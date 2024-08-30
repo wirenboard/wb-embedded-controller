@@ -39,7 +39,7 @@
 // Количество незначащих слов между записью адреса и началом передачи данных. Нужно, чтобы подготовить данные
 // Для совместимости со старым протоколом используется только с адреса 0x137 (для UART-ов)
 #define SPI_SLAVE_PAD_WORDS_COUNT                5
-#define SPI_SLAVE_USE_PAD_WORDS_SINCE_ADDR       0x137
+#define SPI_SLAVE_USE_PAD_WORDS_SINCE_ADDR       0x120
 
 static const struct spi_pins {
     gpio_pin_t miso;

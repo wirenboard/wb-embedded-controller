@@ -8,6 +8,7 @@
 #include "array_size.h"
 #include "atomic.h"
 #include <assert.h>
+#include <string.h>
 
 /**
  * Модуль реализует мост SPI-UART
@@ -138,13 +139,14 @@ void uart_regmap_process_ctrl(const struct uart_descr *u, const struct uart_ctrl
         NVIC_SetPriority(u->irq_num, 1);
 
         ctx->enabled = true;
+        ctx->rx_data.ready_for_tx = 1;
     }
 
     if ((ctx->enabled) && (ctrl->enable == 0)) {
         u->uart_hw_deinit();
         NVIC_DisableIRQ(u->irq_num);
 
-        ctx->enabled = false;
+        memset(ctx, 0, sizeof(*ctx));
     }
 }
 

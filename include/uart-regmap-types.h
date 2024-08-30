@@ -16,7 +16,6 @@ struct uart_tx {
 };
 
 struct uart_ctrl {
-    uint16_t port_num;
     uint16_t enable : 1;
     uint16_t baud_x100;
     uint16_t parity : 2;
