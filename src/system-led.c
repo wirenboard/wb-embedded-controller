@@ -21,11 +21,33 @@ static const gpio_pin_t system_led_gpio = { EC_GPIO_LED };
 static struct REGMAP_LED led_ctx;
 static systime_t timestamp = 0;
 
+/* Тип управления диодом (control)  */
+static enum led_control
+{
+    CONTROL_EC,     // Управляется с EC
+    CONTROL_LINUX,  // Управляется с Linux-а
+} control = CONTROL_EC;
+
+/* Режим работы (аналоги Linux-овым trigger)*/
+enum led_mode
+{
+    MODE_NONE = 0,   // Включен или выключен по команде
+    MODE_TIMER,  // Мигает с заданными таймингами
+};
+
+/* Состояние светимости диода */
+enum led_state
+{
+    STATE_OFF,      // Не светится
+    STATE_ON,       // Светится
+};
+
+
 void system_led_init(void)
 {
     //Начальные настройки модуля:
-    led_ctx.control = CONTROL_EC;
-    led_ctx.mode = MODE_OFF;
+    control = CONTROL_EC;
+    led_ctx.mode = MODE_NONE;
     led_ctx.state = STATE_OFF;
     led_ctx.delay_on = 0;
     led_ctx.delay_off = 0;
@@ -40,7 +62,7 @@ void system_led_init(void)
 
 void system_led_set_control_from_ec(void)
 {
-    led_ctx.control = CONTROL_EC;
+    control = CONTROL_EC;
     regmap_set_region_data(REGMAP_REGION_LED, &led_ctx, sizeof(led_ctx));
 }
 
@@ -69,20 +91,24 @@ static void set_state(enum led_state state)
 
 void system_led_disable(void)
 {
-    led_ctx.mode = MODE_OFF;
-    set_state(STATE_OFF);
+    if (control == CONTROL_EC){
+        led_ctx.mode = MODE_NONE;
+        set_state(STATE_OFF);
+    }
 }
 
 void system_led_enable(void)
 {
-    led_ctx.mode = MODE_ON;
-    set_state(STATE_ON);
+    if (control == CONTROL_EC){
+        led_ctx.mode = MODE_NONE;
+        set_state(STATE_ON);
+    }
 }
 
 void system_led_blink(uint16_t on_ms, uint16_t off_ms)
 {
     /* Метод для установки параметров мигания из под EC */
-    if (led_ctx.control == CONTROL_EC){
+    if (control == CONTROL_EC){
         // Именяю состояние только в режиме EC
         led_ctx.mode = MODE_TIMER;
         led_ctx.delay_on = on_ms;
@@ -101,14 +127,27 @@ void system_led_do_periodic_work(void)
     {
         /* Если изменилось состояние извне - это означает что Linux взял
          * управление диодом на себя */
-        
-        // Обновленные значения от LINUX-а:
+        // Получаю значения:
         struct REGMAP_LED led_regmap;
         regmap_get_region_data(REGMAP_REGION_LED, &led_regmap, sizeof(led_regmap));
-
-        // Затираю полученные значения "правильными":
-        led_ctx.control = CONTROL_LINUX;
-        led_ctx.mode = MODE_NONE; 
+        
+        // Применяю значения:
+        control = CONTROL_LINUX;
+        if (led_ctx.mode != led_regmap.mode){
+            // Изменился режим работы модуля
+            if (led_regmap.mode == MODE_NONE){
+                led_ctx.mode = MODE_NONE;
+                led_ctx.delay_on = 0;
+                led_ctx.delay_off = 0;
+            }else{
+                led_ctx.mode = MODE_TIMER;
+                led_ctx.delay_on = led_regmap.delay_on;
+                led_ctx.delay_off = led_regmap.delay_off;
+                timestamp = systick_get_system_time_ms(); // Обнуляю тикалку
+            }
+        }
+        led_ctx.delay_on = led_regmap.delay_on;
+        led_ctx.delay_off = led_regmap.delay_off;
 
         // Перед сохранением регмапы в set_state очищаю бит измененности:
         regmap_clear_changed(REGMAP_REGION_LED);
