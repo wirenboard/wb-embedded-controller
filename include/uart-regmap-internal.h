@@ -13,6 +13,7 @@ struct uart_ctx {
     struct uart_status status;
     bool enabled;
     bool tx_in_progress;
+    bool tx_completed;
     int tx_bytes_count_in_prev_exchange;
     struct {
         uint16_t pe;

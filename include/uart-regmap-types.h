@@ -5,7 +5,9 @@
 
 struct uart_rx {
     uint8_t read_bytes_count;
-    uint8_t ready_for_tx;
+    uint8_t ready_for_tx : 1;
+    uint8_t tx_completed : 1;
+    uint8_t reserved : 6;
     uint8_t read_bytes[UART_REGMAP_BUFFER_SIZE];
 };
 

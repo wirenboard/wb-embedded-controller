@@ -124,6 +124,10 @@ void uart_regmap_subsystem_init(void)
 
     NVIC_SetHandler(USART1_IRQn, mod1_uart_irq_handler);
     NVIC_SetHandler(USART2_IRQn, mod2_uart_irq_handler);
+
+    for (int i = 0; i < MOD_COUNT; i++) {
+        need_to_collect_data[i] = true;
+    }
 }
 
 void uart_regmap_subsystem_do_periodic_work(void)
@@ -145,41 +149,42 @@ void uart_regmap_subsystem_do_periodic_work(void)
         struct uart_tx uart_tx_start;
         if (regmap_get_data_if_region_changed(uart_descr[i].start_tx_region, &uart_tx_start, sizeof(uart_tx_start))) {
             uart_regmap_process_start_tx(&uart_descr[i], &uart_tx_start);
-            need_to_collect_data[i] = true;
+            // need_to_collect_data[i] = true;
         }
     }
 
     // Обработка региона обмена
-    for (int i = 0; i < MOD_COUNT; i++) {
-        // if (uart_ctx[i].enabled && !(exchange_received[i])) {
-        if (wait_exchange[i]) {
-            union uart_exchange e;
-            if (regmap_get_data_if_region_changed(uart_descr[i].exchange_region, &e, sizeof(e))) {
-                uart_regmap_process_exchange(&uart_descr[i], &e);
-                exchange_received[i] = true;
-                wait_exchange[i] = false;
+    if (irq_handled > 0) {
+        for (int i = 0; i < MOD_COUNT; i++) {
+            if (!exchange_received[i]) {
+                union uart_exchange e;
+                if (regmap_get_data_if_region_changed(uart_descr[i].exchange_region, &e, sizeof(e))) {
+                    uart_regmap_process_exchange(&uart_descr[i], &e);
+                    exchange_received[i] = true;
+                    // wait_exchange[i] = false;
+                }
             }
         }
-    }
 
-    bool exchange_received_all = true;
-    bool has_enabled_ports = false;
-    for (int i = 0; i < MOD_COUNT; i++) {
-        if (wait_exchange[i]) {
-            has_enabled_ports = true;
+        bool exchange_received_all = true;
+        // bool has_enabled_ports = false;
+        for (int i = 0; i < MOD_COUNT; i++) {
+            // if (uart_ctx[i].enabled) {
+            //     has_enabled_ports = true;
             if (!exchange_received[i]) {
                 exchange_received_all = false;
             }
+            // }
         }
-    }
 
-    if (has_enabled_ports && exchange_received_all) {
-        for (int i = 0; i < MOD_COUNT; i++) {
-            exchange_received[i] = false;
-            need_to_collect_data[i] = true;
+        if (exchange_received_all) {
+            for (int i = 0; i < MOD_COUNT; i++) {
+                exchange_received[i] = false;
+                need_to_collect_data[i] = true;
+            }
+            // Прерывание нужно сбросить после того, как обработаны данные для всех портов
+            set_irq_gpio_inactive();
         }
-        // Прерывание нужно сбросить после того, как обработаны данные для всех портов
-        set_irq_gpio_inactive();
     }
 
     // Обработка прерывания
@@ -189,43 +194,43 @@ void uart_regmap_subsystem_do_periodic_work(void)
         bool irq_needed = false;
 
         for (int i = 0; i < MOD_COUNT; i++) {
-            if (uart_ctx[i].enabled) {
+            // if (uart_ctx[i].enabled) {
                 if (need_to_collect_data[i]) {
                     uart_regmap_collect_data_for_new_exchange(&uart_descr[i]);
                 }
                 if (uart_regmap_is_irq_needed(&uart_descr[i])) {
-                    wait_exchange[i] = true;
+                    // wait_exchange[i] = true;
                     irq_needed = true;
                 }
-            }
+            // }
         }
 
         if (irq_needed) {
             for (int i = 0; i < MOD_COUNT; i++) {
-                if (uart_ctx[i].enabled && need_to_collect_data[i]) {
+                if (need_to_collect_data[i]) {
                     if (regmap_set_region_data(uart_descr[i].exchange_region, &uart_descr[i].ctx->rx_data, sizeof(struct uart_rx))) {
                         need_to_collect_data[i] = false;
                         new_exchange_ready[i] = true;
                     }
-                    // set_irq_gpio_active();
                 }
             }
 
             bool new_exchange_ready_all = true;
             // bool has_enabled_ports = false;
             for (int i = 0; i < MOD_COUNT; i++) {
-                if (uart_ctx[i].enabled) {
+                // if (uart_ctx[i].enabled) {
                     // has_enabled_ports = true;
                     if (!new_exchange_ready[i]) {
                         new_exchange_ready_all = false;
                     }
-                }
+                // }
             }
 
-            if (has_enabled_ports && new_exchange_ready_all) {
+            if (new_exchange_ready_all) {
                 for (int i = 0; i < MOD_COUNT; i++) {
                     new_exchange_ready[i] = false;
                     need_to_collect_data[i] = false;
+                    exchange_received[i] = false;
                 }
                 set_irq_gpio_active();
             }
