@@ -12,8 +12,7 @@
  *
  * При первой попытке изменить состояние светодиода (светит/не светит) из Linux,
  * модуль автоматически переходит в режим управления с Linux-а
- * Обратно в режим EC модуль переходит в следующих случаях:
- *  - по команде из Linux-а
+ * Обратно в режим EC модуль переходит при изменнии FSMа в EC:
  *  - при перезагрузке/выключении Linux-а
  *  - при сигнале wathcdog-а из-за потери связи с Linux-ом 
  */
@@ -100,46 +99,21 @@ void system_led_do_periodic_work(void)
     // Проверяем, изменился ли регион LED в REGMAP извне:
     if (regmap_is_region_changed(REGMAP_REGION_LED))
     {
-        // Обновленные значения из REGMAP:
+        /* Если изменилось состояние извне - это означает что Linux взял
+         * управление диодом на себя */
+        
+        // Обновленные значения от LINUX-а:
         struct REGMAP_LED led_regmap;
         regmap_get_region_data(REGMAP_REGION_LED, &led_regmap, sizeof(led_regmap));
 
-        if (led_regmap.control == CONTROL_EC){
-            /* Когда из Linux вернули управление диодом обратно контроллеру */
-            led_ctx.control = CONTROL_EC;
-            // Остальные параметры оставляю на откуп системы
-        } else {
-            /* В любом другом случае любое изменение в REGMAP означает передачу 
-             * управления светодиодом в Linux */
-            led_ctx.control = CONTROL_LINUX;
-            led_ctx.delay_on = led_regmap.delay_on;
-            led_ctx.delay_off = led_regmap.delay_off;
+        // Затираю полученные значения "правильными":
+        led_ctx.control = CONTROL_LINUX;
+        led_ctx.mode = MODE_NONE; 
 
-            if (led_ctx.mode != led_regmap.mode){ 
-                /* Устанавливаю режим работы светодиода */
-                led_ctx.mode = led_regmap.mode;
-                switch(led_ctx.mode){
-                    case MODE_NONE: // При ручном управлении сперва включаю диод
-                    case MODE_ON:
-                        set_state(STATE_ON);
-                        break;
-                    case MODE_TIMER: // Мигание диодом
-                        timestamp = systick_get_system_time_ms(); // Актуализирую тикалку
-                        /* fall through */
-                    default: // MODE_OFF
-                        set_state(STATE_OFF); 
-                }
-            }else{
-                /* Режим не поменялся, но изменились параметры мигания или 
-                 * состояние свечения */
-                if (led_ctx.mode == MODE_NONE){
-                    // Даю изменять значение только в ручном управлении (NONE)
-                    set_state(led_regmap.state);
-                }
-            }
-        }
-        regmap_set_region_data(REGMAP_REGION_LED, &led_ctx, sizeof(led_ctx));
+        // Перед сохранением регмапы в set_state очищаю бит измененности:
         regmap_clear_changed(REGMAP_REGION_LED);
+
+        set_state(led_regmap.state);
     }
 
     if (led_ctx.mode == MODE_TIMER){
