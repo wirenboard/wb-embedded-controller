@@ -144,15 +144,25 @@
         /* 0x118 */ struct uart_status status; \
     ) \
     /*     Addr     Name            RO/RW */ \
-    m(     0x137,   UART_TX_START,  RW, \
-        /* 0x137 */ uint16_t port_num; \
-        /* 0x138 */ struct uart_tx tx; \
-        /* 0x17A    end of the region */ \
+    m(     0x120,   UART_TX_START_MOD1,  RW, \
+        /* 0x120 */ struct uart_tx tx; \
+        /* 0x140    end of the region */ \
     ) \
     /*     Addr     Name            RO/RW */ \
-    m(     0x17B,   UART_EXCHANGE,  RW, \
-        /* 0x17B */ union uart_exchange e[2]; \
-        /* 0x1FF    end of the region */ \
+    m(     0x141,   UART_TX_START_MOD2,  RW, \
+        /* 0x141 */ struct uart_tx tx; \
+        /* 0x161    end of the region */ \
+    ) \
+    /*     Addr     Name            RO/RW */ \
+    m(     0x180,   UART_EXCHANGE_MOD1,  RW, \
+        /* 0x180 */ union uart_exchange e; \
+        /* 0x1A0    end of the region */ \
+    ) \
+    /* ВАЖНО, чтобы регионы exhange шли подряд  */ \
+    /*     Addr     Name            RO/RW */ \
+    m(     0x1A1,   UART_EXCHANGE_MOD2,  RW, \
+        /* 0x1A1 */ union uart_exchange e; \
+        /* 0x1C1    end of the region */ \
     ) \
 
 // Общее число регистров в адресном пространстве
