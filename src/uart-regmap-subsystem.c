@@ -163,7 +163,7 @@ void uart_regmap_subsystem_do_periodic_work(void)
     }
 
     bool exchange_received_all = true;
-    bool has_wait_ports = false;
+    bool has_enabled_ports = false;
     for (int i = 0; i < MOD_COUNT; i++) {
         if (wait_exchange[i]) {
             has_enabled_ports = true;
