@@ -221,6 +221,10 @@ bool uart_regmap_is_irq_needed(const struct uart_descr *u)
         tx_irq_needed = true;
     }
 
+    if (ctx->want_to_tx) {
+        tx_irq_needed = true;
+    }
+
     return tx_irq_needed || rx_irq_needed;
 }
 

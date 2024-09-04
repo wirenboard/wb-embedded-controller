@@ -14,6 +14,7 @@ struct uart_ctx {
     bool enabled;
     bool tx_in_progress;
     bool tx_completed;
+    bool want_to_tx;
     int tx_bytes_count_in_prev_exchange;
     struct {
         uint16_t pe;

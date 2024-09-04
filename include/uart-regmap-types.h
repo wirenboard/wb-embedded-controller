@@ -3,6 +3,10 @@
 
 #define UART_REGMAP_BUFFER_SIZE             64
 
+struct uart_start_tx {
+    uint16_t want_to_tx;
+};
+
 struct uart_rx {
     uint8_t read_bytes_count;
     uint8_t ready_for_tx : 1;

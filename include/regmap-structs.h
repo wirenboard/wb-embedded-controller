@@ -145,13 +145,12 @@
     ) \
     /*     Addr     Name            RO/RW */ \
     m(     0x120,   UART_TX_START_MOD1,  RW, \
-        /* 0x120 */ struct uart_tx tx; \
-        /* 0x140    end of the region */ \
+        /* 0x120 */ struct uart_start_tx start_tx; \
+        /* 0x121    end of the region */ \
     ) \
-    /*     Addr     Name            RO/RW */ \
-    m(     0x141,   UART_TX_START_MOD2,  RW, \
-        /* 0x141 */ struct uart_tx tx; \
-        /* 0x161    end of the region */ \
+    m(     0x121,   UART_TX_START_MOD2,  RW, \
+        /* 0x121 */ struct uart_start_tx start_tx; \
+        /* 0x122    end of the region */ \
     ) \
     /*     Addr     Name            RO/RW */ \
     m(     0x180,   UART_EXCHANGE_MOD1,  RW, \

@@ -12,7 +12,6 @@ static const gpio_pin_t usart_irq_gpio = { EC_GPIO_UART_INT };
 
 static int irq_handled = false;
 
-static bool wait_exchange[MOD_COUNT];
 static bool exchange_received[MOD_COUNT];
 static bool need_to_collect_data[MOD_COUNT];
 static bool new_exchange_ready[MOD_COUNT];
@@ -146,10 +145,11 @@ void uart_regmap_subsystem_do_periodic_work(void)
 
     // Обработка региона начала передачи
     for (int i = 0; i < MOD_COUNT; i++) {
-        struct uart_tx uart_tx_start;
+        struct uart_start_tx uart_tx_start;
         if (regmap_get_data_if_region_changed(uart_descr[i].start_tx_region, &uart_tx_start, sizeof(uart_tx_start))) {
-            uart_regmap_process_start_tx(&uart_descr[i], &uart_tx_start);
-            // need_to_collect_data[i] = true;
+            if (uart_tx_start.want_to_tx) {
+                uart_ctx[i].want_to_tx = 1;
+            }
         }
     }
 
@@ -169,12 +169,9 @@ void uart_regmap_subsystem_do_periodic_work(void)
         bool exchange_received_all = true;
         // bool has_enabled_ports = false;
         for (int i = 0; i < MOD_COUNT; i++) {
-            // if (uart_ctx[i].enabled) {
-            //     has_enabled_ports = true;
             if (!exchange_received[i]) {
                 exchange_received_all = false;
             }
-            // }
         }
 
         if (exchange_received_all) {
@@ -194,15 +191,12 @@ void uart_regmap_subsystem_do_periodic_work(void)
         bool irq_needed = false;
 
         for (int i = 0; i < MOD_COUNT; i++) {
-            // if (uart_ctx[i].enabled) {
-                if (need_to_collect_data[i]) {
-                    uart_regmap_collect_data_for_new_exchange(&uart_descr[i]);
-                }
-                if (uart_regmap_is_irq_needed(&uart_descr[i])) {
-                    // wait_exchange[i] = true;
-                    irq_needed = true;
-                }
-            // }
+            if (need_to_collect_data[i]) {
+                uart_regmap_collect_data_for_new_exchange(&uart_descr[i]);
+            }
+            if (uart_regmap_is_irq_needed(&uart_descr[i])) {
+                irq_needed = true;
+            }
         }
 
         if (irq_needed) {
@@ -216,14 +210,10 @@ void uart_regmap_subsystem_do_periodic_work(void)
             }
 
             bool new_exchange_ready_all = true;
-            // bool has_enabled_ports = false;
             for (int i = 0; i < MOD_COUNT; i++) {
-                // if (uart_ctx[i].enabled) {
-                    // has_enabled_ports = true;
-                    if (!new_exchange_ready[i]) {
-                        new_exchange_ready_all = false;
-                    }
-                // }
+                if (!new_exchange_ready[i]) {
+                    new_exchange_ready_all = false;
+                }
             }
 
             if (new_exchange_ready_all) {
@@ -231,6 +221,7 @@ void uart_regmap_subsystem_do_periodic_work(void)
                     new_exchange_ready[i] = false;
                     need_to_collect_data[i] = false;
                     exchange_received[i] = false;
+                    uart_ctx->want_to_tx = false;
                 }
                 set_irq_gpio_active();
             }
