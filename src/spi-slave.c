@@ -39,7 +39,6 @@
 // Количество незначащих слов между записью адреса и началом передачи данных. Нужно, чтобы подготовить данные
 // Для совместимости со старым протоколом используется только с адреса 0x137 (для UART-ов)
 #define SPI_SLAVE_PAD_WORDS_COUNT                5
-#define SPI_SLAVE_USE_PAD_WORDS_SINCE_ADDR       0x120
 
 static const struct spi_pins {
     gpio_pin_t miso;
@@ -102,8 +101,9 @@ static inline void reset_and_init_spi(void)
     spi_tx_u16(SPI_SLAVE_ADDR_WRITE_ANSWER);
 
     spi_op = SPI_SLAVE_ADDR_WRITE;
-    spi_rx_pad_words_cnt = 0;
-    spi_tx_pad_words_cnt = 0;
+    spi_rx_pad_words_cnt = SPI_SLAVE_PAD_WORDS_COUNT;
+    spi_tx_pad_words_cnt = SPI_SLAVE_PAD_WORDS_COUNT;
+    spi_enable_txe_int();
 }
 
 void spi_slave_init(void)
@@ -138,10 +138,6 @@ void spi_slave_init(void)
     NVIC_SetPriority(SPI2_IRQn, 0);
 }
 
-// #include "config.h"
-// static const gpio_pin_t usart_irq_gpio = { EC_GPIO_UART_INT };
-
-
 static void spi_irq_handler(void)
 {
     if (SPI2->SR & SPI_SR_RXNE) {
@@ -151,14 +147,9 @@ static void spi_irq_handler(void)
         uint16_t rd = spi_rd_u16();
         if (spi_op == SPI_SLAVE_ADDR_WRITE) {
             uint16_t addr = rd & ~SPI_SLAVE_OPERATION_READ_MASK;
-            if (addr >= SPI_SLAVE_USE_PAD_WORDS_SINCE_ADDR) {
-                spi_rx_pad_words_cnt = SPI_SLAVE_PAD_WORDS_COUNT;
-                spi_tx_pad_words_cnt = SPI_SLAVE_PAD_WORDS_COUNT - 1;
-            }
             regmap_ext_prepare_operation(addr);
             if (rd & SPI_SLAVE_OPERATION_READ_MASK) {
                 spi_op = SPI_SLAVE_TRANSMIT;
-                spi_enable_txe_int();
             } else {
                 spi_op = SPI_SLAVE_RECEIVE;
             }
@@ -185,7 +176,6 @@ static void spi_irq_handler(void)
             w = regmap_ext_read_reg_autoinc();
         }
         spi_tx_u16(w);
-        // GPIO_S_TOGGLE(usart_irq_gpio);
     }
 }
 
