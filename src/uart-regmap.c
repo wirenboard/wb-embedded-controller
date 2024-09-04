@@ -49,9 +49,13 @@ static_assert(sizeof(struct uart_rx) == sizeof(struct uart_tx), "Size of uart_rx
 static inline void enable_txe_irq(const struct uart_descr *u)
 {
     if (!u->ctx->tx_in_progress) {
-        u->uart->CR1 |= USART_CR1_TXEIE_TXFNFIE;
-        u->ctx->tx_in_progress = true;
-        u->uart->CR1 &= ~USART_CR1_RE;
+        ATOMIC {
+            uint32_t val = u->uart->CR1;
+            val &= ~USART_CR1_RE;
+            val |= USART_CR1_TXEIE_TXFNFIE;
+            u->uart->CR1 = val;
+            u->ctx->tx_in_progress = true;
+        }
     }
 }
 
