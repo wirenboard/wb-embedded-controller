@@ -76,8 +76,6 @@
 // Подключен через диод к DEBUG_TX
 #define EC_DEBUG_USART_USE_USART1
 #define EC_DEBUG_USART_BAUDRATE                 115200
-#define EC_DEBUG_USART_GPIO                     GPIOA, 9
-#define EC_DEBUG_USART_GPIO_AF                  1
 
 // Пищалка
 // Поддерживается только GPIOC, 7!
