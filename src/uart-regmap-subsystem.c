@@ -20,10 +20,6 @@ static struct uart_ctx uart_ctx[MOD_COUNT] = {};
 
 static void mod1_uart_hw_init(void)
 {
-    RCC->APBENR2 |= RCC_APBENR2_SYSCFGEN;
-
-    SYSCFG->CFGR1 |= SYSCFG_CFGR1_PA11_RMP;
-
     RCC->APBENR2 |= RCC_APBENR2_USART1EN;
     RCC->APBRSTR2 |= RCC_APBRSTR2_USART1RST;
     RCC->APBRSTR2 &= ~RCC_APBRSTR2_USART1RST;
@@ -35,8 +31,6 @@ static void mod1_uart_hw_init(void)
 
 static void mod1_uart_hw_deinit(void)
 {
-    SYSCFG->CFGR1 &= ~SYSCFG_CFGR1_PA11_RMP;
-
     RCC->APBRSTR2 |= RCC_APBRSTR2_USART1RST;
     RCC->APBRSTR2 &= ~RCC_APBRSTR2_USART1RST;
     RCC->APBENR2 &= ~RCC_APBENR2_USART1EN;
@@ -125,6 +119,7 @@ void uart_regmap_subsystem_init(void)
     NVIC_SetHandler(USART2_IRQn, mod2_uart_irq_handler);
 
     for (int i = 0; i < MOD_COUNT; i++) {
+        uart_descr[i].uart_hw_deinit();
         need_to_collect_data[i] = true;
     }
 }

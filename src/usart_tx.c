@@ -2,6 +2,7 @@
 #include "gpio.h"
 #include "config.h"
 #include "rcc.h"
+#include "usart_tx.h"
 
 /**
  * Модуль позволяет передавать строки в отладочный UART.
@@ -15,8 +16,11 @@
     #error "Not supported USART"
 #endif
 
-static const gpio_pin_t usart_tx_gpio = { EC_DEBUG_USART_GPIO };
-
+#if defined EC_DEBUG_USART_GPIO
+    static const gpio_pin_t usart_tx_gpio = { EC_DEBUG_USART_GPIO };
+#else
+    #include "shared-gpio.h"
+#endif
 
 static inline void usart_transmit_char(char c)
 {
@@ -29,12 +33,28 @@ static inline void usart_wait_tranmission_complete(void)
     while (D_USART->ISR & USART_ISR_TC) {};
 }
 
+#if defined EC_DEBUG_USART_GPIO
+    static inline void check_debug_uart_initialized(void) {}
+#else
+    static inline void check_debug_uart_initialized(void)
+    {
+        if (shared_gpio_get_mode(MOD1, MOD_GPIO_TX) != MOD_GPIO_MODE_PA9_AF_DEBUG_UART) {
+            usart_init();
+        }
+    }
+#endif
+
 
 void usart_init(void)
 {
-    // Init GPIO
-    GPIO_S_SET_OUTPUT(usart_tx_gpio);
-    GPIO_S_SET_AF(usart_tx_gpio, EC_DEBUG_USART_GPIO_AF);
+    #if defined EC_DEBUG_USART_GPIO
+        GPIO_S_SET_OUTPUT(usart_tx_gpio);
+        GPIO_S_SET_AF(usart_tx_gpio, EC_DEBUG_USART_GPIO_AF);
+    #else
+        // debug uart делит gpio PA9 с MOD1_TX
+        shared_gpio_set_mode(MOD1, MOD_GPIO_TX, MOD_GPIO_MODE_PA9_AF_DEBUG_UART);
+    #endif
+
 
     #ifdef EC_DEBUG_USART_USE_USART1
         RCC->APBENR2 |= RCC_APBENR2_USART1EN;
@@ -50,6 +70,7 @@ void usart_init(void)
 
 void usart_tx_buf_blocking(const void * buf, size_t size)
 {
+    check_debug_uart_initialized();
     for (size_t i = 0; i < size; i++) {
         usart_transmit_char(((const char *)buf)[i]);
     }
@@ -58,6 +79,7 @@ void usart_tx_buf_blocking(const void * buf, size_t size)
 
 void usart_tx_str_blocking(const char str[])
 {
+    check_debug_uart_initialized();
     while (*str) {
         usart_transmit_char(*str);
         str++;

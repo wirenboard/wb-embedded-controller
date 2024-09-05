@@ -22,10 +22,13 @@ enum mod_gpio_mode {
     MOD_GPIO_MODE_OUTPUT,
     MOD_GPIO_MODE_OPENDRAIN,
     MOD_GPIO_MODE_AF_UART,
+    MOD_GPIO_MODE_PA9_AF_DEBUG_UART,    // ony for MOD1_TX (PA9) - GPIO is shared between DEBUG_UART and MOD1
 
     MOD_GPIO_MODE_COUNT,
     MOD_GPIO_MODE_DEFAULT = MOD_GPIO_MODE_INPUT
 };
+
+void shared_gpio_init(void);
 
 void shared_gpio_set_mode(enum mod mod, enum mod_gpio mod_gpio, enum mod_gpio_mode mode);
 enum mod_gpio_mode shared_gpio_get_mode(enum mod mod, enum mod_gpio mod_gpio);
