@@ -63,12 +63,16 @@
         /* 0x49 */  uint16_t v_a4; \
     ) \
     /*     Addr     Name            RO/RW */ \
-    m(     0x80,    GPIO,           RW, \
-        /* 0x80 */  uint16_t a1 : 1; \
-        /* -//- */  uint16_t a2 : 1; \
-        /* -//- */  uint16_t a3 : 1; \
-        /* -//- */  uint16_t a4 : 1; \
-        /* -//- */  uint16_t v_out : 1; \
+    m(     0x80,    GPIO_CTRL,      RW, \
+        /* 0x80 */  uint16_t gpio_ctrl; \
+    ) \
+    /*     Addr     Name            RO/RW */ \
+    m(     0x82,    GPIO_STATE,     RO, \
+        /* 0x82 */  uint16_t gpio_state; \
+    ) \
+    /*     Addr     Name            RO/RW */ \
+    m(     0x84,    GPIO_MODE,      RW, \
+        /* 0x84 */  uint16_t gpio_mode; \
     ) \
     /*     Addr     Name            RO/RW */ \
     m(     0x90,    WDT,            RW, \
