@@ -107,8 +107,18 @@ static void set_mod_gpio_modes(void)
     }
 }
 
-static void set_mod_gpio_values(void)
+static void control_v_out(void)
 {
+    bool v_in_is_proper_range = vmon_get_ch_status(VMON_CHANNEL_V_OUT);
+    bool v_out_ctrl = get_gpio_ctrl(EC_EXT_GPIO_V_OUT);
+    set_v_out_state(v_in_is_proper_range && v_out_ctrl);
+}
+
+static void set_gpio_values(void)
+{
+    // V_OUT нужно мониторить постоянно, т.к. его состояние зависит от входного напряжения
+    control_v_out();
+
     for (unsigned mod = 0; mod < MOD_COUNT; mod++) {
         for (unsigned mod_gpio = 0; mod_gpio < MOD_GPIO_COUNT; mod_gpio++) {
             enum ec_ext_gpio gpio = mod_gpio_base[mod] + mod_gpio;
@@ -119,28 +129,38 @@ static void set_mod_gpio_values(void)
     }
 }
 
-static void collect_mod_gpio_states(void)
+static void collect_gpio_states(void)
 {
+    // Планировали сделать гистерезис на Analog Watchdog
+    // вместо использования аппаратных внешних компараторов
+    // gpio_ctx.a1 = 0;
+    // gpio_ctx.a2 = 0;
+    // gpio_ctx.a3 = 0;
+    // gpio_ctx.a4 = 0;
+
+
+    if (get_gpio_ctrl(EC_EXT_GPIO_V_OUT)) {
+        gpio_ctx.gpio_state |= BIT(EC_EXT_GPIO_V_OUT);
+    } else {
+        gpio_ctx.gpio_state &= ~BIT(EC_EXT_GPIO_V_OUT);
+    }
+
     for (unsigned mod = 0; mod < MOD_COUNT; mod++) {
         for (unsigned mod_gpio = 0; mod_gpio < MOD_GPIO_COUNT; mod_gpio++) {
             enum ec_ext_gpio gpio = mod_gpio_base[mod] + mod_gpio;
+            bool state = false;
             if (shared_gpio_get_mode(mod, mod_gpio) == MOD_GPIO_MODE_INPUT) {
-                bool state = shared_gpio_test(mod, mod_gpio);
-                if (state) {
-                    gpio_ctx.gpio_ctrl |= BIT(gpio);
-                } else {
-                    gpio_ctx.gpio_ctrl &= ~BIT(gpio);
-                }
+                state = shared_gpio_test(mod, mod_gpio);
+            } else if (shared_gpio_get_mode(mod, mod_gpio) == MOD_GPIO_MODE_OUTPUT) {
+                state = get_gpio_ctrl(gpio);
+            }
+            if (state) {
+                gpio_ctx.gpio_state |= BIT(gpio);
+            } else {
+                gpio_ctx.gpio_state &= ~BIT(gpio);
             }
         }
     }
-}
-
-static void control_v_out(void)
-{
-    bool v_in_is_proper_range = vmon_get_ch_status(VMON_CHANNEL_V_OUT);
-    bool v_out_ctrl = get_gpio_ctrl(EC_EXT_GPIO_V_OUT);
-    set_v_out_state(v_in_is_proper_range && v_out_ctrl);
 }
 
 void gpio_init(void)
@@ -167,25 +187,12 @@ void gpio_reset(void)
 
 void gpio_do_periodic_work(void)
 {
-    // TODO Get data from ADC
-    // Планировали сделать гистерезис на Analog Watchdog
-    // вместо использования аппаратных внешних компараторов
-    // gpio_ctx.a1 = 0;
-    // gpio_ctx.a2 = 0;
-    // gpio_ctx.a3 = 0;
-    // gpio_ctx.a4 = 0;
-    collect_mod_gpio_states();
-
-    // V_OUT нужно мониторить постоянно, т.к. его состояние зависит от входного напряжения
-    control_v_out();
-
-    set_mod_gpio_values();
+    collect_gpio_states();
+    set_gpio_values();
 
     struct REGMAP_GPIO_CTRL gpio_ctrl_regmap;
     if (regmap_get_data_if_region_changed(REGMAP_REGION_GPIO_CTRL, &gpio_ctrl_regmap, sizeof(gpio_ctrl_regmap))) {
-        // Менять снаружи можно только состояния output пинов
-        gpio_ctx.gpio_ctrl &= ~gpio_ctx.gpio_mode;
-        gpio_ctx.gpio_ctrl |= gpio_ctx.gpio_mode & gpio_ctrl_regmap.gpio_ctrl;
+        gpio_ctx.gpio_ctrl = gpio_ctrl_regmap.gpio_ctrl;
     }
 
     struct REGMAP_GPIO_MODE gpio_mode_regmap;
@@ -198,6 +205,6 @@ void gpio_do_periodic_work(void)
         set_mod_gpio_modes();
     }
 
-    regmap_set_region_data(REGMAP_REGION_GPIO_CTRL, &gpio_ctx.gpio_ctrl, sizeof(gpio_ctx.gpio_ctrl));
+    regmap_set_region_data(REGMAP_REGION_GPIO_STATE, &gpio_ctx.gpio_state, sizeof(gpio_ctx.gpio_state));
     regmap_set_region_data(REGMAP_REGION_GPIO_MODE, &gpio_ctx.gpio_mode, sizeof(gpio_ctx.gpio_mode));
 }
