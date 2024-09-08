@@ -90,6 +90,10 @@
         /* 0xC0 */  uint16_t wbmz_enabled : 1; \
     ) \
     /*     Addr     Name            RO/RW */ \
+    m(     0xD0,    LED_CTRL,       RW, \
+        /* 0xD0 */  uint16_t led_state : 1; \
+    ) \
+    /*     Addr     Name            RO/RW */ \
     m(     0xF0,    TEST,           RW, \
         /* 0xF0 */  uint16_t send_test_message : 1; \
         /* 0xF0 */  uint16_t enable_rtc_out : 1; \
