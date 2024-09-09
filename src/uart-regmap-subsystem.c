@@ -139,10 +139,6 @@ void uart_regmap_subsystem_do_periodic_work(void)
                 uart_ctx[i].ctrl.ctrl_applyed = 0;
             }
         }
-
-        // struct uart_status uart_status = {};
-        // uart_regmap_update_status(&uart_descr[i], &uart_status);
-        // regmap_set_region_data(uart_descr[i].status_region, &uart_status, sizeof(uart_status));
     }
 
     // Обработка региона начала передачи
@@ -163,13 +159,11 @@ void uart_regmap_subsystem_do_periodic_work(void)
                 if (regmap_get_data_if_region_changed(uart_descr[i].exchange_region, &e, sizeof(e))) {
                     uart_regmap_process_exchange(&uart_descr[i], &e);
                     exchange_received[i] = true;
-                    // wait_exchange[i] = false;
                 }
             }
         }
 
         bool exchange_received_all = true;
-        // bool has_enabled_ports = false;
         for (int i = 0; i < MOD_COUNT; i++) {
             if (!exchange_received[i]) {
                 exchange_received_all = false;
