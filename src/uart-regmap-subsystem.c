@@ -1,8 +1,11 @@
+#include "config.h"
+
+#if defined EC_UART_REGMAP_SUPPORT
+
 #include "uart-regmap-internal.h"
 #include "shared-gpio.h"
 #include "regmap-structs.h"
 #include "gpio.h"
-#include "config.h"
 #include "uart-regmap.h"
 #include <string.h>
 
@@ -228,3 +231,4 @@ void uart_regmap_subsystem_do_periodic_work(void)
     }
 }
 
+#endif

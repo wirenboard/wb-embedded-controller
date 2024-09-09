@@ -128,7 +128,10 @@ int main(void)
         test_do_periodic_work();
         buzzer_subsystem_do_periodic_work();
         wbmz_subsystem_do_periodic_work();
-        uart_regmap_subsystem_do_periodic_work();
+
+        #if defined EC_UART_REGMAP_SUPPORT
+            uart_regmap_subsystem_do_periodic_work();
+        #endif
 
         // Main algorithm
         linux_cpu_pwr_seq_do_periodic_work();
