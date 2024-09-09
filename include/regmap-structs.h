@@ -140,14 +140,6 @@
         /* 0x108 */ struct uart_ctrl ctrl; \
     ) \
     /*     Addr     Name            RO/RW */ \
-    m(     0x110,   UART_STATUS_MOD1, RO, \
-        /* 0x110 */ struct uart_status status; \
-    ) \
-    /*     Addr     Name            RO/RW */ \
-    m(     0x118,   UART_STATUS_MOD2, RO, \
-        /* 0x118 */ struct uart_status status; \
-    ) \
-    /*     Addr     Name            RO/RW */ \
     m(     0x120,   UART_TX_START_MOD1,  RW, \
         /* 0x120 */ struct uart_start_tx start_tx; \
         /* 0x121    end of the region */ \
