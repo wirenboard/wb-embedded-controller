@@ -10,8 +10,7 @@ struct uart_ctx {
     struct circular_buffer circ_buf_rx;
 
     struct uart_rx rx_data;
-    struct uart_status status;
-    bool enabled;
+    struct uart_ctrl ctrl;
     bool tx_in_progress;
     bool tx_completed;
     bool want_to_tx;
@@ -30,7 +29,6 @@ struct uart_descr {
     void (*uart_hw_init)(void);
     void (*uart_hw_deinit)(void);
     enum regmap_region ctrl_region;
-    enum regmap_region status_region;
     enum regmap_region start_tx_region;
     enum regmap_region exchange_region;
     struct uart_ctx *ctx;

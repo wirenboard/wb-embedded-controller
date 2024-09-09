@@ -3,6 +3,20 @@
 
 #define UART_REGMAP_BUFFER_SIZE             64
 
+enum uart_parity {
+    UART_PARITY_NONE = 0,
+    UART_PARITY_EVEN = 1,
+    UART_PARITY_ODD = 2,
+};
+
+enum uart_stop_bits {
+    // values according to STM32G0 reference manual
+    UART_STOP_BITS_1 = 0,
+    UART_STOP_BITS_0_5 = 1,
+    UART_STOP_BITS_2 = 2,
+    UART_STOP_BITS_1_5 = 3,
+};
+
 struct uart_start_tx {
     uint16_t want_to_tx;
 };
@@ -22,15 +36,14 @@ struct uart_tx {
 };
 
 struct uart_ctrl {
+    /* offset 0x00 */
     uint16_t enable : 1;
+    uint16_t ctrl_applyed : 1;
+    /* offset 0x01 */
     uint16_t baud_x100;
+    /* offset 0x02 */
     uint16_t parity : 2;
     uint16_t stop_bits : 2;
-};
-
-struct uart_status {
-    uint16_t enabled : 1;
-    uint16_t reserved : 15;
 };
 
 union uart_exchange {

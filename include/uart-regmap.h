@@ -8,5 +8,3 @@ void uart_regmap_process_irq(const struct uart_descr *u);
 void uart_regmap_process_ctrl(const struct uart_descr *u, const struct uart_ctrl *ctrl);
 void uart_regmap_collect_data_for_new_exchange(const struct uart_descr *u);
 bool uart_regmap_is_irq_needed(const struct uart_descr *u);
-void uart_regmap_update_status(const struct uart_descr *u, struct uart_status *status);
-

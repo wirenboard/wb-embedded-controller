@@ -79,6 +79,65 @@ static void uart_put_tx_data_from_regmap_to_circ_buffer(const struct uart_descr 
     u->ctx->tx_bytes_count_in_prev_exchange = tx->bytes_to_send_count;
 }
 
+static void uart_set_baud(const struct uart_descr *u, uint16_t baud_x100)
+{
+    NVIC_DisableIRQ(u->irq_num);
+    u->uart->CR1 &= ~USART_CR1_UE;
+    NVIC_ClearPendingIRQ(u->irq_num);
+
+    u->uart->BRR = SystemCoreClock / (baud_x100 * 100);
+
+    u->uart->CR1 |= USART_CR1_UE;
+    u->ctx->ctrl.baud_x100 = baud_x100;
+    u->uart->ICR = USART_ICR_TCCF;
+    NVIC_EnableIRQ(u->irq_num);
+}
+
+static void uart_set_parity(const struct uart_descr *u, enum uart_parity parity)
+{
+    NVIC_DisableIRQ(u->irq_num);
+    while (u->uart->ISR & USART_ISR_BUSY) {};
+    u->uart->CR1 &= ~USART_CR1_UE;
+    NVIC_ClearPendingIRQ(u->irq_num);
+
+    switch (parity) {
+    case UART_PARITY_NONE:
+        u->uart->CR1 &= ~(USART_CR1_PCE | USART_CR1_PS | USART_CR1_M);
+        break;
+    case UART_PARITY_EVEN:
+        u->uart->CR1 &= ~USART_CR1_PS;
+        u->uart->CR1 |= USART_CR1_PCE | USART_CR1_M;
+        break;
+    case UART_PARITY_ODD:
+        u->uart->CR1 |= USART_CR1_PCE | USART_CR1_PS | USART_CR1_M;
+        break;
+    default:
+        break;
+    }
+
+    u->ctx->ctrl.parity = parity;
+    u->uart->CR1 |= USART_CR1_UE;
+    u->uart->ICR = USART_ICR_TCCF;
+    NVIC_EnableIRQ(u->irq_num);
+}
+
+static void uart_set_stop_bits(const struct uart_descr *u, enum uart_stop_bits stop_bits)
+{
+    NVIC_DisableIRQ(u->irq_num);
+    while (u->uart->ISR & USART_ISR_BUSY) {};
+    u->uart->CR1 &= ~USART_CR1_UE;
+    NVIC_ClearPendingIRQ(u->irq_num);
+
+    u->uart->CR2 &= ~USART_CR2_STOP;
+    u->uart->CR2 |= (stop_bits << USART_CR2_STOP_Pos);
+
+    u->ctx->ctrl.stop_bits = stop_bits;
+
+    u->uart->CR1 |= USART_CR1_UE;
+    u->uart->ICR = USART_ICR_TCCF;
+    NVIC_EnableIRQ(u->irq_num);
+}
+
 void uart_regmap_process_irq(const struct uart_descr *u)
 {
     struct uart_ctx *ctx = u->ctx;
@@ -128,7 +187,7 @@ void uart_regmap_process_ctrl(const struct uart_descr *u, const struct uart_ctrl
 {
     struct uart_ctx *ctx = u->ctx;
 
-    if ((!ctx->enabled) && (ctrl->enable == 1)) {
+    if ((ctx->ctrl.enable == 0) && (ctrl->enable == 1)) {
         u->uart_hw_init();
 
         circ_buffer_reset(&ctx->circ_buf_tx);
@@ -145,21 +204,40 @@ void uart_regmap_process_ctrl(const struct uart_descr *u, const struct uart_ctrl
         NVIC_EnableIRQ(u->irq_num);
         NVIC_SetPriority(u->irq_num, 1);
 
-        ctx->enabled = true;
+        uart_set_baud(u, 1152);
+        uart_set_parity(u, UART_PARITY_NONE);
+        uart_set_stop_bits(u, UART_STOP_BITS_1);
+
+
+        ctx->ctrl.enable = 1;
         ctx->rx_data.ready_for_tx = 1;
     }
 
-    if ((ctx->enabled) && (ctrl->enable == 0)) {
+    if ((ctx->ctrl.enable == 1) && (ctrl->enable == 0)) {
         u->uart_hw_deinit();
         NVIC_DisableIRQ(u->irq_num);
 
         memset(ctx, 0, sizeof(*ctx));
     }
-}
 
-void uart_regmap_update_status(const struct uart_descr *u, struct uart_status *status)
-{
-    status->enabled = u->ctx->enabled;
+    uint16_t baud = ctrl->baud_x100;
+    if ((baud < 12) || (baud > 1152)) {
+        baud = 1152;
+    }
+
+    if (ctx->ctrl.baud_x100 != baud) {
+        uart_set_baud(u, baud);
+    }
+
+    if (ctx->ctrl.parity != ctrl->parity) {
+        uart_set_parity(u, ctrl->parity);
+    }
+
+    if (ctx->ctrl.stop_bits != ctrl->stop_bits) {
+        uart_set_stop_bits(u, ctrl->stop_bits);
+    }
+
+    ctx->ctrl.ctrl_applyed = 1;
 }
 
 void uart_regmap_process_start_tx(const struct uart_descr *u, const struct uart_tx *tx)

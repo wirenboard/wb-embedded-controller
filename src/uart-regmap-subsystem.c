@@ -70,7 +70,6 @@ static const struct uart_descr uart_descr[MOD_COUNT] = {
         .uart_hw_init = mod1_uart_hw_init,
         .uart_hw_deinit = mod1_uart_hw_deinit,
         .ctrl_region = REGMAP_REGION_UART_CTRL_MOD1,
-        .status_region = REGMAP_REGION_UART_STATUS_MOD1,
         .start_tx_region = REGMAP_REGION_UART_TX_START_MOD1,
         .exchange_region = REGMAP_REGION_UART_EXCHANGE_MOD1
     },
@@ -81,7 +80,6 @@ static const struct uart_descr uart_descr[MOD_COUNT] = {
         .uart_hw_init = mod2_uart_hw_init,
         .uart_hw_deinit = mod2_uart_hw_deinit,
         .ctrl_region = REGMAP_REGION_UART_CTRL_MOD2,
-        .status_region = REGMAP_REGION_UART_STATUS_MOD2,
         .start_tx_region = REGMAP_REGION_UART_TX_START_MOD2,
         .exchange_region = REGMAP_REGION_UART_EXCHANGE_MOD2
     },
@@ -133,9 +131,15 @@ void uart_regmap_subsystem_do_periodic_work(void)
             uart_regmap_process_ctrl(&uart_descr[i], &uart_ctrl);
         }
 
-        struct uart_status uart_status = {};
-        uart_regmap_update_status(&uart_descr[i], &uart_status);
-        regmap_set_region_data(uart_descr[i].status_region, &uart_status, sizeof(uart_status));
+        if (uart_ctx[i].ctrl.ctrl_applyed) {
+            if (regmap_set_region_data(uart_descr[i].ctrl_region, &uart_ctx[i].ctrl, sizeof(uart_ctx[i].ctrl))) {
+                uart_ctx[i].ctrl.ctrl_applyed = 0;
+            }
+        }
+
+        // struct uart_status uart_status = {};
+        // uart_regmap_update_status(&uart_descr[i], &uart_status);
+        // regmap_set_region_data(uart_descr[i].status_region, &uart_status, sizeof(uart_status));
     }
 
     // Обработка региона начала передачи
@@ -216,7 +220,7 @@ void uart_regmap_subsystem_do_periodic_work(void)
                     new_exchange_ready[i] = false;
                     need_to_collect_data[i] = false;
                     exchange_received[i] = false;
-                    uart_ctx->want_to_tx = false;
+                    uart_ctx[i].want_to_tx = false;
                 }
                 set_irq_gpio_active();
             }
