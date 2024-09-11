@@ -50,9 +50,9 @@ static_assert(WBEC_WBMZ6_BATTERY_CHARGE_CURRENT_MA == 600, "Only 600 mA charge c
 #define AXP221S_REG_BATTERY_CHARGE_CURRENT              0x7A
 #define AXP221S_REG_BATTERY_DISCHARGE_CURRENT           0x7C
 #define AXP221S_REG_BATTERY_LEVEL                       0xB9
-    #define AXP221S_REG_BATTERY_LEVEL_LEVEL_MASK        BIT_MASK(7)
+    #define AXP221S_REG_BATTERY_LEVEL_MASK              BIT_MASK(7)
 
-#define AXP221S_TEMPERATURE_LIMIT_MV_TO_VAL(mv)     ((mv) / 16.0 / 0.8)
+#define AXP221S_TEMPERATURE_LIMIT_MV_TO_VAL(mv)         ((mv) / 16.0 / 0.8)
 
 
 static const uint8_t wbmz6_init_sequence[][2] = {
@@ -200,7 +200,7 @@ void wbmz6_battery_update_status(struct wbmz6_status *status)
 
     // lsb is 1%
     status->capacity_percent = axp221s_read_u8(AXP221S_REG_BATTERY_LEVEL);
-    status->capacity_percent &= AXP221S_REG_BATTERY_LEVEL_LEVEL_MASK;
+    status->capacity_percent &= AXP221S_REG_BATTERY_LEVEL_MASK;
 
     fix16_t ts_adc = fix16_from_int(axp221s_read_adc_value(AXP221S_REG_TS_PIN_ADC_DATA, 8, 4));
     fix16_t ts_mv = fix16_mul(ts_adc, F16(0.8));
