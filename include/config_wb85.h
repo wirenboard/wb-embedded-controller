@@ -50,7 +50,7 @@
 #define WBEC_WBMZ6_BATTERY_VOLTAGE_MAX_MV               4100
 #define WBEC_WBMZ6_BATTERY_HIGH_TEMP_CHARGE_LIMIT       40.0
 #define WBEC_WBMZ6_BATTERY_NTC_RES_KOHM                 10
-// Температурные пороги
+// Температурные пороги задаются в мВ на пине TS
 // При расчете следует учитывать сопротивление резистора последовательно с NTC
 // Посчитать можно тут: https://docs.google.com/spreadsheets/d/1fvdiSBb0WEPnSeek40awh9ejFEPKrPeAPRvstHpcSgI/edit?gid=0#gid=0
 // VLTF-charge - дефолтное значение 3.9 °C
