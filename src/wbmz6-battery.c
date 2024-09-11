@@ -23,6 +23,8 @@ static_assert(WBEC_WBMZ6_BATTERY_VOLTAGE_MIN_MV == 2900, "Only 2900 mV min volta
 static_assert(WBEC_WBMZ6_BATTERY_VOLTAGE_MAX_MV == 4100, "Only 4100 mV max voltage supported");
 static_assert(WBEC_WBMZ6_BATTERY_CHARGE_CURRENT_MA == 600, "Only 600 mA charge current supported");
 
+#define BIT_MASK(bits)                                  ((1 << (bits)) - 1)
+
 #define AXP221S_ADDR                                    0x34
 
 #define AXP221S_REG_ADC_ENABLE                          0x82
@@ -48,9 +50,10 @@ static_assert(WBEC_WBMZ6_BATTERY_CHARGE_CURRENT_MA == 600, "Only 600 mA charge c
 #define AXP221S_REG_BATTERY_CHARGE_CURRENT              0x7A
 #define AXP221S_REG_BATTERY_DISCHARGE_CURRENT           0x7C
 #define AXP221S_REG_BATTERY_LEVEL                       0xB9
-    #define AXP221S_REG_BATTERY_LEVEL_LEVEL_MASK        0x7F
+    #define AXP221S_REG_BATTERY_LEVEL_LEVEL_MASK        BIT_MASK(7)
 
 #define AXP221S_TEMPERATURE_LIMIT_MV_TO_VAL(mv)     ((mv) / 16.0 / 0.8)
+
 
 static const uint8_t wbmz6_init_sequence[][2] = {
     {
@@ -138,8 +141,8 @@ static inline void axp221s_read_buf(uint8_t reg, uint8_t *buf, uint8_t len)
 // Функция зануляет лишние биты и объединяет значения из двух регистров
 static inline uint16_t axp221s_get_adc_value_from_buf(uint8_t buf[2], uint8_t bits_in_first_reg, uint8_t bits_in_second_reg)
 {
-    buf[0] &= (1 << bits_in_first_reg) - 1;
-    buf[1] &= (1 << bits_in_second_reg) - 1;
+    buf[0] &= BIT_MASK(bits_in_first_reg);
+    buf[1] &= BIT_MASK(bits_in_second_reg);
 
     return (buf[0] << bits_in_second_reg) | buf[1];
 }
