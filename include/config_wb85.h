@@ -60,7 +60,7 @@
 // Параметры WBMZ6-SUPERCAP
 #define WBEC_WBMZ6_SUPERCAP_DETECT_VOLTAGE_MV           500
 #define WBEC_WBMZ6_SUPERCAP_VOLTAGE_MAX_MV              4950
-#define WBEC_WBMZ6_SUPERCAP_VOLTAGE_MIN_MV              1700
+#define WBEC_WBMZ6_SUPERCAP_VOLTAGE_MIN_MV              3000
 #define WBEC_WBMZ6_SUPERCAP_CAPACITY_MF                 25000   // 25 Farad = 2 series 50F capacitors
 #define WBEC_WBMZ6_SUPERCAP_CHARGE_CURRENT_MA           230
 // Ток, по модулю меньший этого значения, будет зануляться
