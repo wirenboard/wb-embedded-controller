@@ -192,9 +192,8 @@ void wbmz6_battery_update_status(struct wbmz6_status *status)
     status->voltage_now_mv = v;
 
     // status units is mA, AXP lsb is 0.5mA
-    // use shift instead of division by 2
-    status->charging_current_ma = axp221s_get_adc_value_from_buf(&buf[2], 8, 5) >> 1;
-    status->discharging_current_ma = axp221s_get_adc_value_from_buf(&buf[4], 8, 5) >> 1;
+    status->charging_current_ma = axp221s_get_adc_value_from_buf(&buf[2], 8, 5) / 2;
+    status->discharging_current_ma = axp221s_get_adc_value_from_buf(&buf[4], 8, 5) / 2;
 
     // lsb is 1%
     status->capacity_percent = axp221s_read_u8(AXP221S_REG_BATTERY_LEVEL);
