@@ -23,6 +23,7 @@ static_assert(WBEC_WBMZ6_BATTERY_VOLTAGE_MIN_MV == 2900, "Only 2900 mV min volta
 static_assert(WBEC_WBMZ6_BATTERY_VOLTAGE_MAX_MV == 4100, "Only 4100 mV max voltage supported");
 static_assert(WBEC_WBMZ6_BATTERY_CHARGE_CURRENT_MA == 600, "Only 600 mA charge current supported");
 
+#define BIT(bit)                                        (1 << (bit))
 #define BIT_MASK(bits)                                  ((1 << (bits)) - 1)
 
 #define AXP221S_ADDR                                    0x34
@@ -40,10 +41,15 @@ static_assert(WBEC_WBMZ6_BATTERY_CHARGE_CURRENT_MA == 600, "Only 600 mA charge c
 #define AXP221S_REG_VHTF_DISCHARGE                      0x3D
 
 #define AXP221S_REG_POWER_STATUS                        0x00
-    #define AXP221S_REG_POWER_STATUS_IS_CHARGING_BIT    0x04
+    // Флаг показывает режим работы (заряд/разряд)
+    // При полном заряде батареи здесь 1
+    #define AXP221S_REG_POWER_STATUS_IS_CHARGING_BIT    BIT(2)
 
 #define AXP221S_REG_OP_MODE                             0x01
-    #define AXP221S_REG_OP_MODE_IS_DEAD_BIT             0x08
+    // Флаг показывает идет заряд / не идет заряд
+    // Подробности в тикете SOFT-4055
+    #define AXP221S_REG_OP_MODE_CHARGING                BIT(6)
+    #define AXP221S_REG_OP_MODE_ACTIVATION_MODE         BIT(3)
 
 #define AXP221S_REG_TS_PIN_ADC_DATA                     0x58
 #define AXP221S_REG_BATTERY_VOLTAGE                     0x78
@@ -209,14 +215,14 @@ void wbmz6_battery_update_status(struct wbmz6_status *status)
     fix16_t temp = ntc_kohm_to_temp(ntc_kohm);
     status->temperature = fix16_to_int(fix16_mul(temp, F16(10)));
 
-    // read POWER_STATUS and OP_MODE in one transaction
-    axp221s_read_buf(AXP221S_REG_POWER_STATUS, buf, 2);
-    if (buf[0] & AXP221S_REG_POWER_STATUS_IS_CHARGING_BIT) {
+    // read OP_MODE reg
+    uint8_t op_mode_reg = axp221s_read_u8(AXP221S_REG_OP_MODE);
+    if (op_mode_reg & AXP221S_REG_OP_MODE_CHARGING) {
         status->is_charging = true;
     } else {
         status->is_charging = false;
     }
-    if (buf[1] & AXP221S_REG_OP_MODE_IS_DEAD_BIT) {
+    if (op_mode_reg & AXP221S_REG_OP_MODE_ACTIVATION_MODE) {
         status->is_dead = true;
     } else {
         status->is_dead = false;
