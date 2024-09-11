@@ -36,21 +36,13 @@ static enum wbmz6_device wmbz6_detect_device(void)
 
 static bool wbmz6_init_device(enum wbmz6_device device)
 {
-    switch (device) {
-    case WBMZ6_DEVICE_BATTERY:
-        if (wbmz6_battery_init()) {
-            wbmz6_battery_update_params(&wbmz6_params);
+    if (device == WBMZ6_DEVICE_BATTERY) {
+        if (wbmz6_battery_init(&wbmz6_params)) {
             return true;
         }
-        return false;
-
-    case WBMZ6_DEVICE_SUPERCAP:
-        wbmz6_supercap_init();
-        wbmz6_supercap_update_params(&wbmz6_params);
+    } else if (device == WBMZ6_DEVICE_SUPERCAP) {
+        wbmz6_supercap_init(&wbmz6_params);
         return true;
-
-    default:
-        return false;
     }
     return false;
 }
