@@ -106,21 +106,17 @@ bool wbmz6_supercap_is_present(void)
     return false;
 }
 
-void wbmz6_supercap_init(void)
+void wbmz6_supercap_init(struct wbmz6_params *params)
 {
     supercap_prev_voltage_mv = adc_get_ch_mv_f16(ADC_CHANNEL_ADC_VBAT);
     supercap_dv_lowpass = 0;
-}
 
-void wbmz6_supercap_update_params(struct wbmz6_params *params)
-{
     // return milliwatt-hours to fit in uint16_t
     params->full_design_capacity_mah = supercap_energy_max_uwh / 1000;
     params->voltage_min_mv = WBEC_WBMZ6_SUPERCAP_VOLTAGE_MIN_MV;
     params->voltage_max_mv = WBEC_WBMZ6_SUPERCAP_VOLTAGE_MAX_MV;
     params->charge_current_ma = WBEC_WBMZ6_SUPERCAP_CHARGE_CURRENT_MA;
 }
-
 
 void wbmz6_supercap_update_status(struct wbmz6_status *status)
 {
