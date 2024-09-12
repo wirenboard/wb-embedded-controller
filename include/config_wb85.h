@@ -39,6 +39,33 @@
 // Зяряд нужно разрешать, когда работаем от Vin (от USB заряд д.б. запрещен)
 #define WBEC_GPIO_WBMZ_CHARGE_ENABLE            GPIOB, 4
 
+// WBMZ6-BATTERY имеет на борту свой собственный PMIC для контроля заряда и других параметров
+#define WBEC_WBMZ6_SUPPORT
+#define WBEC_WBMZ6_POLL_PERIOD_MS                       100
+// Параметры WBMZ6-BATTERY
+#define WBEC_WBMZ6_BATTERY_POLL_PERIOD_MS               100
+#define WBEC_WBMZ6_BATTERY_CHARGE_CURRENT_MA            600
+#define WBEC_WBMZ6_BATTERY_FULL_DESIGN_CAPACITY_MAH     2600
+#define WBEC_WBMZ6_BATTERY_VOLTAGE_MIN_MV               2900
+#define WBEC_WBMZ6_BATTERY_VOLTAGE_MAX_MV               4100
+#define WBEC_WBMZ6_BATTERY_HIGH_TEMP_CHARGE_LIMIT       40.0
+#define WBEC_WBMZ6_BATTERY_NTC_RES_KOHM                 10
+// Температурные пороги задаются в мВ на пине TS
+// При расчете следует учитывать сопротивление резистора последовательно с NTC
+// Посчитать можно тут: https://docs.google.com/spreadsheets/d/1fvdiSBb0WEPnSeek40awh9ejFEPKrPeAPRvstHpcSgI/edit?gid=0#gid=0
+// VLTF-charge - дефолтное значение 3.9 °C
+// VHTF-charge - дефолтное значение 59.5 °C
+// VLTF-discharge - дефолтное значение 5.6 °C
+#define WBEC_WBMZ6_BATTERY_VHTF_DISCHARGE_VADC_MV       499     // 48.5 °C
+// Параметры WBMZ6-SUPERCAP
+#define WBEC_WBMZ6_SUPERCAP_DETECT_VOLTAGE_MV           500
+#define WBEC_WBMZ6_SUPERCAP_VOLTAGE_MAX_MV              4950
+#define WBEC_WBMZ6_SUPERCAP_VOLTAGE_MIN_MV              3000
+#define WBEC_WBMZ6_SUPERCAP_CAPACITY_MF                 25000   // 25 Farad = 2 series 50F capacitors
+#define WBEC_WBMZ6_SUPERCAP_CHARGE_CURRENT_MA           230
+// Ток, по модулю меньший этого значения, будет зануляться
+#define WBEC_WBMZ6_SUPERCAP_CURRENT_ZEROING_MA          80
+
 // Управляет питанием Linux
 #define EC_GPIO_LINUX_POWER                     GPIOD, 1
 #define EC_GPIO_LINUX_PMIC_PWRON                GPIOD, 3
@@ -64,6 +91,9 @@
 
 // Один USB разъем на DEBUG и NETWORK
 #define EC_USB_HUB_DEBUG_NETWORK
+
+//                                                    name     freq    sda        scl
+#define SOFTWARE_I2C_DESC(macro)                macro(WBMZ6,   100000, GPIOF, 1,  GPIOF, 0)
 
 
 /* ====== Параметры RTC ====== */
