@@ -22,11 +22,22 @@ struct uart_start_tx {
 };
 
 struct uart_rx {
+    // количество прочитанных байт в текущей транзакции
     uint8_t read_bytes_count;
+    // флаг означает, что ЕС готов к передаче: в следующей транзакции можно отправить данные
     uint8_t ready_for_tx : 1;
+    // флаг означает, что передача завершена
     uint8_t tx_completed : 1;
-    uint8_t reserved : 6;
-    uint8_t read_bytes[UART_REGMAP_BUFFER_SIZE];
+    // формат данных: 0 - байты, 1 - байты с ошибками
+    uint8_t data_format : 1;
+    uint8_t reserved : 5;
+    union {
+        struct {
+            uint8_t err_flags;
+            uint8_t byte;
+        } bytes_with_errors[UART_REGMAP_BUFFER_SIZE / 2];
+        uint8_t read_bytes[UART_REGMAP_BUFFER_SIZE];
+    };
 };
 
 struct uart_tx {

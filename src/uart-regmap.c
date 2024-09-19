@@ -72,7 +72,7 @@ static void uart_put_tx_data_from_regmap_to_circ_buffer(const struct uart_descr 
     if ((u->ctx->rx_data.ready_for_tx) && (tx->bytes_to_send_count > 0)) {
         disable_txe_irq(u);
         for (size_t i = 0; i < tx->bytes_to_send_count; i++) {
-            circ_buffer_push(&u->ctx->circ_buf_tx, tx->bytes_to_send[i]);
+            circ_buffer_tx_push(&u->ctx->circ_buf_tx, tx->bytes_to_send[i]);
         }
         u->ctx->rx_data.ready_for_tx = false;
         enable_txe_irq(u);
@@ -136,8 +136,8 @@ void uart_apply_ctrl(const struct uart_descr *u, bool enable_req)
     u->uart->CR1 |= USART_CR1_TE | USART_CR1_UE | USART_CR1_RE | USART_CR1_RXNEIE_RXFNEIE | USART_CR1_PEIE | USART_CR1_TCIE;
 
     if ((ctrl->enable == 0) && (enable_req == 1)) {
-        circ_buffer_reset(&u->ctx->circ_buf_tx);
-        circ_buffer_reset(&u->ctx->circ_buf_rx);
+        circ_buffer_reset(&u->ctx->circ_buf_tx.i);
+        circ_buffer_reset(&u->ctx->circ_buf_rx.i);
 
         u->ctx->rx_data.ready_for_tx = 1;
         u->ctx->rx_data.read_bytes_count = 0;
@@ -175,15 +175,15 @@ void uart_regmap_process_irq(const struct uart_descr *u)
 
     if (u->uart->ISR & USART_ISR_RXNE_RXFNE) {
         uint8_t byte = u->uart->RDR;
-        if (cicr_buffer_get_available_space(&ctx->circ_buf_rx) > 0) {
-            circ_buffer_push(&ctx->circ_buf_rx, byte);
+        if (circ_buffer_get_available_space(&ctx->circ_buf_rx.i) > 0) {
+            circ_buffer_rx_push(&ctx->circ_buf_rx, byte, 0);
         }
     }
 
     if (u->uart->ISR & USART_ISR_TXE_TXFNF) {
-        if (circ_buffer_get_used_space(&ctx->circ_buf_tx) > 0) {
+        if (circ_buffer_get_used_space(&ctx->circ_buf_tx.i) > 0) {
             // also clears TXFNF flag
-            u->uart->TDR = circ_buffer_pop(&ctx->circ_buf_tx);
+            u->uart->TDR = circ_buffer_tx_pop(&ctx->circ_buf_tx);
         } else {
             u->uart->ICR = USART_ICR_TXFECF;
             disable_txe_irq(u);
@@ -262,7 +262,7 @@ void uart_regmap_collect_data_for_new_exchange(const struct uart_descr *u)
         return;
     }
 
-    if (cicr_buffer_get_available_space(&ctx->circ_buf_tx) >= UART_REGMAP_BUFFER_SIZE) {
+    if (circ_buffer_get_available_space(&ctx->circ_buf_tx.i) >= UART_REGMAP_BUFFER_SIZE) {
         ctx->rx_data.ready_for_tx = 1;
     }
 
@@ -274,10 +274,12 @@ void uart_regmap_collect_data_for_new_exchange(const struct uart_descr *u)
     ATOMIC {
         u->uart->CR1 &= ~USART_CR1_RXNEIE_RXFNEIE;
     }
-    while ((circ_buffer_get_used_space(&ctx->circ_buf_rx) > 0) &&
+    while ((circ_buffer_get_used_space(&ctx->circ_buf_rx.i) > 0) &&
             (ctx->rx_data.read_bytes_count < UART_REGMAP_BUFFER_SIZE))
     {
-        ctx->rx_data.read_bytes[ctx->rx_data.read_bytes_count] = circ_buffer_pop(&ctx->circ_buf_rx);
+        uint8_t byte, err_flags;
+        circ_buffer_rx_pop(&ctx->circ_buf_rx, &byte, &err_flags);
+        ctx->rx_data.read_bytes[ctx->rx_data.read_bytes_count] = byte;
         ctx->rx_data.read_bytes_count++;
     }
     ATOMIC {

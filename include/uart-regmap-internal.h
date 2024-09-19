@@ -6,8 +6,8 @@
 #include "uart-circ-buffer.h"
 
 struct uart_ctx {
-    struct circular_buffer circ_buf_tx;
-    struct circular_buffer circ_buf_rx;
+    struct circ_buf_tx circ_buf_tx;
+    struct circ_buf_rx circ_buf_rx;
 
     struct uart_rx rx_data;
     struct uart_ctrl ctrl;
