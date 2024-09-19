@@ -21,57 +21,11 @@ static bool new_exchange_ready[MOD_COUNT];
 
 static struct uart_ctx uart_ctx[MOD_COUNT] = {};
 
-static void mod1_uart_hw_init(void)
-{
-    RCC->APBENR2 |= RCC_APBENR2_USART1EN;
-    RCC->APBRSTR2 |= RCC_APBRSTR2_USART1RST;
-    RCC->APBRSTR2 &= ~RCC_APBRSTR2_USART1RST;
-
-    shared_gpio_set_mode(MOD1, MOD_GPIO_TX, MOD_GPIO_MODE_AF_UART);
-    shared_gpio_set_mode(MOD1, MOD_GPIO_RX, MOD_GPIO_MODE_AF_UART);
-    shared_gpio_set_mode(MOD1, MOD_GPIO_DE, MOD_GPIO_MODE_AF_UART);
-}
-
-static void mod1_uart_hw_deinit(void)
-{
-    RCC->APBRSTR2 |= RCC_APBRSTR2_USART1RST;
-    RCC->APBRSTR2 &= ~RCC_APBRSTR2_USART1RST;
-    RCC->APBENR2 &= ~RCC_APBENR2_USART1EN;
-
-    shared_gpio_set_mode(MOD1, MOD_GPIO_TX, MOD_GPIO_MODE_DEFAULT);
-    shared_gpio_set_mode(MOD1, MOD_GPIO_RX, MOD_GPIO_MODE_DEFAULT);
-    shared_gpio_set_mode(MOD1, MOD_GPIO_DE, MOD_GPIO_MODE_DEFAULT);
-}
-
-static void mod2_uart_hw_init(void)
-{
-    RCC->APBENR1 |= RCC_APBENR1_USART2EN;
-    RCC->APBRSTR1 |= RCC_APBRSTR1_USART2RST;
-    RCC->APBRSTR1 &= ~RCC_APBRSTR1_USART2RST;
-
-    shared_gpio_set_mode(MOD2, MOD_GPIO_TX, MOD_GPIO_MODE_AF_UART);
-    shared_gpio_set_mode(MOD2, MOD_GPIO_RX, MOD_GPIO_MODE_AF_UART);
-    shared_gpio_set_mode(MOD2, MOD_GPIO_DE, MOD_GPIO_MODE_AF_UART);
-}
-
-static void mod2_uart_hw_deinit(void)
-{
-    RCC->APBRSTR1 |= RCC_APBRSTR1_USART2RST;
-    RCC->APBRSTR1 &= ~RCC_APBRSTR1_USART2RST;
-    RCC->APBENR1 &= ~RCC_APBENR1_USART2EN;
-
-    shared_gpio_set_mode(MOD2, MOD_GPIO_TX, MOD_GPIO_MODE_DEFAULT);
-    shared_gpio_set_mode(MOD2, MOD_GPIO_RX, MOD_GPIO_MODE_DEFAULT);
-    shared_gpio_set_mode(MOD2, MOD_GPIO_DE, MOD_GPIO_MODE_DEFAULT);
-}
-
 static const struct uart_descr uart_descr[MOD_COUNT] = {
     [MOD1] = {
         .ctx = &uart_ctx[MOD1],
         .uart = USART1,
         .irq_num = USART1_IRQn,
-        .uart_hw_init = mod1_uart_hw_init,
-        .uart_hw_deinit = mod1_uart_hw_deinit,
         .ctrl_region = REGMAP_REGION_UART_CTRL_MOD1,
         .start_tx_region = REGMAP_REGION_UART_TX_START_MOD1,
         .exchange_region = REGMAP_REGION_UART_EXCHANGE_MOD1
@@ -80,8 +34,6 @@ static const struct uart_descr uart_descr[MOD_COUNT] = {
         .ctx = &uart_ctx[MOD2],
         .uart = USART2,
         .irq_num = USART2_IRQn,
-        .uart_hw_init = mod2_uart_hw_init,
-        .uart_hw_deinit = mod2_uart_hw_deinit,
         .ctrl_region = REGMAP_REGION_UART_CTRL_MOD2,
         .start_tx_region = REGMAP_REGION_UART_TX_START_MOD2,
         .exchange_region = REGMAP_REGION_UART_EXCHANGE_MOD2
@@ -116,12 +68,25 @@ void uart_regmap_subsystem_init(void)
     GPIO_S_SET_PUSHPULL(usart_irq_gpio);
     GPIO_S_SET_OUTPUT(usart_irq_gpio);
 
+    RCC->APBENR2 |= RCC_APBENR2_USART1EN;
+    RCC->APBRSTR2 |= RCC_APBRSTR2_USART1RST;
+    RCC->APBRSTR2 &= ~RCC_APBRSTR2_USART1RST;
+
+    RCC->APBENR1 |= RCC_APBENR1_USART2EN;
+    RCC->APBRSTR1 |= RCC_APBRSTR1_USART2RST;
+    RCC->APBRSTR1 &= ~RCC_APBRSTR1_USART2RST;
+
     NVIC_SetHandler(USART1_IRQn, mod1_uart_irq_handler);
     NVIC_SetHandler(USART2_IRQn, mod2_uart_irq_handler);
 
     for (int i = 0; i < MOD_COUNT; i++) {
-        uart_descr[i].uart_hw_deinit();
         need_to_collect_data[i] = true;
+        uart_ctx[i].ctrl.enable = 0;
+        uart_ctx[i].ctrl.baud_x100 = 1152;
+        uart_ctx[i].ctrl.parity = UART_PARITY_NONE;
+        uart_ctx[i].ctrl.stop_bits = UART_STOP_BITS_1;
+        uart_ctx[i].ctrl.rs485_enabled = 0;
+        uart_ctx[i].ctrl.rs485_rx_during_tx = 0;
     }
 }
 

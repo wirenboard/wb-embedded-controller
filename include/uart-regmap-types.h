@@ -44,6 +44,8 @@ struct uart_ctrl {
     /* offset 0x02 */
     uint16_t parity : 2;
     uint16_t stop_bits : 2;
+    uint16_t rs485_enabled : 1;
+    uint16_t rs485_rx_during_tx : 1;
 };
 
 union uart_exchange {

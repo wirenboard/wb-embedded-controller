@@ -14,6 +14,7 @@ struct uart_ctx {
     bool tx_in_progress;
     bool tx_completed;
     bool want_to_tx;
+    bool rx_during_tx;
     int tx_bytes_count_in_prev_exchange;
     struct {
         uint16_t pe;
@@ -26,8 +27,6 @@ struct uart_ctx {
 struct uart_descr {
     USART_TypeDef *uart;
     int irq_num;
-    void (*uart_hw_init)(void);
-    void (*uart_hw_deinit)(void);
     enum regmap_region ctrl_region;
     enum regmap_region start_tx_region;
     enum regmap_region exchange_region;

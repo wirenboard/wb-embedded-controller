@@ -51,7 +51,9 @@ static inline void enable_txe_irq(const struct uart_descr *u)
     if (!u->ctx->tx_in_progress) {
         ATOMIC {
             uint32_t val = u->uart->CR1;
-            val &= ~USART_CR1_RE;
+            if ((u->ctx->ctrl.rs485_enabled) && (!u->ctx->rx_during_tx)) {
+                val &= ~USART_CR1_RE;
+            }
             val |= USART_CR1_TXEIE_TXFNFIE;
             u->uart->CR1 = val;
             u->ctx->tx_in_progress = true;
@@ -79,63 +81,84 @@ static void uart_put_tx_data_from_regmap_to_circ_buffer(const struct uart_descr 
     u->ctx->tx_bytes_count_in_prev_exchange = tx->bytes_to_send_count;
 }
 
-static void uart_set_baud(const struct uart_descr *u, uint16_t baud_x100)
+void uart_apply_ctrl(const struct uart_descr *u, bool enable_req)
 {
+    struct uart_ctx *ctx = u->ctx;
+    struct uart_ctrl *ctrl = &ctx->ctrl;
+
+    if (ctrl->enable) {
+        while (u->uart->ISR & USART_ISR_BUSY) {};
+    }
+
     NVIC_DisableIRQ(u->irq_num);
     u->uart->CR1 &= ~USART_CR1_UE;
     NVIC_ClearPendingIRQ(u->irq_num);
 
-    u->uart->BRR = SystemCoreClock / (baud_x100 * 100);
+    // baud rate
+    u->uart->BRR = SystemCoreClock / (ctrl->baud_x100 * 100);
 
-    u->uart->CR1 |= USART_CR1_UE;
-    u->ctx->ctrl.baud_x100 = baud_x100;
-    u->uart->ICR = USART_ICR_TCCF;
-    NVIC_EnableIRQ(u->irq_num);
-}
+    // stop bits
+    u->uart->CR2 &= ~USART_CR2_STOP;
+    u->uart->CR2 |= (ctrl->stop_bits << USART_CR2_STOP_Pos);
 
-static void uart_set_parity(const struct uart_descr *u, enum uart_parity parity)
-{
-    NVIC_DisableIRQ(u->irq_num);
-    while (u->uart->ISR & USART_ISR_BUSY) {};
-    u->uart->CR1 &= ~USART_CR1_UE;
-    NVIC_ClearPendingIRQ(u->irq_num);
-
-    switch (parity) {
+    // parity
+    switch (ctrl->parity) {
+    default:
     case UART_PARITY_NONE:
         u->uart->CR1 &= ~(USART_CR1_PCE | USART_CR1_PS | USART_CR1_M);
         break;
+
     case UART_PARITY_EVEN:
         u->uart->CR1 &= ~USART_CR1_PS;
-        u->uart->CR1 |= USART_CR1_PCE | USART_CR1_M;
+        u->uart->CR1 |= USART_CR1_PCE | USART_CR1_M0;
         break;
+
     case UART_PARITY_ODD:
-        u->uart->CR1 |= USART_CR1_PCE | USART_CR1_PS | USART_CR1_M;
-        break;
-    default:
+        u->uart->CR1 |= USART_CR1_PCE | USART_CR1_PS | USART_CR1_M0;
         break;
     }
 
-    u->ctx->ctrl.parity = parity;
-    u->uart->CR1 |= USART_CR1_UE;
-    u->uart->ICR = USART_ICR_TCCF;
-    NVIC_EnableIRQ(u->irq_num);
-}
+    if (ctrl->rs485_enabled) {
+        u->uart->CR1 |= 0x08 << 21 | 0x08 << 16;     // driver enable assert and de-assert time;
+        u->uart->CR3 |= USART_CR3_DEM;               // activate external transceiver control through the DE (Driver Enable) signal
 
-static void uart_set_stop_bits(const struct uart_descr *u, enum uart_stop_bits stop_bits)
-{
-    NVIC_DisableIRQ(u->irq_num);
-    while (u->uart->ISR & USART_ISR_BUSY) {};
-    u->uart->CR1 &= ~USART_CR1_UE;
-    NVIC_ClearPendingIRQ(u->irq_num);
+        if (ctrl->rs485_rx_during_tx) {
+            u->ctx->rx_during_tx = true;
+        } else {
+            u->ctx->rx_during_tx = false;
+        }
+    } else {
+        u->uart->CR3 &= ~USART_CR3_DEM;
+        u->ctx->rx_during_tx = true;
+    }
 
-    u->uart->CR2 &= ~USART_CR2_STOP;
-    u->uart->CR2 |= (stop_bits << USART_CR2_STOP_Pos);
+    u->uart->CR3 |= USART_CR3_EIE;               // error interrupt enable
+    u->uart->CR1 |= USART_CR1_TE | USART_CR1_UE | USART_CR1_RE | USART_CR1_RXNEIE_RXFNEIE | USART_CR1_PEIE | USART_CR1_TCIE;
 
-    u->ctx->ctrl.stop_bits = stop_bits;
+    if ((ctrl->enable == 0) && (enable_req == 1)) {
+        circ_buffer_reset(&u->ctx->circ_buf_tx);
+        circ_buffer_reset(&u->ctx->circ_buf_rx);
 
-    u->uart->CR1 |= USART_CR1_UE;
-    u->uart->ICR = USART_ICR_TCCF;
-    NVIC_EnableIRQ(u->irq_num);
+        u->ctx->rx_data.ready_for_tx = 1;
+        u->ctx->rx_data.read_bytes_count = 0;
+        u->ctx->rx_data.tx_completed = 0;
+
+        ctrl->enable = 1;
+    }
+
+    if ((ctrl->enable == 1) && (enable_req == 0)) {
+        u->ctx->rx_data.read_bytes_count = 0;
+        u->ctx->rx_data.tx_completed = 0;
+        u->ctx->rx_data.ready_for_tx = 0;
+
+        ctrl->enable = 0;
+    }
+
+    if (ctrl->enable) {
+        u->uart->CR1 |= USART_CR1_UE;
+        u->uart->ICR = USART_ICR_TCCF;
+        NVIC_EnableIRQ(u->irq_num);
+    }
 }
 
 void uart_regmap_process_irq(const struct uart_descr *u)
@@ -144,7 +167,9 @@ void uart_regmap_process_irq(const struct uart_descr *u)
 
     if (u->uart->ISR & USART_ISR_TC) {
         u->uart->ICR = USART_ICR_TCCF;
-        u->uart->CR1 |= USART_CR1_RE;
+        if ((u->ctx->ctrl.rs485_enabled) && (!u->ctx->rx_during_tx)) {
+            u->uart->CR1 |= USART_CR1_RE;
+        }
         ctx->tx_completed = true;
     }
 
@@ -187,57 +212,31 @@ void uart_regmap_process_ctrl(const struct uart_descr *u, const struct uart_ctrl
 {
     struct uart_ctx *ctx = u->ctx;
 
-    if ((ctx->ctrl.enable == 0) && (ctrl->enable == 1)) {
-        u->uart_hw_init();
-
-        circ_buffer_reset(&ctx->circ_buf_tx);
-        circ_buffer_reset(&ctx->circ_buf_rx);
-
-        u->uart->BRR = SystemCoreClock / 115200;
-        u->uart->CR1 |= 0x08 << 21 | 0x08 << 16;     // driver enable assert and de-assert time;
-        u->uart->CR3 |= USART_CR3_DEM;               // activate external transceiver control through the DE (Driver Enable) signal
-        u->uart->CR3 |= USART_CR3_EIE;               // error interrupt enable
-        u->uart->CR1 |= USART_CR1_TE | USART_CR1_UE | USART_CR1_RE | USART_CR1_RXNEIE_RXFNEIE | USART_CR1_PEIE | USART_CR1_TCIE;
-
-        u->uart->ICR = USART_ICR_TCCF;
-
-        NVIC_EnableIRQ(u->irq_num);
-        NVIC_SetPriority(u->irq_num, 1);
-
-        uart_set_baud(u, 1152);
-        uart_set_parity(u, UART_PARITY_NONE);
-        uart_set_stop_bits(u, UART_STOP_BITS_1);
-
-
-        ctx->ctrl.enable = 1;
-        ctx->rx_data.ready_for_tx = 1;
+    // valid baud 1200..115200
+    if ((ctrl->baud_x100 >= 12) && (ctrl->baud_x100 <= 1152)) {
+        ctx->ctrl.baud_x100 = ctrl->baud_x100;
     }
 
-    if ((ctx->ctrl.enable == 1) && (ctrl->enable == 0)) {
-        u->uart_hw_deinit();
-        NVIC_DisableIRQ(u->irq_num);
-
-        memset(ctx, 0, sizeof(*ctx));
+    if ((ctrl->parity == UART_PARITY_NONE) ||
+        (ctrl->parity == UART_PARITY_EVEN) ||
+        (ctrl->parity == UART_PARITY_ODD))
+    {
+        ctx->ctrl.parity = ctrl->parity;
     }
 
-    uint16_t baud = ctrl->baud_x100;
-    if ((baud < 12) || (baud > 1152)) {
-        baud = 1152;
+    // all values are valid
+    ctx->ctrl.stop_bits = ctrl->stop_bits;
+    ctx->ctrl.rs485_enabled = ctrl->rs485_enabled;
+    ctx->ctrl.rs485_rx_during_tx = ctrl->rs485_rx_during_tx;
+
+    bool enable_req = false;
+    if (ctrl->enable) {
+        enable_req = true;
     }
 
-    if (ctx->ctrl.baud_x100 != baud) {
-        uart_set_baud(u, baud);
-    }
+    uart_apply_ctrl(u, enable_req);
 
-    if (ctx->ctrl.parity != ctrl->parity) {
-        uart_set_parity(u, ctrl->parity);
-    }
-
-    if (ctx->ctrl.stop_bits != ctrl->stop_bits) {
-        uart_set_stop_bits(u, ctrl->stop_bits);
-    }
-
-    ctx->ctrl.ctrl_applyed = 1;
+    u->ctx->ctrl.ctrl_applyed = 1;
 }
 
 void uart_regmap_process_start_tx(const struct uart_descr *u, const struct uart_tx *tx)
@@ -258,6 +257,10 @@ void uart_regmap_process_exchange(const struct uart_descr *u, union uart_exchang
 void uart_regmap_collect_data_for_new_exchange(const struct uart_descr *u)
 {
     struct uart_ctx *ctx = u->ctx;
+
+    if (ctx->ctrl.enable == 0) {
+        return;
+    }
 
     if (cicr_buffer_get_available_space(&ctx->circ_buf_tx) >= UART_REGMAP_BUFFER_SIZE) {
         ctx->rx_data.ready_for_tx = 1;
@@ -286,28 +289,29 @@ bool uart_regmap_is_irq_needed(const struct uart_descr *u)
 {
     struct uart_ctx *ctx = u->ctx;
 
-    bool tx_irq_needed = false;
-    bool rx_irq_needed = false;
+    if (ctx->ctrl.enable == 0) {
+        return false;
+    }
 
     if (ctx->rx_data.read_bytes_count > 0) {
-        rx_irq_needed = true;
+        return true;
     }
 
     if (ctx->rx_data.ready_for_tx) {
         if (ctx->tx_bytes_count_in_prev_exchange > 0) {
-            tx_irq_needed = true;
+            return true;
         }
     }
 
     if (ctx->rx_data.tx_completed) {
-        tx_irq_needed = true;
+        return true;
     }
 
     if (ctx->want_to_tx) {
-        tx_irq_needed = true;
+        return true;
     }
 
-    return tx_irq_needed || rx_irq_needed;
+    return false;
 }
 
 #endif
