@@ -71,8 +71,23 @@
         /* 0x82 */  uint16_t gpio_state; \
     ) \
     /*     Addr     Name            RO/RW */ \
-    m(     0x84,    GPIO_MODE,      RW, \
-        /* 0x84 */  uint16_t gpio_mode; \
+    m(     0x84,    GPIO_DIR,      RW, \
+        /* 0x84 */  uint16_t gpio_dir; \
+    ) \
+    /*     Addr     Name            RO/RW */ \
+    m(     0x86,    GPIO_AF,        RW, \
+                    union { \
+                        struct { \
+        /* 0x86 */          uint16_t mod1_tx : 2; \
+        /* 0x86 */          uint16_t mod1_rx : 2; \
+        /* 0x86 */          uint16_t mod1_rts : 2; \
+        /* 0x86 */          uint16_t mod2_tx : 2; \
+        /* 0x86 */          uint16_t mod2_rx : 2; \
+        /* 0x86 */          uint16_t mod2_rts : 2; \
+        /* 0x86 */          uint16_t res : 4; \
+                        }; \
+                        uint16_t af; \
+                    }; \
     ) \
     /*     Addr     Name            RO/RW */ \
     m(     0x90,    WDT,            RW, \

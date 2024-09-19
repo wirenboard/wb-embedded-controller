@@ -12,7 +12,7 @@ enum mod {
 enum mod_gpio {
     MOD_GPIO_TX,
     MOD_GPIO_RX,
-    MOD_GPIO_DE,
+    MOD_GPIO_RTS,
 
     MOD_GPIO_COUNT
 };

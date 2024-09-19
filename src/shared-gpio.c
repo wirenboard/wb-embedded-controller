@@ -12,12 +12,12 @@ static const gpio_pin_t mod_gpios[MOD_COUNT][MOD_GPIO_COUNT] = {
     [MOD1] = {
         [MOD_GPIO_TX] = { GPIOA, 9 },
         [MOD_GPIO_RX] = { GPIOA, 10 },
-        [MOD_GPIO_DE] = { GPIOA, 12 },
+        [MOD_GPIO_RTS] = { GPIOA, 12 },
     },
     [MOD2] = {
         [MOD_GPIO_TX] = { GPIOA, 2 },
         [MOD_GPIO_RX] = { GPIOA, 15 },
-        [MOD_GPIO_DE] = { GPIOA, 1 },
+        [MOD_GPIO_RTS] = { GPIOA, 1 },
     },
 };
 
