@@ -15,6 +15,12 @@
 
 #define BIT(x)              (1 << (x))
 
+// Значения в регионе GPIO_AF (по 2 бита на пин)
+enum gpio_regmap_af {
+    GPIO_REGMAP_AF_GPIO = 0,
+    GPIO_REGMAP_AF_UART = 1,
+};
+
 enum ec_ext_gpio {
     EC_EXT_GPIO_A1,
     EC_EXT_GPIO_A2,
@@ -53,12 +59,13 @@ static const gpio_pin_t v_out_gpio = { EC_GPIO_VOUT_EN };
 struct gpio_ctx {
     uint16_t gpio_state;
     uint16_t gpio_ctrl;
-    uint16_t gpio_mode;
+    uint16_t gpio_dir;
+    uint16_t gpio_af;
 };
 
 static struct gpio_ctx gpio_ctx = {
-    .gpio_ctrl = 0,
-    .gpio_mode = outputs_only_gpios
+    .gpio_ctrl = BIT(EC_EXT_GPIO_V_OUT),
+    .gpio_dir = outputs_only_gpios,
 };
 
 static inline void set_v_out_state(bool state)
@@ -81,30 +88,57 @@ static inline bool get_gpio_ctrl(enum ec_ext_gpio gpio)
 
 static inline bool gpio_is_output(enum ec_ext_gpio gpio)
 {
-    if (gpio_ctx.gpio_mode & BIT(gpio)) {
+    if (gpio_ctx.gpio_dir & BIT(gpio)) {
         return true;
     } else {
         return false;
     }
 }
 
-static void set_mod_gpio_modes(void)
+static void set_mod_gpio_dir(uint16_t gpio_dir)
 {
+    gpio_dir &= ~inputs_only_gpios;
+    gpio_dir |= outputs_only_gpios;
+
     for (unsigned mod = 0; mod < MOD_COUNT; mod++) {
         for (unsigned mod_gpio = 0; mod_gpio < MOD_GPIO_COUNT; mod_gpio++) {
-            enum ec_ext_gpio gpio = mod_gpio_base[mod] + mod_gpio;
+            uint8_t mod_gpio_index = mod * MOD_GPIO_COUNT + mod_gpio;
+            enum ec_ext_gpio global_gpio_index = mod_gpio_base[mod] + mod_gpio;
             // Можно менять режим работы пина MODx, только если он не используется как UART
-            if (shared_gpio_get_mode(mod, mod_gpio) != MOD_GPIO_MODE_AF_UART) {
+            uint8_t af = (gpio_ctx.gpio_af >> (mod_gpio_index * 2)) & BIT_FIELD_MASK(2);
+            if (af == GPIO_REGMAP_AF_GPIO) {
                 enum mod_gpio_mode mode = MOD_GPIO_MODE_INPUT;
-                if (gpio_is_output(gpio)) {
+                if (gpio_is_output(global_gpio_index)) {
                     mode = MOD_GPIO_MODE_OUTPUT;
                 }
                 shared_gpio_set_mode(mod, mod_gpio, mode);
             } else {
-                gpio_ctx.gpio_ctrl &= ~BIT(gpio);
+                gpio_ctx.gpio_ctrl &= ~BIT(global_gpio_index);
             }
         }
     }
+
+    gpio_ctx.gpio_dir = gpio_dir;
+}
+
+static void set_mod_gpio_af(uint16_t gpio_af)
+{
+    for (unsigned mod = 0; mod < MOD_COUNT; mod++) {
+        for (unsigned mod_gpio = 0; mod_gpio < MOD_GPIO_COUNT; mod_gpio++) {
+            enum ec_ext_gpio gpio = mod_gpio_base[mod] + mod_gpio;
+            uint8_t af = (gpio_af >> ((mod * MOD_GPIO_COUNT + mod_gpio) * 2)) & BIT_FIELD_MASK(2);
+            if (af == GPIO_REGMAP_AF_GPIO) {
+                if (gpio_is_output(gpio)) {
+                    shared_gpio_set_mode(mod, mod_gpio, MOD_GPIO_MODE_OUTPUT);
+                } else {
+                    shared_gpio_set_mode(mod, mod_gpio, MOD_GPIO_MODE_INPUT);
+                }
+            } else if (af == GPIO_REGMAP_AF_UART) {
+                shared_gpio_set_mode(mod, mod_gpio, MOD_GPIO_MODE_AF_UART);
+            }
+        }
+    }
+    gpio_ctx.gpio_af = gpio_af;
 }
 
 static void control_v_out(void)
@@ -180,9 +214,9 @@ void gpio_reset(void)
     // Зануляем всё кроме V_OUT - он не должен сбрасываться при перезагрузке
     gpio_ctx.gpio_ctrl &= BIT(EC_EXT_GPIO_V_OUT);
     // Все пины по умолчанию на вход (кроме V_OUT)
-    gpio_ctx.gpio_mode = outputs_only_gpios;
+    gpio_ctx.gpio_dir = outputs_only_gpios;
 
-    set_mod_gpio_modes();
+    set_mod_gpio_dir(gpio_ctx.gpio_dir);
 }
 
 void gpio_do_periodic_work(void)
@@ -195,16 +229,16 @@ void gpio_do_periodic_work(void)
         gpio_ctx.gpio_ctrl = gpio_ctrl_regmap.gpio_ctrl;
     }
 
-    struct REGMAP_GPIO_MODE gpio_mode_regmap;
-    if (regmap_get_data_if_region_changed(REGMAP_REGION_GPIO_MODE, &gpio_mode_regmap, sizeof(gpio_mode_regmap))) {
-        gpio_mode_regmap.gpio_mode &= ~inputs_only_gpios;
-        gpio_mode_regmap.gpio_mode |= outputs_only_gpios;
+    struct REGMAP_GPIO_DIR gpio_dir_regmap;
+    if (regmap_get_data_if_region_changed(REGMAP_REGION_GPIO_DIR, &gpio_dir_regmap, sizeof(gpio_dir_regmap))) {
+        set_mod_gpio_dir(gpio_dir_regmap.gpio_dir);
+    }
 
-        gpio_ctx.gpio_mode = gpio_mode_regmap.gpio_mode;
-
-        set_mod_gpio_modes();
+    struct REGMAP_GPIO_AF gpio_af_regmap;
+    if (regmap_get_data_if_region_changed(REGMAP_REGION_GPIO_AF, &gpio_af_regmap, sizeof(gpio_af_regmap))) {
+        set_mod_gpio_af(gpio_af_regmap.af);
     }
 
     regmap_set_region_data(REGMAP_REGION_GPIO_STATE, &gpio_ctx.gpio_state, sizeof(gpio_ctx.gpio_state));
-    regmap_set_region_data(REGMAP_REGION_GPIO_MODE, &gpio_ctx.gpio_mode, sizeof(gpio_ctx.gpio_mode));
+    regmap_set_region_data(REGMAP_REGION_GPIO_DIR, &gpio_ctx.gpio_dir, sizeof(gpio_ctx.gpio_dir));
 }
