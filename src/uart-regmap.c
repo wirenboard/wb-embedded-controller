@@ -7,6 +7,7 @@
 #include "rcc.h"
 #include "array_size.h"
 #include "atomic.h"
+#include "bits.h"
 #include <assert.h>
 #include <string.h>
 
@@ -42,6 +43,11 @@
  * 5) Процесс продолжается до тех пор, пока во внутреннем кольцевом буфере есть ЕС есть данные
  *
  */
+
+#define UART_RX_BYTE_ERROR_PE               BIT(0)
+#define UART_RX_BYTE_ERROR_FE               BIT(1)
+#define UART_RX_BYTE_ERROR_NE               BIT(2)
+#define UART_RX_BYTE_ERROR_ORE              BIT(3)
 
 static_assert(sizeof(struct uart_rx) == sizeof(struct uart_tx), "Size of uart_rx and uart_tx must be equal");
 
@@ -132,8 +138,7 @@ void uart_apply_ctrl(const struct uart_descr *u, bool enable_req)
         u->ctx->rx_during_tx = true;
     }
 
-    u->uart->CR3 |= USART_CR3_EIE;               // error interrupt enable
-    u->uart->CR1 |= USART_CR1_TE | USART_CR1_UE | USART_CR1_RE | USART_CR1_RXNEIE_RXFNEIE | USART_CR1_PEIE | USART_CR1_TCIE;
+    u->uart->CR1 |= USART_CR1_TE | USART_CR1_UE | USART_CR1_RE | USART_CR1_RXNEIE_RXFNEIE | USART_CR1_TCIE;
 
     if ((ctrl->enable == 0) && (enable_req == 1)) {
         circ_buffer_reset(&u->ctx->circ_buf_tx.i);
@@ -175,8 +180,37 @@ void uart_regmap_process_irq(const struct uart_descr *u)
 
     if (u->uart->ISR & USART_ISR_RXNE_RXFNE) {
         uint8_t byte = u->uart->RDR;
+        uint8_t err_flags = 0;
+
+        if (u->uart->ISR & USART_ISR_PE) {
+            u->uart->ICR = USART_ICR_PECF;
+            err_flags |= UART_RX_BYTE_ERROR_PE;
+            ctx->errors.pe++;
+        }
+        if (u->uart->ISR & USART_ISR_FE) {
+            u->uart->ICR = USART_ICR_FECF;
+            err_flags |= UART_RX_BYTE_ERROR_FE;
+            ctx->errors.fe++;
+        }
+        if (u->uart->ISR & USART_ISR_NE) {
+            u->uart->ICR = USART_ICR_NECF;
+            err_flags |= UART_RX_BYTE_ERROR_NE;
+            ctx->errors.ne++;
+        }
+        if (u->uart->ISR & USART_ISR_ORE) {
+            u->uart->ICR = USART_ICR_ORECF;
+            err_flags |= UART_RX_BYTE_ERROR_ORE;
+            ctx->errors.ore++;
+        }
+        if (ctx->rx_buf_overflow) {
+            ctx->rx_buf_overflow = false;
+            err_flags |= UART_RX_BYTE_ERROR_ORE;
+        }
+
         if (circ_buffer_get_available_space(&ctx->circ_buf_rx.i) > 0) {
-            circ_buffer_rx_push(&ctx->circ_buf_rx, byte, 0);
+            circ_buffer_rx_push(&ctx->circ_buf_rx, byte, err_flags);
+        } else {
+            ctx->rx_buf_overflow = true;
         }
     }
 
@@ -188,23 +222,6 @@ void uart_regmap_process_irq(const struct uart_descr *u)
             u->uart->ICR = USART_ICR_TXFECF;
             disable_txe_irq(u);
         }
-    }
-
-    if (u->uart->ISR & USART_ISR_PE) {
-        ctx->errors.pe++;
-        u->uart->ICR = USART_ICR_PECF;
-    }
-    if (u->uart->ISR & USART_ISR_FE) {
-        ctx->errors.fe++;
-        u->uart->ICR = USART_ICR_FECF;
-    }
-    if (u->uart->ISR & USART_ISR_NE) {
-        ctx->errors.ne++;
-        u->uart->ICR = USART_ICR_NECF;
-    }
-    if (u->uart->ISR & USART_ISR_ORE) {
-        ctx->errors.ore++;
-        u->uart->ICR = USART_ICR_ORECF;
     }
 }
 
@@ -274,13 +291,50 @@ void uart_regmap_collect_data_for_new_exchange(const struct uart_descr *u)
     ATOMIC {
         u->uart->CR1 &= ~USART_CR1_RXNEIE_RXFNEIE;
     }
-    while ((circ_buffer_get_used_space(&ctx->circ_buf_rx.i) > 0) &&
-            (ctx->rx_data.read_bytes_count < UART_REGMAP_BUFFER_SIZE))
+
+    if ((circ_buffer_get_used_space(&ctx->circ_buf_rx.i) > 0) &&
+        (ctx->rx_data.read_bytes_count == 0))
     {
+        // Первый байт определяет формат данных - с ошибками или без
         uint8_t byte, err_flags;
         circ_buffer_rx_pop(&ctx->circ_buf_rx, &byte, &err_flags);
-        ctx->rx_data.read_bytes[ctx->rx_data.read_bytes_count] = byte;
+        if (err_flags) {
+            ctx->rx_data.data_format = 1;
+            ctx->rx_data.bytes_with_errors[0].byte = byte;
+            ctx->rx_data.bytes_with_errors[0].err_flags = err_flags;
+        } else {
+            ctx->rx_data.data_format = 0;
+            ctx->rx_data.read_bytes[0] = byte;
+        }
+        ctx->rx_data.read_bytes_count = 1;
+    }
+
+    uint8_t regmap_buf_size = UART_REGMAP_BUFFER_SIZE;
+    if (ctx->rx_data.data_format == 1) {
+        regmap_buf_size = ARRAY_SIZE(ctx->rx_data.bytes_with_errors);
+    }
+
+    while ((circ_buffer_get_used_space(&ctx->circ_buf_rx.i) > 0) &&
+            (ctx->rx_data.read_bytes_count < regmap_buf_size))
+    {
+        uint8_t byte, err_flags;
+        // Нельзя сразу извлекать байт из буфера, т.к. он может не подойти по формату
+        circ_buffer_rx_get(&ctx->circ_buf_rx, &byte, &err_flags);
+        if (ctx->rx_data.data_format == 1) {
+            ctx->rx_data.bytes_with_errors[ctx->rx_data.read_bytes_count].byte = byte;
+            ctx->rx_data.bytes_with_errors[ctx->rx_data.read_bytes_count].err_flags = err_flags;
+        } else {
+            if (err_flags) {
+                // Если встретили байт с ошибкой, а текущий формат данных - без ошибок,
+                // то прекращаем заполнять буфер в regmap.
+                // При следующем обмене данные будут в формате с ошибками
+                break;
+            }
+            ctx->rx_data.read_bytes[ctx->rx_data.read_bytes_count] = byte;
+        }
         ctx->rx_data.read_bytes_count++;
+        // Байт в итоге подходит по формату, извлекаем его из буфера
+        circ_buffer_tail_inc(&ctx->circ_buf_rx.i);
     }
     ATOMIC {
         u->uart->CR1 |= USART_CR1_RXNEIE_RXFNEIE;
