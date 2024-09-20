@@ -144,6 +144,8 @@ void uart_apply_ctrl(const struct uart_descr *u, bool enable_req)
         circ_buffer_reset(&u->ctx->circ_buf_tx.i);
         circ_buffer_reset(&u->ctx->circ_buf_rx.i);
 
+        u->ctx->rx_buf_overflow = false;
+        u->ctx->rx_data.data_format = 0;
         u->ctx->rx_data.ready_for_tx = 1;
         u->ctx->rx_data.read_bytes_count = 0;
         u->ctx->rx_data.tx_completed = 0;
