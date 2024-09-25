@@ -5,6 +5,7 @@
 #include "linux-power-control.h"
 #include "voltage-monitor.h"
 #include "shared-gpio.h"
+#include "bits.h"
 
 /**
  * Модуль занимается работой с регионом GPIO в regmap
@@ -12,8 +13,6 @@
  * Устанавливает состояния GPIO в regmap, если это входы
  * Управляет GPIO, если это выходы
  */
-
-#define BIT(x)              (1 << (x))
 
 // Значения в регионе GPIO_AF (по 2 бита на пин)
 enum gpio_regmap_af {
