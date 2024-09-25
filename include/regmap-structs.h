@@ -16,7 +16,7 @@
                         uint16_t fwrev[4]; \
                     }; \
         /* 0x06 */  uint16_t poweron_reason; \
-        /* 0x07-0x0C */ uint16_t uid[6]; \
+         /* 0x07-0x0C */ uint16_t uid[6]; \
     ) \
     /*     Addr     Name            RO/RW */ \
     m(     0x10,    RTC_TIME,       RW, \
@@ -52,6 +52,12 @@
         /* 0x47 */  uint16_t v_a2; \
         /* 0x48 */  uint16_t v_a3; \
         /* 0x49 */  uint16_t v_a4; \
+    ) \
+    /*     Addr     Name           RO/RW */ \
+    m(     0x60,   EC_SYSTEM_LED,  RW, \
+        /* 0x60 */ uint16_t mode;      \
+        /* 0x61 */ uint16_t on_ms;     \
+        /* 0x62 */ uint16_t off_ms;    \
     ) \
     /*     Addr     Name            RO/RW */ \
     m(     0x80,    GPIO,           RW, \

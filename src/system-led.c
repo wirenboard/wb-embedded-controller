@@ -1,6 +1,7 @@
 #include "system-led.h"
 #include "config.h"
 #include "gpio.h"
+#include "regmap-int.h"
 #include "systick.h"
 #include <stdbool.h>
 
@@ -88,8 +89,38 @@ void system_led_blink(uint16_t on_ms, uint16_t off_ms)
     led_ctx.timestamp = systick_get_system_time_ms();
 }
 
+static unsigned command_from_controller_received()
+{
+    if (regmap_is_region_changed(REGMAP_REGION_EC_SYSTEM_LED)) {
+        struct REGMAP_EC_SYSTEM_LED led;
+        regmap_get_region_data(REGMAP_REGION_EC_SYSTEM_LED, &led, sizeof(led));
+        led_ctx.mode = led.mode;
+        led_ctx.time[LED_TIME_ON] = led.on_ms;
+        led_ctx.time[LED_TIME_OFF] = led.off_ms;
+
+        switch (led_ctx.mode) {
+        case LED_OFF:
+            led_gpio_off();
+            break;
+        case LED_ON:
+            led_gpio_on();
+            break;
+        case LED_BLINK:
+            system_led_blink(led_ctx.time[LED_TIME_ON], led_ctx.time[LED_TIME_OFF]);
+            break;
+        }
+        regmap_clear_changed(REGMAP_REGION_EC_SYSTEM_LED);
+        return 1;
+    }
+
+    return 0;
+}
+
 void system_led_do_periodic_work(void)
 {
+    if (command_from_controller_received()) {
+        return;
+    }
     if (led_ctx.mode != LED_BLINK) {
         return;
     }
