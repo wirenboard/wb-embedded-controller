@@ -214,8 +214,15 @@ void gpio_reset(void)
     gpio_ctx.gpio_ctrl &= BIT(EC_EXT_GPIO_V_OUT);
     // Все пины по умолчанию на вход (кроме V_OUT)
     gpio_ctx.gpio_dir = outputs_only_gpios;
+    // Все пины по умолчанию на GPIO
+    gpio_ctx.gpio_af = 0;
 
     set_mod_gpio_dir(gpio_ctx.gpio_dir);
+    set_mod_gpio_af(gpio_ctx.gpio_af);
+
+    regmap_set_region_data(REGMAP_REGION_GPIO_STATE, &gpio_ctx.gpio_state, sizeof(gpio_ctx.gpio_state));
+    regmap_set_region_data(REGMAP_REGION_GPIO_DIR, &gpio_ctx.gpio_dir, sizeof(gpio_ctx.gpio_dir));
+    regmap_set_region_data(REGMAP_REGION_GPIO_AF, &gpio_ctx.gpio_af, sizeof(gpio_ctx.gpio_af));
 }
 
 void gpio_do_periodic_work(void)

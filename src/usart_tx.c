@@ -39,13 +39,12 @@ static inline void usart_wait_tranmission_complete(void)
     static inline void check_debug_uart_initialized(void)
     {
         if (shared_gpio_get_mode(MOD1, MOD_GPIO_TX) != MOD_GPIO_MODE_PA9_AF_DEBUG_UART) {
-            usart_init();
+            usart_tx_init();
         }
     }
 #endif
 
-
-void usart_init(void)
+void usart_tx_init(void)
 {
     #if defined EC_DEBUG_USART_GPIO
         GPIO_S_SET_OUTPUT(usart_tx_gpio);
@@ -57,6 +56,9 @@ void usart_init(void)
 
 
     #ifdef EC_DEBUG_USART_USE_USART1
+        NVIC_DisableIRQ(USART1_IRQn);
+        NVIC_ClearPendingIRQ(USART1_IRQn);
+
         RCC->APBENR2 |= RCC_APBENR2_USART1EN;
 
         // Reset USART
@@ -66,6 +68,26 @@ void usart_init(void)
 
     D_USART->BRR = SystemCoreClock / EC_DEBUG_USART_BAUDRATE;
     D_USART->CR1 |= USART_CR1_TE | USART_CR1_UE;
+}
+
+void usart_tx_deinit(void)
+{
+    #if defined EC_DEBUG_USART_GPIO
+        GPIO_S_SET_INPUT(usart_tx_gpio);
+    #else
+        if (shared_gpio_get_mode(MOD1, MOD_GPIO_TX) != MOD_GPIO_MODE_PA9_AF_DEBUG_UART) {
+            return;
+        }
+        shared_gpio_set_mode(MOD1, MOD_GPIO_TX, MOD_GPIO_MODE_INPUT);
+    #endif
+
+    #ifdef EC_DEBUG_USART_USE_USART1
+        // Reset USART
+        RCC->APBRSTR2 |= RCC_APBRSTR2_USART1RST;
+        RCC->APBRSTR2 &= ~RCC_APBRSTR2_USART1RST;
+
+        RCC->APBENR2 &= ~RCC_APBENR2_USART1EN;
+    #endif
 }
 
 void usart_tx_buf_blocking(const void * buf, size_t size)

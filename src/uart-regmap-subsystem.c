@@ -14,6 +14,7 @@
 static const gpio_pin_t usart_irq_gpio = { EC_GPIO_UART_INT };
 
 static int irq_handled = false;
+static bool uart_subsystem_initialized = false;
 
 static bool exchange_received[MOD_COUNT];
 static bool need_to_collect_data[MOD_COUNT];
@@ -62,7 +63,6 @@ static inline void set_irq_gpio_inactive(void)
     GPIO_S_RESET(usart_irq_gpio);
 }
 
-
 void uart_regmap_subsystem_init(void)
 {
     GPIO_S_SET_PUSHPULL(usart_irq_gpio);
@@ -81,17 +81,47 @@ void uart_regmap_subsystem_init(void)
 
     for (int i = 0; i < MOD_COUNT; i++) {
         need_to_collect_data[i] = true;
-        uart_ctx[i].ctrl.enable = 0;
+        exchange_received[i] = false;
+        new_exchange_ready[i] = false;
+
+        memset(&uart_ctx[i], 0, sizeof(struct uart_ctx));
+
         uart_ctx[i].ctrl.baud_x100 = 1152;
         uart_ctx[i].ctrl.parity = UART_PARITY_NONE;
         uart_ctx[i].ctrl.stop_bits = UART_STOP_BITS_1;
-        uart_ctx[i].ctrl.rs485_enabled = 0;
-        uart_ctx[i].ctrl.rs485_rx_during_tx = 0;
+
+        regmap_set_region_data(uart_descr[i].ctrl_region, &uart_ctx[i].ctrl, sizeof(uart_ctx[i].ctrl));
+        regmap_set_region_data(uart_descr[i].exchange_region, &uart_descr[i].ctx->rx_data, sizeof(struct uart_rx));
     }
+    set_irq_gpio_inactive();
+    uart_subsystem_initialized = true;
+}
+
+void uart_subsystem_deinit(void)
+{
+    if (!uart_subsystem_initialized) {
+        return;
+    }
+
+    set_irq_gpio_inactive();
+
+    RCC->APBRSTR2 |= RCC_APBRSTR2_USART1RST;
+    RCC->APBRSTR2 &= ~RCC_APBRSTR2_USART1RST;
+    RCC->APBENR2 &= ~RCC_APBENR2_USART1EN;
+
+    RCC->APBRSTR1 |= RCC_APBRSTR1_USART2RST;
+    RCC->APBRSTR1 &= ~RCC_APBRSTR1_USART2RST;
+    RCC->APBENR1 &= ~RCC_APBENR1_USART2EN;
+
+    uart_subsystem_initialized = false;
 }
 
 void uart_regmap_subsystem_do_periodic_work(void)
 {
+    if (!uart_subsystem_initialized) {
+        return;
+    }
+
     // Обработка региона управления и статуса
     for (int i = 0; i < MOD_COUNT; i++) {
         struct uart_ctrl uart_ctrl;

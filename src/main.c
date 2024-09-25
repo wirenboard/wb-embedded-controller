@@ -89,11 +89,7 @@ int main(void)
     temperature_control_init();
     spi_slave_init();
     regmap_init();
-    usart_init();
-
-    #if defined EC_UART_REGMAP_SUPPORT
-        uart_regmap_subsystem_init();
-    #endif
+    usart_tx_init();
 
     #if defined WBEC_WBMZ6_SUPPORT
         software_i2c_init();
