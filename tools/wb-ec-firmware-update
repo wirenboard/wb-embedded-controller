@@ -28,7 +28,13 @@ if [ "$1" = "--help" ]; then
     exit 0
 fi
 
-FIRMWARES_ORDER=$(echo -n "$1 "; echo $DEFAULT_FIRMWARES_ORDER)
+if [ -f "$1" ]; then
+    echo "Using firmware file: $1"
+    FIRMWARES_ORDER=$1
+else
+    echo "Using default firmwares order"
+    FIRMWARES_ORDER=$DEFAULT_FIRMWARES_ORDER
+fi
 
 GPIO_RESET="EC RESET"
 GPIO_BOOT0="EC SWCLK/BOOT0"
