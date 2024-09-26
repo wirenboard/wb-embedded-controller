@@ -80,6 +80,9 @@ void uart_regmap_subsystem_init(void)
     NVIC_SetHandler(USART2_IRQn, mod2_uart_irq_handler);
 
     for (int i = 0; i < MOD_COUNT; i++) {
+        NVIC_DisableIRQ(uart_descr[i].irq_num);
+        NVIC_ClearPendingIRQ(uart_descr[i].irq_num);
+
         need_to_collect_data[i] = true;
         exchange_received[i] = false;
         new_exchange_ready[i] = false;
