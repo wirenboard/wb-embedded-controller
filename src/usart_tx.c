@@ -3,6 +3,7 @@
 #include "config.h"
 #include "rcc.h"
 #include "usart_tx.h"
+#include <stdbool.h>
 
 /**
  * Модуль позволяет передавать строки в отладочный UART.
@@ -22,6 +23,8 @@
     #include "shared-gpio.h"
 #endif
 
+static bool usart_initialized = false;
+
 static inline void usart_transmit_char(char c)
 {
     while ((D_USART->ISR & USART_ISR_TXE_TXFNF) == 0) {};
@@ -33,16 +36,12 @@ static inline void usart_wait_tranmission_complete(void)
     while (D_USART->ISR & USART_ISR_TC) {};
 }
 
-#if defined EC_DEBUG_USART_GPIO
-    static inline void check_debug_uart_initialized(void) {}
-#else
-    static inline void check_debug_uart_initialized(void)
-    {
-        if (shared_gpio_get_mode(MOD1, MOD_GPIO_TX) != MOD_GPIO_MODE_PA9_AF_DEBUG_UART) {
-            usart_tx_init();
-        }
+static inline void check_debug_uart_initialized(void)
+{
+    if (!usart_initialized) {
+        usart_tx_init();
     }
-#endif
+}
 
 void usart_tx_init(void)
 {
@@ -68,6 +67,8 @@ void usart_tx_init(void)
 
     D_USART->BRR = SystemCoreClock / EC_DEBUG_USART_BAUDRATE;
     D_USART->CR1 |= USART_CR1_TE | USART_CR1_UE;
+
+    usart_initialized = true;
 }
 
 void usart_tx_deinit(void)
@@ -88,11 +89,14 @@ void usart_tx_deinit(void)
 
         RCC->APBENR2 &= ~RCC_APBENR2_USART1EN;
     #endif
+
+    usart_initialized = false;
 }
 
 void usart_tx_buf_blocking(const void * buf, size_t size)
 {
     check_debug_uart_initialized();
+
     for (size_t i = 0; i < size; i++) {
         usart_transmit_char(((const char *)buf)[i]);
     }
@@ -102,6 +106,7 @@ void usart_tx_buf_blocking(const void * buf, size_t size)
 void usart_tx_str_blocking(const char str[])
 {
     check_debug_uart_initialized();
+
     while (*str) {
         usart_transmit_char(*str);
         str++;
