@@ -158,6 +158,9 @@ static void spi_irq_handler(void)
             regmap_ext_prepare_operation(addr);
             if (rd & SPI_SLAVE_OPERATION_READ_MASK) {
                 spi_op = SPI_SLAVE_TRANSMIT;
+                #if !defined SPI_SLAVE_PAD_WORDS_COUNT
+                    spi_enable_txe_int();
+                #endif
             } else {
                 spi_op = SPI_SLAVE_RECEIVE;
             }
