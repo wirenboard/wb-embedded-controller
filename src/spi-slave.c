@@ -41,9 +41,6 @@
 #define SPI_SLAVE_OPERATION_READ_MASK            0x8000
 // Слово, которое передается в ответ на запись адреса
 #define SPI_SLAVE_ADDR_WRITE_ANSWER              0x0000
-// Количество незначащих слов между записью адреса и началом передачи данных. Нужно, чтобы подготовить данные
-// Для совместимости со старым протоколом используется только с адреса 0x137 (для UART-ов)
-#define SPI_SLAVE_PAD_WORDS_COUNT                5
 
 static const struct spi_pins {
     gpio_pin_t miso;
