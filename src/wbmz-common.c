@@ -10,7 +10,7 @@
 
     static bool charge_enabled = false;
     static bool charge_force_ctrl_enabled = false;
-    static bool charge_force_ctll_state = false;
+    static bool charge_force_ctrl_state = false;
 
     static inline void wbmz_enable_charge(void)
     {
@@ -28,11 +28,11 @@
     {
         if (charge_force_ctrl_enabled) {
             if (charge_enabled) {
-                if (!charge_force_ctll_state) {
+                if (!charge_force_ctrl_state) {
                     wbmz_disable_charge();
                 }
             } else {
-                if (charge_force_ctll_state) {
+                if (charge_force_ctrl_state) {
                     wbmz_enable_charge();
                 }
             }
@@ -59,9 +59,9 @@
     void wbmz_set_charging_force_control(bool force_control, bool en)
     {
         if (force_control) {
-            charge_force_ctll_state = en;
+            charge_force_ctrl_state = en;
         } else {
-            charge_force_ctll_state = false;
+            charge_force_ctrl_state = false;
             wbmz_disable_charge();
         }
         charge_force_ctrl_enabled = force_control;
