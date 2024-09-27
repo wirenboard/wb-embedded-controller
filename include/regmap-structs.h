@@ -124,6 +124,9 @@
         /* 0xF0 */  uint16_t enable_rtc_out : 1; \
         /* 0xF0 */  uint16_t reset_rtc : 1; \
         /* 0xF0 */  uint16_t heater_force_enable : 1; \
+        /* 0xF0 */  uint16_t wbmz_force_control : 1; \
+        /* 0xF0 */  uint16_t wbmz_stepup_en : 1; \
+        /* 0xF0 */  uint16_t wbmz_charge_en : 1; \
     ) \
 
 // Общее число регистров в адресном пространстве

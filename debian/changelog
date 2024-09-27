@@ -1,4 +1,4 @@
-wb-ec-firmware (2.0.0-rc2) stable; urgency=medium
+wb-ec-firmware (2.0.0-rc3) stable; urgency=medium
 
   * Add WB8.5 target
   * wb85: buzzer support
@@ -8,11 +8,12 @@ wb-ec-firmware (2.0.0-rc2) stable; urgency=medium
   * check hw revision on startup
   * WBMZ6-BATTERY support
   * WBMZ6-SUPERCAP support
+  * add direct control for WBMZ lines for production tests
   * regmap: full-duplex access: read region data while writing
   * wb85: use spi pad words between address and data
   * wb-ec-firmware-update: flash single file without checking for compatibility
 
- -- Pavel Gasheev <pavel.gasheev@wirenboard.ru>  Fri, 27 Sep 2024 14:09:20 +0300
+ -- Pavel Gasheev <pavel.gasheev@wirenboard.ru>  Fri, 27 Sep 2024 14:25:19 +0300
 
 wb-ec-firmware (1.3.1) stable; urgency=medium
 

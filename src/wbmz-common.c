@@ -8,7 +8,9 @@
 #if defined WBEC_GPIO_WBMZ_CHARGE_ENABLE
     static const gpio_pin_t charge_enable_gpio = { WBEC_GPIO_WBMZ_CHARGE_ENABLE };
 
-    static bool charge_enabled;
+    static bool charge_enabled = false;
+    static bool charge_force_ctrl_enabled = false;
+    static bool charge_force_ctrl_state = false;
 
     static inline void wbmz_enable_charge(void)
     {
@@ -24,6 +26,19 @@
 
     static void wbmz_charging_control(void)
     {
+        if (charge_force_ctrl_enabled) {
+            if (charge_enabled) {
+                if (!charge_force_ctrl_state) {
+                    wbmz_disable_charge();
+                }
+            } else {
+                if (charge_force_ctrl_state) {
+                    wbmz_enable_charge();
+                }
+            }
+            return;
+        }
+
         bool vin_ok = vmon_get_ch_status(VMON_CHANNEL_V_IN);
         if (charge_enabled) {
             if ((!vin_ok) || wbmz_is_powered_from_wbmz()) {
@@ -40,21 +55,63 @@
     {
         return charge_enabled;
     }
+
+    void wbmz_set_charging_force_control(bool force_control, bool en)
+    {
+        if (force_control) {
+            charge_force_ctrl_state = en;
+        } else {
+            charge_force_ctrl_state = false;
+            wbmz_disable_charge();
+        }
+        charge_force_ctrl_enabled = force_control;
+    }
 #else
     static void wbmz_charging_control(void) {}
     bool wbmz_is_charging_enabled(void) {
         // Если нет управления зарядом, то заряд всегда включен схемотехникой
         return true;
     }
+    void wbmz_set_charging_force_control(bool force_control, bool en)
+    {
+        (void)force_control;
+        (void)en;
+    }
 #endif
 
 static const gpio_pin_t wbmz_stepup_enable_gpio = { EC_GPIO_WBMZ_STEPUP_ENABLE };
 static const gpio_pin_t wbmz_status_bat_gpio = { EC_GPIO_WBMZ_STATUS_BAT };
 
-static bool stepup_enabled;
+static bool stepup_enabled = false;
+static bool stepup_force_ctrl_enabled = false;
+static bool stepup_force_ctrl_state = false;
+
+void wbmz_set_stepup_force_control(bool force_control, bool en)
+{
+    if (force_control) {
+        stepup_force_ctrl_state = en;
+    } else {
+        stepup_force_ctrl_state = false;
+        wbmz_disable_stepup();
+    }
+    stepup_force_ctrl_enabled = force_control;
+}
 
 static void wbmz_stepup_control(void)
 {
+    if (stepup_force_ctrl_enabled) {
+        if (stepup_enabled) {
+            if (!stepup_force_ctrl_state) {
+                wbmz_disable_stepup();
+            }
+        } else {
+            if (stepup_force_ctrl_state) {
+                wbmz_enable_stepup();
+            }
+        }
+        return;
+    }
+
     bool usb = vmon_get_ch_status(VMON_CHANNEL_VBUS_DEBUG);
     #if !defined(EC_USB_HUB_DEBUG_NETWORK)
         usb = usb || vmon_get_ch_status(VMON_CHANNEL_VBUS_NETWORK);
