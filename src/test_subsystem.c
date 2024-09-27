@@ -3,6 +3,7 @@
 #include "console.h"
 #include "rtc.h"
 #include "temperature-control.h"
+#include "wbmz-common.h"
 
 /**
  * Выполняет разные тестовые функции, в обычной работе не участвует.
@@ -40,7 +41,9 @@ void test_do_periodic_work(void)
         }
 
         temperature_control_heater_force_control(test.heater_force_enable);
-        test.heater_force_enable = 0;
+
+        wbmz_set_charging_force_control(test.wbmz_force_control, test.wbmz_charge_en);
+        wbmz_set_stepup_force_control(test.wbmz_force_control, test.wbmz_stepup_en);
 
         regmap_set_region_data(REGMAP_REGION_TEST, &test, sizeof(test));
     }
