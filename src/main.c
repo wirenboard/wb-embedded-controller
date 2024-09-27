@@ -27,6 +27,7 @@
 int main(void)
 {
     RCC->APBENR1 |= RCC_APBENR1_PWREN;
+    RCC->APBENR2 |= RCC_APBENR2_SYSCFGEN;
     RCC->IOPENR |= RCC_IOPENR_GPIOAEN;
     RCC->IOPENR |= RCC_IOPENR_GPIOBEN;
     RCC->IOPENR |= RCC_IOPENR_GPIOCEN;
@@ -87,7 +88,7 @@ int main(void)
     temperature_control_init();
     spi_slave_init();
     regmap_init();
-    usart_init();
+    usart_tx_init();
 
     #if defined WBEC_WBMZ6_SUPPORT
         software_i2c_init();
