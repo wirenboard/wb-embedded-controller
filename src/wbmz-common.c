@@ -9,7 +9,7 @@
     static const gpio_pin_t charge_enable_gpio = { WBEC_GPIO_WBMZ_CHARGE_ENABLE };
 
     static bool charge_enabled = false;
-    static bool charge_force_ctrl_mode = false;
+    static bool charge_force_ctrl_enabled = false;
     static bool charge_force_ctll_state = false;
 
     static inline void wbmz_enable_charge(void)
@@ -26,7 +26,7 @@
 
     static void wbmz_charging_control(void)
     {
-        if (charge_force_ctrl_mode) {
+        if (charge_force_ctrl_enabled) {
             if (charge_enabled) {
                 if (!charge_force_ctll_state) {
                     wbmz_disable_charge();
@@ -64,7 +64,7 @@
             charge_force_ctll_state = false;
             wbmz_disable_charge();
         }
-        charge_force_ctrl_mode = force_control;
+        charge_force_ctrl_enabled = force_control;
     }
 #else
     static void wbmz_charging_control(void) {}
@@ -83,7 +83,7 @@ static const gpio_pin_t wbmz_stepup_enable_gpio = { EC_GPIO_WBMZ_STEPUP_ENABLE }
 static const gpio_pin_t wbmz_status_bat_gpio = { EC_GPIO_WBMZ_STATUS_BAT };
 
 static bool stepup_enabled = false;
-static bool stepup_force_ctrl_mode = false;
+static bool stepup_force_ctrl_enabled = false;
 static bool stepup_force_ctrl_state = false;
 
 void wbmz_set_stepup_force_control(bool force_control, bool en)
@@ -94,12 +94,12 @@ void wbmz_set_stepup_force_control(bool force_control, bool en)
         stepup_force_ctrl_state = false;
         wbmz_disable_stepup();
     }
-    stepup_force_ctrl_mode = force_control;
+    stepup_force_ctrl_enabled = force_control;
 }
 
 static void wbmz_stepup_control(void)
 {
-    if (stepup_force_ctrl_mode) {
+    if (stepup_force_ctrl_enabled) {
         if (stepup_enabled) {
             if (!stepup_force_ctrl_state) {
                 wbmz_disable_stepup();
