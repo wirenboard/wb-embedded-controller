@@ -24,7 +24,6 @@ void mcu_init_poweron_reason(void)
     } else {
         mcu_poweron_reason = MCU_POWERON_REASON_POWER_ON;
     }
-    mcu_poweron_reason = MCU_POWERON_REASON_UNKNOWN;
 }
 
 enum mcu_poweron_reason mcu_get_poweron_reason(void)
