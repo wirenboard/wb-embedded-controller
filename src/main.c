@@ -32,6 +32,7 @@ int main(void)
     RCC->IOPENR |= RCC_IOPENR_GPIOCEN;
     RCC->IOPENR |= RCC_IOPENR_GPIODEN;
     RCC->IOPENR |= RCC_IOPENR_GPIOFEN;
+
     system_led_init();
 
     // При включении начинаем всегда с low power run
@@ -50,6 +51,8 @@ int main(void)
     // Измерение проиходит в wbec_init()
     adc_init(ADC_CLOCK_NO_DIV, ADC_VREF_INT);
     while (!adc_get_ready()) {};
+
+    mcu_init_poweron_reason();
 
     hwrev_init_and_check();
 
