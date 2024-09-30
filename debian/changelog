@@ -1,11 +1,11 @@
-wb-ec-firmware (2.0.0-rc3) stable; urgency=medium
+wb-ec-firmware (2.0.0-rc4) stable; urgency=medium
 
   * Add WB8.5 target
   * wb85: buzzer support
   * regmap: fix atomic: merge is_region_changed and get_region_data functions
   * regmap: full-duplex access: read region data while writing
   * wb85: add heater support
-  * check hw revision on startup
+  * check hw revision on startup (only if poweon reason is 'power_on')
   * WBMZ6-BATTERY support
   * WBMZ6-SUPERCAP support
   * add direct control for WBMZ lines for production tests

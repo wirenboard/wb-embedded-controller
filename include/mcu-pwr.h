@@ -15,6 +15,7 @@ enum mcu_vcc_5v_state {
     MCU_VCC_5V_STATE_ON = 1,
 };
 
+void mcu_init_poweron_reason(void);
 enum mcu_poweron_reason mcu_get_poweron_reason(void);
 void mcu_goto_standby(uint16_t wakeup_after_s);
 enum mcu_vcc_5v_state mcu_get_vcc_5v_last_state(void);

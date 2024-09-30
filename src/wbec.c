@@ -162,9 +162,6 @@ void wbec_init(void)
     // Иначе управление питанием перехватится раньше, чем нужно
     // Инициализация GPIO выполняется в WBEC_STATE_VOLTAGE_CHECK
 
-    // Enable internal wakeup line (for RTC)
-    PWR->CR3 |= PWR_CR3_EIWUL;
-
     enum mcu_poweron_reason mcu_poweron_reason = mcu_get_poweron_reason();
     wbec_ctx.poweron_reason = REASON_UNKNOWN;
 
