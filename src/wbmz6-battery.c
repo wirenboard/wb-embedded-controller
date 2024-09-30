@@ -7,6 +7,7 @@
 #include "array_size.h"
 #include "wbmz6-battery.h"
 #include "ntc.h"
+#include "bits.h"
 
 /**
  * Модуль предназначен для работы с батарейным модулем WBMZ6-BATTERY.
@@ -22,9 +23,6 @@
 static_assert(WBEC_WBMZ6_BATTERY_VOLTAGE_MIN_MV == 2900, "Only 2900 mV min voltage supported");
 static_assert(WBEC_WBMZ6_BATTERY_VOLTAGE_MAX_MV == 4100, "Only 4100 mV max voltage supported");
 static_assert(WBEC_WBMZ6_BATTERY_CHARGE_CURRENT_MA == 600, "Only 600 mA charge current supported");
-
-#define BIT(bit)                                        (1 << (bit))
-#define BIT_MASK(bits)                                  ((1 << (bits)) - 1)
 
 #define AXP221S_ADDR                                    0x34
 
