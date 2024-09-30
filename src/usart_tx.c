@@ -8,7 +8,7 @@
 /**
  * Модуль позволяет передавать строки в отладочный UART.
  * Используется блокирующая передача.
- * Возможно передавать как null-terminated строки, так и явновно указывать размер
+ * Возможно передавать как null-terminated строки, так и явно указывать размер
  */
 
 #ifdef EC_DEBUG_USART_USE_USART1
@@ -36,7 +36,7 @@ static inline void usart_wait_tranmission_complete(void)
     while (D_USART->ISR & USART_ISR_TC) {};
 }
 
-static inline void check_debug_uart_initialized(void)
+static inline void init_debug_uart_if_not_initialized(void)
 {
     if (!usart_initialized) {
         usart_tx_init();
@@ -95,7 +95,7 @@ void usart_tx_deinit(void)
 
 void usart_tx_buf_blocking(const void * buf, size_t size)
 {
-    check_debug_uart_initialized();
+    init_debug_uart_if_not_initialized();
 
     for (size_t i = 0; i < size; i++) {
         usart_transmit_char(((const char *)buf)[i]);
@@ -105,7 +105,7 @@ void usart_tx_buf_blocking(const void * buf, size_t size)
 
 void usart_tx_str_blocking(const char str[])
 {
-    check_debug_uart_initialized();
+    init_debug_uart_if_not_initialized();
 
     while (*str) {
         usart_transmit_char(*str);

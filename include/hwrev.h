@@ -11,6 +11,6 @@ enum hwrev {
     HWREV_UNKNOWN = 0xFFFF
 };
 
-void hwrev_init(void);
+void hwrev_init_and_check(void);
 enum hwrev hwrev_get(void);
 void hwrev_put_hw_info_to_regmap(void);
