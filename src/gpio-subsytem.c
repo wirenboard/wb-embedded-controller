@@ -142,9 +142,9 @@ static void set_mod_gpio_af(uint16_t gpio_af)
 
 static void control_v_out(void)
 {
-    bool v_in_is_proper_range = vmon_get_ch_status(VMON_CHANNEL_V_OUT);
+    bool v_in_is_in_proper_range = vmon_get_ch_status(VMON_CHANNEL_V_OUT);
     bool v_out_ctrl = get_gpio_ctrl(EC_EXT_GPIO_V_OUT);
-    set_v_out_state(v_in_is_proper_range && v_out_ctrl);
+    set_v_out_state(v_in_is_in_proper_range && v_out_ctrl);
 }
 
 static void set_gpio_values(void)
