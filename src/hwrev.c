@@ -7,6 +7,11 @@
 #include "regmap-int.h"
 #include "wbmcu_system.h"
 #include <string.h>
+#include "mcu-pwr.h"
+#include "spi-slave.h"
+#include "systick.h"
+#include "system-led.h"
+#include "rcc.h"
 
 #define HWREV_ADC_VALUE_EXPECTED(res_up, res_down) \
     ((res_down) * 4096 / ((res_up) + (res_down)))
@@ -41,7 +46,7 @@ static const struct hwrev_desc hwrev_desc[HWREV_COUNT] = {
 static enum hwrev hwrev = HWREV_UNKNOWN;
 static uint16_t hwrev_code = HWREV_UNKNOWN;
 
-void hwrev_init(void)
+static void hwrev_init(void)
 {
     #if defined DEBUG
         // При отладке через SWD мы не можем понять какая аппаратная ревизия
@@ -89,4 +94,45 @@ void hwrev_put_hw_info_to_regmap(void)
 
     regmap_set_region_data(REGMAP_REGION_HW_INFO_PART1, &hw_info_1, sizeof(hw_info_1));
     regmap_set_region_data(REGMAP_REGION_HW_INFO_PART2, &hw_info_2, sizeof(hw_info_2));
+}
+
+void hwrev_init_and_check(void)
+{
+    enum mcu_poweron_reason poweron_reason = mcu_get_poweron_reason();
+
+    // hwrev имеет смысл проверять только при включении питания
+    // Все остальные причины включения не могут возникнуть сами по себе,
+    // это означает что прошивка уже была загружена и hwrev уже был проверен,
+    // поэтому нет смысла проверять его ещё раз.
+    if (poweron_reason != MCU_POWERON_REASON_POWER_ON) {
+        // заполняем поля hwrev, не проверяя его
+        hwrev = WBEC_HWREV;
+        hwrev_code = hwrev_desc[WBEC_HWREV].code;
+        hwrev_put_hw_info_to_regmap();
+        return;
+    }
+
+    // Прежде чем инициализировать всё остальное, нужно проверить совместимость железа и прошивки
+    hwrev_init();
+    if (hwrev_get() != WBEC_HWREV) {
+        // Прошивка несовместима с железом
+        // Дальше что-то делать смысла нет, т.к. мы не знаем что за железо и какие gpio чем управляют
+        // Инициализируем только системный светодиод, spi и regmap
+        // Чтобы из линукса можно было прочитать код железа и понять какую прошивку заливать
+        rcc_set_hsi_pll_64mhz_clock();
+        systick_init();
+        spi_slave_init();
+        regmap_init();
+        hwrev_put_hw_info_to_regmap();
+        // Редко мигаем светодиодом, чтобы понять что прошивка несовместима
+        system_led_blink(25, 25);
+        while (1) {
+            system_led_do_periodic_work();
+            // На всякий случай перезагружаем микроконтроллер каждые 10 секунд
+            // для повторной проверки hwrev, если проверка оказалась ложно-отрицательной
+            if (systick_get_system_time_ms() > 10000) {
+                NVIC_SystemReset();
+            }
+        }
+    }
 }
