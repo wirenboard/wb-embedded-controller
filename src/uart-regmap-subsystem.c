@@ -93,6 +93,8 @@ void uart_regmap_subsystem_init(void)
         uart_ctx[i].ctrl.parity = UART_PARITY_NONE;
         uart_ctx[i].ctrl.stop_bits = UART_STOP_BITS_1;
 
+        uart_ctx[i].rx_data.ready_for_tx = 1;
+
         regmap_set_region_data(uart_descr[i].ctrl_region, &uart_ctx[i].ctrl, sizeof(uart_ctx[i].ctrl));
         regmap_set_region_data(uart_descr[i].exchange_region, &uart_descr[i].ctx->rx_data, sizeof(struct uart_rx));
     }
