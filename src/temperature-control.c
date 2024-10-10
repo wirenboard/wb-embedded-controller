@@ -3,6 +3,18 @@
 #include "adc.h"
 #include "gpio.h"
 #include "ntc.h"
+#include "wbmz-common.h"
+#include "voltage-monitor.h"
+
+static const fix16_t minimum_working_temperature = F16(WBEC_MINIMUM_WORKING_TEMPERATURE);
+
+static inline fix16_t get_temperature(void)
+{
+    fix16_t ntc_raw = adc_get_ch_adc_raw(ADC_CHANNEL_ADC_NTC);
+    fix16_t temperature = ntc_convert_adc_raw_to_temp(ntc_raw);
+
+    return temperature;
+}
 
 #if defined EC_GPIO_HEATER
     static const gpio_pin_t heater_gpio = { EC_GPIO_HEATER };
@@ -28,17 +40,36 @@
         heater_ctx.enabled = false;
     }
 
+    static void heater_control(void)
+    {
+        if (heater_ctx.force_enabled) {
+            // Нагреватель включили через regmap принудительно
+            return;
+        }
+
+        bool powered_from_wbmz = wbmz_is_powered_from_wbmz();
+        bool vin_present = vmon_get_ch_status(VMON_CHANNEL_V_IN);
+
+        if ((powered_from_wbmz) || (!vin_present)) {
+            // Нагреватель потребляет большой ток, включать его можно только при работе от Vin
+            // При работе от USB или WBMZ не хватает мощности
+            if (heater_ctx.enabled) {
+                heater_disable();
+            }
+            return;
+        }
+
+        fix16_t temp = get_temperature();
+
+        if ((heater_ctx.enabled) && (temp > heater_off_temp)) {
+            heater_disable();
+        }
+        if ((!heater_ctx.enabled) && (temp < heater_on_temp)) {
+            heater_enable();
+        }
+    }
+
 #endif
-
-static const fix16_t minimum_working_temperature = F16(WBEC_MINIMUM_WORKING_TEMPERATURE);
-
-static inline fix16_t get_temperature(void)
-{
-    fix16_t ntc_raw = adc_get_ch_adc_raw(ADC_CHANNEL_ADC_NTC);
-    fix16_t temperature = ntc_convert_adc_raw_to_temp(ntc_raw);
-
-    return temperature;
-}
 
 void temperature_control_init(void)
 {
@@ -52,16 +83,7 @@ void temperature_control_init(void)
 void temperature_control_do_periodic_work(void)
 {
     #if defined EC_GPIO_HEATER
-        fix16_t temp = get_temperature();
-
-        if (!heater_ctx.force_enabled) {
-            if ((heater_ctx.enabled) && (temp > heater_off_temp)) {
-                heater_disable();
-            }
-            if ((!heater_ctx.enabled) && (temp < heater_on_temp)) {
-                heater_enable();
-            }
-        }
+        heater_control();
     #endif
 }
 
