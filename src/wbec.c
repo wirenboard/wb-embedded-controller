@@ -407,7 +407,11 @@ void wbec_do_periodic_work(void)
                 linux_cpu_pwr_seq_on();
                 new_state(WBEC_STATE_POWER_ON_SEQUENCE_WAIT);
             } else {
-                console_print_w_prefix("Board temperature is below -40°C! Rechecking in 5 seconds\r\n");
+                console_print_w_prefix("Current board temperature ");
+                console_print_fixed_point(adc.temp / 10, 1);
+                console_print("ºC is too low! Waiting for it to rise above ");
+                console_print_fixed_point(WBEC_MINIMUM_WORKING_TEMPERATURE * 10, 1);
+                console_print("ºC\r\n");
                 new_state(WBEC_STATE_TEMP_CHECK_LOOP);
             }
         }
