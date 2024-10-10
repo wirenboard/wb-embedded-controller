@@ -123,7 +123,9 @@ static inline void collect_adc_data(struct REGMAP_ADC_DATA * adc)
     adc->v_5_0 = adc_get_ch_mv(ADC_CHANNEL_ADC_5V);
     adc->v_3_3 = adc_get_ch_mv(ADC_CHANNEL_ADC_3V3);
     adc->vbus_console = adc_get_ch_mv(ADC_CHANNEL_ADC_VBUS_DEBUG);
-    #if !defined(EC_USB_HUB_DEBUG_NETWORK)
+    #if defined(EC_USB_HUB_DEBUG_NETWORK)
+        adc->vbus_network = 0;
+    #else
         adc->vbus_network = adc_get_ch_mv(ADC_CHANNEL_ADC_VBUS_NETWORK);
     #endif
 
@@ -371,11 +373,17 @@ void wbec_do_periodic_work(void)
 
         console_print_w_prefix("Vin: ");
         console_print_fixed_point(adc.v_in / 100, 1);
-        console_print("V, USB Net: ");
-        console_print_fixed_point(adc.vbus_network / 100, 1);
-        console_print("V, USB Console: ");
-        console_print_fixed_point(adc.vbus_console / 100, 1);
-        console_print("V\r\n");
+        #if defined EC_USB_HUB_DEBUG_NETWORK
+            console_print("V, USB: ");
+            console_print_fixed_point(adc.vbus_console / 100, 1);
+            console_print("V\r\n");
+        #else
+            console_print("V, USB Net: ");
+            console_print_fixed_point(adc.vbus_network / 100, 1);
+            console_print("V, USB Console: ");
+            console_print_fixed_point(adc.vbus_console / 100, 1);
+            console_print("V\r\n");
+        #endif
 
         if (temperature_control_is_temperature_ready()) {
             console_print_w_prefix("Turning on the main CPU; all future debug messages will originate from the CPU.\r\n\n\n");
