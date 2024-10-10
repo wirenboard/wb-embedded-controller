@@ -1,3 +1,9 @@
+wb-ec-firmware (1.3.3) stable; urgency=medium
+
+  * Fix RTC regs initialization on startup
+
+ -- Pavel Gasheev <pavel.gasheev@wirenboard.com>  Thu, 10 Oct 2024 10:51:01 +0300
+
 wb-ec-firmware (1.3.2) stable; urgency=medium
 
   * fix EC firmware updating: add a delay after option bytes written to get MCU time to rebooting
