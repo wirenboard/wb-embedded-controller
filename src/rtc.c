@@ -172,10 +172,11 @@ void rtc_init(void)
     if (((RTC->CR & RTC_CR_REG_MSK) != RTC_CR_REG_VAL) ||
         ((RTC->PRER & RTC_PRER_REG_MSK) != RTC_PRER_REG_VAL))
     {
-        disable_wpr();
+        start_init_disable_wpr();
         RTC->CR = RTC_CR_REG_VAL;
+        // PRER register can be written only when INIT bit is set
         RTC->PRER = RTC_PRER_REG_VAL;
-        enable_wpr();
+        end_init_enable_wpr();
     }
 
     // Если RTC не инициализирован - нужно настроить часы на дефолтную дату
