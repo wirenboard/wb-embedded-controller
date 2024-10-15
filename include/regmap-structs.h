@@ -1,5 +1,6 @@
 #pragma once
 #include <stdint.h>
+#include "uart-regmap-types.h"
 
 #define REGMAP(m) \
     /*     Addr     Name            RO/RW */ \
@@ -142,6 +143,35 @@
         /* 0xF0 */  uint16_t wbmz_force_control : 1; \
         /* 0xF0 */  uint16_t wbmz_stepup_en : 1; \
         /* 0xF0 */  uint16_t wbmz_charge_en : 1; \
+    ) \
+    /* UARTs */ \
+    /*     Addr     Name            RO/RW */ \
+    m(     0x100,   UART_CTRL_MOD1, RW, \
+        /* 0x100 */ struct uart_ctrl ctrl; \
+    ) \
+    /*     Addr     Name            RO/RW */ \
+    m(     0x108,   UART_CTRL_MOD2, RW, \
+        /* 0x108 */ struct uart_ctrl ctrl; \
+    ) \
+    /*     Addr     Name            RO/RW */ \
+    m(     0x120,   UART_TX_START_MOD1,  RW, \
+        /* 0x120 */ struct uart_start_tx start_tx; \
+        /* 0x121    end of the region */ \
+    ) \
+    m(     0x121,   UART_TX_START_MOD2,  RW, \
+        /* 0x121 */ struct uart_start_tx start_tx; \
+        /* 0x122    end of the region */ \
+    ) \
+    /*     Addr     Name            RO/RW */ \
+    m(     0x180,   UART_EXCHANGE_MOD1,  RW, \
+        /* 0x180 */ union uart_exchange e; \
+        /* 0x1A0    end of the region */ \
+    ) \
+    /* ВАЖНО, чтобы регионы exhange шли подряд  */ \
+    /*     Addr     Name            RO/RW */ \
+    m(     0x1A1,   UART_EXCHANGE_MOD2,  RW, \
+        /* 0x1A1 */ union uart_exchange e; \
+        /* 0x1C1    end of the region */ \
     ) \
 
 // Общее число регистров в адресном пространстве
