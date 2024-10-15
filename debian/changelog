@@ -1,10 +1,10 @@
-wb-ec-firmware (2.0.0-rc5) stable; urgency=medium
+wb-ec-firmware (2.0.0-rc6) stable; urgency=medium
 
   * Add WB8.5 target
   * wb85: buzzer support
   * regmap: fix atomic: merge is_region_changed and get_region_data functions
   * regmap: full-duplex access: read region data while writing
-  * wb85: add heater support
+  * wb85: add heater support: work only if Vin present
   * check hw revision on startup (only if poweon reason is 'power_on')
   * WBMZ6-BATTERY support
   * WBMZ6-SUPERCAP support
@@ -14,7 +14,7 @@ wb-ec-firmware (2.0.0-rc5) stable; urgency=medium
   * wb-ec-firmware-update: flash single file without checking for compatibility
   * wb85: add GPIO control for MOD1 and MOD2
 
- -- Pavel Gasheev <pavel.gasheev@wirenboard.ru>  Mon, 30 Sep 2024 12:31:34 +0300
+ -- Pavel Gasheev <pavel.gasheev@wirenboard.com>  Tue, 15 Oct 2024 10:22:00 +0300
 
 wb-ec-firmware (1.3.1) stable; urgency=medium
 
