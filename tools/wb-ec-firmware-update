@@ -47,8 +47,6 @@ DT_OVERLAY="
 /dts-v1/;
 /plugin/;
 / {
-    compatible = \"wirenboard,wirenboard-740\";
-
     fragment-wbec-disable {
         target = <&wbec>;
         __overlay__ {
@@ -85,8 +83,7 @@ remove_overlay_and_start_drivers() {
     # where we can't manage services and kernel modules,
     # so this check will suppress error messages.
     if [[ -x "$(which ischroot)" ]] && ! ischroot; then
-        modprobe pwrkey-wbec
-
+        systemctl restart wb-mqtt-serial
         systemctl restart wb-mqtt-gpio
         systemctl restart wb-mqtt-adc
         systemctl restart wb-rules
@@ -106,6 +103,15 @@ is_wbec_running() {
     [ $rc -eq "0" ] && true || false
 }
 
+ask_for_reboot() {
+    echo "Reboot is required after Embedded Controller firmware update"
+    read -p "Do you want to reboot now? [y/N] " -n 1 -r
+    echo
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        reboot
+    fi
+}
+
 # Try to find GPIO
 GPIO_RESET_NUM=$(gpiofind "$GPIO_RESET") || {
     echo "GPIO $GPIO_RESET not found"
@@ -120,10 +126,7 @@ GPIO_BOOT0_NUM=$(gpiofind "$GPIO_BOOT0") || {
 # where we can't manage services and kernel modules,
 # so this check will suppress error messages.
 if [[ -x "$(which ischroot)" ]] && ! ischroot; then
-    # Remove pwrkey driver
-    modprobe -r pwrkey-wbec
-
-    # Stop services
+    systemctl stop wb-mqtt-serial
     systemctl stop wb-mqtt-gpio
     systemctl stop wb-mqtt-adc
     systemctl stop wb-rules
@@ -143,6 +146,8 @@ for FIRMWARE in $FIRMWARES_ORDER; do
         exit -1
     fi
 
+    # Kill processes that use wbec-uart ports
+    fuser -k -TERM /dev/ttyWBE* || true
     # Apply overlay to disable spi and enable i2c
     remove_overlay
     mkdir $DT_OVERLAY_DIR
@@ -204,3 +209,5 @@ for FIRMWARE in $FIRMWARES_ORDER; do
         break
     fi
 done
+
+ask_for_reboot
