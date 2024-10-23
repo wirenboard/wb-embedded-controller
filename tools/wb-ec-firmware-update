@@ -103,15 +103,6 @@ is_wbec_running() {
     [ $rc -eq "0" ] && true || false
 }
 
-ask_for_reboot() {
-    echo "Reboot is required after Embedded Controller firmware update"
-    read -p "Do you want to reboot now? [y/N] " -n 1 -r
-    echo
-    if [[ $REPLY =~ ^[Yy]$ ]]; then
-        reboot
-    fi
-}
-
 # Try to find GPIO
 GPIO_RESET_NUM=$(gpiofind "$GPIO_RESET") || {
     echo "GPIO $GPIO_RESET not found"
@@ -210,4 +201,5 @@ for FIRMWARE in $FIRMWARES_ORDER; do
     fi
 done
 
-ask_for_reboot
+echo
+echo "Reboot is required after Embedded Controller firmware update"
