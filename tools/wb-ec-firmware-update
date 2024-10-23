@@ -138,7 +138,9 @@ for FIRMWARE in $FIRMWARES_ORDER; do
     fi
 
     # Kill processes that use wbec-uart ports
-    fuser -k -TERM /dev/ttyWBE* || true
+    if [[ -x "$(which fuser)" ]]; then
+        fuser -k -TERM /dev/ttyWBE* || true
+    fi
     # Apply overlay to disable spi and enable i2c
     remove_overlay
     mkdir $DT_OVERLAY_DIR
