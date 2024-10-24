@@ -102,25 +102,6 @@ void uart_regmap_subsystem_init(void)
     uart_subsystem_initialized = true;
 }
 
-void uart_subsystem_deinit(void)
-{
-    if (!uart_subsystem_initialized) {
-        return;
-    }
-
-    set_irq_gpio_inactive();
-
-    RCC->APBRSTR2 |= RCC_APBRSTR2_USART1RST;
-    RCC->APBRSTR2 &= ~RCC_APBRSTR2_USART1RST;
-    RCC->APBENR2 &= ~RCC_APBENR2_USART1EN;
-
-    RCC->APBRSTR1 |= RCC_APBRSTR1_USART2RST;
-    RCC->APBRSTR1 &= ~RCC_APBRSTR1_USART2RST;
-    RCC->APBENR1 &= ~RCC_APBENR1_USART2EN;
-
-    uart_subsystem_initialized = false;
-}
-
 void uart_regmap_subsystem_do_periodic_work(void)
 {
     if (!uart_subsystem_initialized) {
