@@ -7,6 +7,8 @@ enum uart_parity {
     UART_PARITY_NONE = 0,
     UART_PARITY_EVEN = 1,
     UART_PARITY_ODD = 2,
+
+    UART_PARITY_MAX_VALUE = UART_PARITY_ODD
 };
 
 enum uart_stop_bits {

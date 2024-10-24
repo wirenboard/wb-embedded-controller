@@ -234,10 +234,7 @@ void uart_regmap_process_ctrl(const struct uart_descr *u, const struct uart_ctrl
         ctx->ctrl.baud_x100 = ctrl->baud_x100;
     }
 
-    if ((ctrl->parity == UART_PARITY_NONE) ||
-        (ctrl->parity == UART_PARITY_EVEN) ||
-        (ctrl->parity == UART_PARITY_ODD))
-    {
+    if (ctrl->parity <= UART_PARITY_MAX_VALUE) {
         ctx->ctrl.parity = ctrl->parity;
     }
 
