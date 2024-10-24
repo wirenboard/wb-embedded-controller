@@ -21,6 +21,7 @@
 #include "buzzer.h"
 #include "temperature-control.h"
 #include "wbmz-common.h"
+#include "wdt-stm32.h"
 
 #define LINUX_POWERON_REASON(m) \
     m(REASON_POWER_ON,        "Power supply on"        ) \
@@ -207,6 +208,7 @@ void wbec_init(void)
         pwrkey_init();
         while (!pwrkey_ready()) {
             pwrkey_do_periodic_work();
+            watchdog_reload();
         }
         if (pwrkey_pressed()) {
             wbec_ctx.poweron_reason = REASON_POWER_KEY;

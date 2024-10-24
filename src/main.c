@@ -24,6 +24,7 @@
 #include "wbmz-subsystem.h"
 #include "software_i2c.h"
 #include "uart-regmap-subsystem.h"
+#include "wdt-stm32.h"
 
 int main(void)
 {
@@ -35,6 +36,7 @@ int main(void)
     RCC->IOPENR |= RCC_IOPENR_GPIODEN;
     RCC->IOPENR |= RCC_IOPENR_GPIOFEN;
 
+    watchdog_init();
     system_led_init();
 
     // При включении начинаем всегда с low power run
@@ -118,5 +120,7 @@ int main(void)
         // Main algorithm
         linux_cpu_pwr_seq_do_periodic_work();
         wbec_do_periodic_work();
+
+        watchdog_reload();
     }
 }

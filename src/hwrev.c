@@ -12,6 +12,7 @@
 #include "systick.h"
 #include "system-led.h"
 #include "rcc.h"
+#include "wdt-stm32.h"
 
 #define HWREV_ADC_VALUE_EXPECTED(res_up, res_down) \
     ((res_down) * 4096 / ((res_up) + (res_down)))
@@ -133,6 +134,7 @@ void hwrev_init_and_check(void)
             if (systick_get_system_time_ms() > 10000) {
                 NVIC_SystemReset();
             }
+            watchdog_reload();
         }
     }
 }

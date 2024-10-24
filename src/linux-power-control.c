@@ -11,6 +11,7 @@
 #include "console.h"
 #include "regmap-int.h"
 #include "wbmz-common.h"
+#include "wdt-stm32.h"
 
 static const gpio_pin_t gpio_linux_power = { EC_GPIO_LINUX_POWER };
 static const gpio_pin_t gpio_pmic_pwron = { EC_GPIO_LINUX_PMIC_PWRON };
@@ -205,6 +206,7 @@ void linux_cpu_pwr_seq_do_periodic_work(void)
         // Ждём отпускания кнопки
         while (pwrkey_pressed()) {
             pwrkey_do_periodic_work();
+            watchdog_reload();
         }
         goto_standby_and_save_5v_status();
     }
