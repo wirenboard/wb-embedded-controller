@@ -110,9 +110,9 @@ void uart_regmap_subsystem_do_periodic_work(void)
 
     // Обработка региона управления и статуса
     for (int i = 0; i < MOD_COUNT; i++) {
-        struct uart_ctrl uart_ctrl;
-        if (regmap_get_data_if_region_changed(uart_descr[i].ctrl_region, &uart_ctrl, sizeof(uart_ctrl))) {
-            uart_regmap_process_ctrl(&uart_descr[i], &uart_ctrl);
+        struct uart_ctrl uart_ctrl_from_regmap;
+        if (regmap_get_data_if_region_changed(uart_descr[i].ctrl_region, &uart_ctrl_from_regmap, sizeof(uart_ctrl_from_regmap))) {
+            uart_regmap_process_ctrl(&uart_descr[i], &uart_ctrl_from_regmap);
         }
 
         if (uart_ctx[i].ctrl.ctrl_applyed) {
