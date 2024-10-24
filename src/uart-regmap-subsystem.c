@@ -117,6 +117,9 @@ void uart_regmap_subsystem_do_periodic_work(void)
 
         if (uart_ctx[i].ctrl.ctrl_applyed) {
             if (regmap_set_region_data(uart_descr[i].ctrl_region, &uart_ctx[i].ctrl, sizeof(uart_ctx[i].ctrl))) {
+                // ctrl_applyed сбрасывается после того, как данные успешно записаны в regmap
+                // и одновременно используется как флаг успешной записи в regmap
+                // в итоге в regmap ctrl_applyed = 1
                 uart_ctx[i].ctrl.ctrl_applyed = 0;
             }
         }
