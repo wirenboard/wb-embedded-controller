@@ -2,14 +2,16 @@
 # MODEL defines list
 #######################################
 
-MODEL_LIST = MODEL_WB74
+MODEL_LIST = \
+MODEL_WB74 \
+MODEL_WB85
 
 #######################################
 # variabes
 #######################################
 
 SRC_DIR = src
-INCLUDE_DIR = include system/common
+INCLUDE_DIR = include
 SUBMODULES_DIR = libfixmath/libfixmath
 
 #order important
@@ -32,5 +34,11 @@ LDFLAGS=
 
 # Use debian/changelog to get version
 VERSION_STRING = $(shell cat debian/changelog | head -n 1 | cut -d' ' -f2 | sed 's/.*[(]\(.*\)[)].*/\1/' | cut -d'~' -f1)
+
+# set SWD_DEBUG=1 to enable debug build and able to use SWD debugger
+ifeq ($(SWD_DEBUG),1)
+	CFLAGS=-g
+	DEFS += DEBUG
+endif
 
 include system/build_common.mk

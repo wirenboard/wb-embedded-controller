@@ -2,6 +2,7 @@
 #include "array_size.h"
 #include "gpio.h"
 #include "regmap-ext.h"
+#include "config.h"
 
 /**
  * Реализация SPI Slave с размером слова 16 бит
@@ -20,6 +21,10 @@
  * После приема адреса регистра устройство готовит данные для чтения, это занимает ~XX мкс на 64 МГц
  * Соответственно Master должен выдержать паузу между отправкой адреса и чтением/запись, либо
  * использовать частоту SPI, при которой период SCK будет больше этого времени.
+ *
+ * Возможно не использовать паузу, а определить SPI_SLAVE_PAD_WORDS_COUNT. В таком случае мастер должен
+ * после передачи адреса передать SPI_SLAVE_PAD_WORDS_COUNT незначащих слов,
+ * чтобы устройство подготовило данные. После этого можно начинать чтение/запись.
  *
  * После записи адреса Master либо передает данные и получает в ответ нули (если это запись),
  * либо передает что угодно и получает в ответ данные, если это чтение.
@@ -57,6 +62,11 @@ enum spi_slave_op {
 
 static enum spi_slave_op spi_op;
 
+#if defined SPI_SLAVE_PAD_WORDS_COUNT
+    static unsigned spi_tx_pad_words_cnt;
+    static unsigned spi_rx_pad_words_cnt;
+#endif
+
 static void spi_irq_handler(void);
 static void exti_irq_handler(void);
 
@@ -89,14 +99,19 @@ static inline void reset_and_init_spi(void)
     RCC->APBRSTR1 |= RCC_APBRSTR1_SPI2RST;
     RCC->APBRSTR1 &= ~RCC_APBRSTR1_SPI2RST;
 
-    SPI2->CR2 |= 0b1111 << SPI_CR2_DS_Pos;   // 16 bit
-    SPI2->CR2 |= SPI_CR2_RXNEIE;
-    SPI2->CR1 |= SPI_CR1_SPE;
+    SPI2->CR2 = (0b1111 << SPI_CR2_DS_Pos) | SPI_CR2_RXNEIE;   // 16 bit
+    SPI2->CR1 = SPI_CR1_SPE;
 
     // Put dummy word to TX FIFO
     spi_tx_u16(SPI_SLAVE_ADDR_WRITE_ANSWER);
 
     spi_op = SPI_SLAVE_ADDR_WRITE;
+
+    #if defined SPI_SLAVE_PAD_WORDS_COUNT
+        spi_rx_pad_words_cnt = SPI_SLAVE_PAD_WORDS_COUNT;
+        spi_tx_pad_words_cnt = SPI_SLAVE_PAD_WORDS_COUNT;
+        spi_enable_txe_int();
+    #endif
 }
 
 void spi_slave_init(void)
@@ -143,24 +158,42 @@ static void spi_irq_handler(void)
             regmap_ext_prepare_operation(addr);
             if (rd & SPI_SLAVE_OPERATION_READ_MASK) {
                 spi_op = SPI_SLAVE_TRANSMIT;
-                spi_enable_txe_int();
+                #if !defined SPI_SLAVE_PAD_WORDS_COUNT
+                    spi_enable_txe_int();
+                #endif
             } else {
                 spi_op = SPI_SLAVE_RECEIVE;
             }
         } else if (spi_op == SPI_SLAVE_RECEIVE) {
-            regmap_ext_write_reg_autoinc(rd);
+            #if defined SPI_SLAVE_PAD_WORDS_COUNT
+                if (spi_rx_pad_words_cnt) {
+                    spi_rx_pad_words_cnt--;
+                } else {
+                    regmap_ext_write_reg_autoinc(rd);
+                }
+            #else
+                regmap_ext_write_reg_autoinc(rd);
+            #endif
         }
     }
 
     if (SPI2->SR & SPI_SR_TXE) {
         // В прерывание по TXE также попадаем в любом случае,
         // даже если бит TXE выключен, в обработчик всё равно попадаем по RXNE
-        // Это не мешает, если операция - не чтение, передаются нули
+        // Это не мешает, если операция - запись, то в ответ всё равно передаем
+        // значения регистров. Мастер может поступить с ними как угодно.
 
         uint16_t w = 0;
-        if (spi_op == SPI_SLAVE_TRANSMIT) {
+        #if defined SPI_SLAVE_PAD_WORDS_COUNT
+            if (spi_tx_pad_words_cnt) {
+                w = spi_tx_pad_words_cnt;
+                spi_tx_pad_words_cnt--;
+            } else {
+                w = regmap_ext_read_reg_autoinc();
+            }
+        #else
             w = regmap_ext_read_reg_autoinc();
-        }
+        #endif
         spi_tx_u16(w);
     }
 }

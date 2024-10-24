@@ -145,6 +145,8 @@ void rtc_init(void)
 {
     RCC->APBENR1 |= RCC_APBENR1_PWREN | RCC_APBENR1_RTCAPBEN;
 	PWR->CR1 |= PWR_CR1_DBP;
+    // Enable internal wakeup line (for RTC)
+    PWR->CR3 |= PWR_CR3_EIWUL;
 
     // Check LSE drive capability
     if ((RCC->BDCR & RCC_BDCR_LSEDRV_Msk) != (RTC_LSE_DRIVE_CAPABILITY << RCC_BDCR_LSEDRV_Pos)) {

@@ -1,3 +1,24 @@
+wb-ec-firmware (2.0.0) stable; urgency=medium
+
+  * Add WB8.5 target
+  * wb85: buzzer support
+  * regmap: fix atomic: merge is_region_changed and get_region_data functions
+  * regmap: full-duplex access: read region data while writing
+  * wb85: add heater support: work only if Vin present
+  * check hw revision on startup (only if poweon reason is 'power_on')
+  * WBMZ6-BATTERY support
+  * WBMZ6-SUPERCAP support
+  * add direct control for WBMZ lines for production tests
+  * regmap: full-duplex access: read region data while writing
+  * wb85: use spi pad words between address and data
+  * wb-ec-firmware-update: flash single file without checking for compatibility
+  * wb85: add GPIO control for MOD1 and MOD2
+  * wb-ec-firmware-update: free /dev/ttyWBE* before flashing
+  * spi-uart over regmap support
+  * add watchdog for EC firmware
+
+ -- Pavel Gasheev <pavel.gasheev@wirenboard.com>  Thu, 24 Oct 2024 18:14:10 +0300
+
 wb-ec-firmware (1.3.3) stable; urgency=medium
 
   * Fix RTC regs initialization on startup

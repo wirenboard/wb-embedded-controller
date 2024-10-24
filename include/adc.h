@@ -35,6 +35,7 @@ enum adc_vref {
 void adc_init(enum adc_clock clock_divider, enum adc_vref vref);
 void adc_set_lowpass_rc(enum adc_channel channel, uint16_t rc_ms);
 fix16_t adc_get_ch_adc_raw(enum adc_channel channel);
-uint32_t adc_get_ch_mv(enum adc_channel channel);
+int32_t adc_get_ch_mv(enum adc_channel channel);
+fix16_t adc_get_ch_mv_f16(enum adc_channel channel);
 bool adc_get_ready(void);
 void adc_do_periodic_work(void);
