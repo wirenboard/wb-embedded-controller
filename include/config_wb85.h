@@ -18,9 +18,8 @@
 /* ====== Подключения EC к Wiren Board ====== */
 
 // Линия прерывания от EC в линукс
-// Меняет состояние на активное, если в EC есть флаги событий
-#define EC_GPIO_INT                             GPIOA, 8
-#define EC_GPIO_INT_ACTIVE_HIGH
+// Используется только для работы UART-ов
+#define EC_GPIO_UART_INT                        GPIOA, 8
 
 // Кнопка включения
 #define EC_GPIO_PWRKEY                          GPIOA, 0
@@ -94,6 +93,9 @@
 
 // Один USB разъем на DEBUG и NETWORK
 #define EC_USB_HUB_DEBUG_NETWORK
+
+// Поддержка spi-uart
+#define EC_UART_REGMAP_SUPPORT
 
 //                                                    name     freq    sda        scl
 #define SOFTWARE_I2C_DESC(macro)                macro(WBMZ6,   100000, GPIOF, 1,  GPIOF, 0)
