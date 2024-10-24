@@ -13,7 +13,7 @@
 
 static const gpio_pin_t usart_irq_gpio = { EC_GPIO_UART_INT };
 
-static int irq_handled = false;
+static bool irq_handled = false;
 static bool uart_subsystem_initialized = false;
 
 static bool exchange_received[MOD_COUNT];
@@ -53,13 +53,13 @@ static void mod2_uart_irq_handler(void)
 
 static inline void set_irq_gpio_active(void)
 {
-    irq_handled = 1;
+    irq_handled = true;
     GPIO_S_SET(usart_irq_gpio);
 }
 
 static inline void set_irq_gpio_inactive(void)
 {
-    irq_handled = -1;
+    irq_handled = false;
     GPIO_S_RESET(usart_irq_gpio);
 }
 
@@ -136,7 +136,7 @@ void uart_regmap_subsystem_do_periodic_work(void)
     }
 
     // Обработка региона обмена
-    if (irq_handled > 0) {
+    if (irq_handled) {
         for (int i = 0; i < MOD_COUNT; i++) {
             if (!exchange_received[i]) {
                 union uart_exchange e;
@@ -162,12 +162,8 @@ void uart_regmap_subsystem_do_periodic_work(void)
             // Прерывание нужно сбросить после того, как обработаны данные для всех портов
             set_irq_gpio_inactive();
         }
-    }
-
-    // Обработка прерывания
-    if (irq_handled < 0) {
-        irq_handled++;
-    } else if (irq_handled == 0) {
+    } else {
+        // Обработка прерывания
         bool irq_needed = false;
 
         for (int i = 0; i < MOD_COUNT; i++) {
