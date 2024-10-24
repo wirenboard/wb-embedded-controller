@@ -1,6 +1,7 @@
 #pragma once
 #include <stdint.h>
 #include <stddef.h>
+#include "uart-regmap-types.h"
 
 #define UART_REGMAP_CIRC_BUFFER_SIZE        512
 
@@ -11,10 +12,7 @@ struct circ_buf_index {
 
 struct circ_buf_rx {
     struct circ_buf_index i;
-    struct data {
-        uint8_t byte;
-        uint8_t err_flags;
-    } data[UART_REGMAP_CIRC_BUFFER_SIZE];
+    union uart_rx_byte_w_errors data[UART_REGMAP_CIRC_BUFFER_SIZE];
 };
 
 struct circ_buf_tx {
@@ -63,24 +61,22 @@ static inline uint16_t circ_buffer_tx_pop(struct circ_buf_tx *buf)
     return byte;
 }
 
-static inline void circ_buffer_rx_push(struct circ_buf_rx *buf, uint8_t byte, uint8_t err_flags)
+static inline void circ_buffer_rx_push(struct circ_buf_rx *buf, const union uart_rx_byte_w_errors *data)
 {
     uint16_t byte_pos = buf->i.head % UART_REGMAP_CIRC_BUFFER_SIZE;
     circ_buffer_head_inc(&buf->i);
-    buf->data[byte_pos].byte = byte;
-    buf->data[byte_pos].err_flags = err_flags;
+    buf->data[byte_pos].byte_w_errors = data->byte_w_errors;
 }
 
 // Не удаляет данные из буфера
-static inline void circ_buffer_rx_get(struct circ_buf_rx *buf, uint8_t *data, uint8_t *err_flags)
+static inline void circ_buffer_rx_get(struct circ_buf_rx *buf, union uart_rx_byte_w_errors *data)
 {
     uint16_t byte_pos = buf->i.tail % UART_REGMAP_CIRC_BUFFER_SIZE;
-    *data = buf->data[byte_pos].byte;
-    *err_flags = buf->data[byte_pos].err_flags;
+    data->byte_w_errors = buf->data[byte_pos].byte_w_errors;
 }
 
-static inline void circ_buffer_rx_pop(struct circ_buf_rx *buf, uint8_t *data, uint8_t *err_flags)
+static inline void circ_buffer_rx_pop(struct circ_buf_rx *buf, union uart_rx_byte_w_errors *data)
 {
-    circ_buffer_rx_get(buf, data, err_flags);
+    circ_buffer_rx_get(buf, data);
     circ_buffer_tail_inc(&buf->i);
 }

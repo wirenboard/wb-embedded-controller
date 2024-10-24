@@ -19,6 +19,14 @@ enum uart_stop_bits {
     UART_STOP_BITS_1_5 = 3,
 };
 
+union uart_rx_byte_w_errors {
+    struct {
+        uint8_t err_flags;
+        uint8_t byte;
+    };
+    uint16_t byte_w_errors;
+};
+
 struct uart_start_tx {
     uint16_t want_to_tx;
 };
@@ -34,10 +42,7 @@ struct uart_rx {
     uint8_t data_format : 1;
     uint8_t reserved : 5;
     union {
-        struct {
-            uint8_t err_flags;
-            uint8_t byte;
-        } bytes_with_errors[UART_REGMAP_BUFFER_SIZE / 2];
+        union uart_rx_byte_w_errors bytes_with_errors[UART_REGMAP_BUFFER_SIZE / 2];
         uint8_t read_bytes[UART_REGMAP_BUFFER_SIZE];
     };
 };

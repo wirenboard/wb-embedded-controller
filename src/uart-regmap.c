@@ -207,18 +207,19 @@ void uart_regmap_process_irq(const struct uart_descr *u)
     }
 
     if (u->uart->ISR & USART_ISR_RXNE_RXFNE) {
-        uint8_t byte = u->uart->RDR;
+        union uart_rx_byte_w_errors rx_data;
+        rx_data.byte = u->uart->RDR;
         // максимально быстро считываем флаги ошибок и сбрасываем их, разгребем потом
-        uint8_t err_flags = u->uart->ISR;
+        rx_data.err_flags = u->uart->ISR;
         u->uart->ICR = USART_ICR_PECF | USART_ICR_FECF | USART_ICR_NECF | USART_ICR_ORECF;
 
         if (ctx->rx_buf_overflow) {
             ctx->rx_buf_overflow = false;
-            err_flags |= UART_RX_BYTE_ERROR_ORE;
+            rx_data.err_flags |= UART_RX_BYTE_ERROR_ORE;
         }
 
         if (circ_buffer_get_available_space(&ctx->circ_buf_rx.i) > 0) {
-            circ_buffer_rx_push(&ctx->circ_buf_rx, byte, err_flags);
+            circ_buffer_rx_push(&ctx->circ_buf_rx, &rx_data);
         } else {
             ctx->rx_buf_overflow = true;
         }
@@ -291,15 +292,14 @@ void uart_regmap_collect_data_for_new_exchange(const struct uart_descr *u)
         (ctx->rx_data.read_bytes_count == 0))
     {
         // Первый байт определяет формат данных - с ошибками или без
-        uint8_t byte, err_flags;
-        circ_buffer_rx_pop(&ctx->circ_buf_rx, &byte, &err_flags);
-        if (err_flags) {
+        union uart_rx_byte_w_errors data;
+        circ_buffer_rx_pop(&ctx->circ_buf_rx, &data);
+        if (data.err_flags) {
             ctx->rx_data.data_format = 1;
-            ctx->rx_data.bytes_with_errors[0].byte = byte;
-            ctx->rx_data.bytes_with_errors[0].err_flags = err_flags;
+            ctx->rx_data.bytes_with_errors[0].byte_w_errors = data.byte_w_errors;
         } else {
             ctx->rx_data.data_format = 0;
-            ctx->rx_data.read_bytes[0] = byte;
+            ctx->rx_data.read_bytes[0] = data.byte;
         }
         ctx->rx_data.read_bytes_count = 1;
     }
@@ -312,27 +312,26 @@ void uart_regmap_collect_data_for_new_exchange(const struct uart_descr *u)
     while ((circ_buffer_get_used_space(&ctx->circ_buf_rx.i) > 0) &&
             (ctx->rx_data.read_bytes_count < regmap_buf_size))
     {
-        uint8_t byte, err_flags;
+        union uart_rx_byte_w_errors data;
         // Нельзя сразу извлекать байт из буфера, т.к. он может не подойти по формату
-        circ_buffer_rx_get(&ctx->circ_buf_rx, &byte, &err_flags);
+        circ_buffer_rx_get(&ctx->circ_buf_rx, &data);
 
         // В err_flags лежит содержимое регистра ISR
         // используем тот факт, что биты ошибок в регистре ISR совпадают с битами ошибок в UART_RX_BYTE_ERROR_*
         // и просто обнулим лишние биты
-        err_flags &= (UART_RX_BYTE_ERROR_PE | UART_RX_BYTE_ERROR_FE | UART_RX_BYTE_ERROR_NE | UART_RX_BYTE_ERROR_ORE);
+        data.err_flags &= (UART_RX_BYTE_ERROR_PE | UART_RX_BYTE_ERROR_FE | UART_RX_BYTE_ERROR_NE | UART_RX_BYTE_ERROR_ORE);
 
         if (ctx->rx_data.data_format == 1) {
-            ctx->rx_data.bytes_with_errors[ctx->rx_data.read_bytes_count].byte = byte;
-            ctx->rx_data.bytes_with_errors[ctx->rx_data.read_bytes_count].err_flags = err_flags;
+            ctx->rx_data.bytes_with_errors[ctx->rx_data.read_bytes_count].byte_w_errors = data.byte_w_errors;
         } else {
-            if (err_flags) {
+            if (data.err_flags) {
                 // Если встретили байт с ошибкой, а текущий формат данных - без ошибок,
                 // то прекращаем заполнять буфер в regmap.
                 // При следующем обмене данные будут в формате с ошибками
                 // Не пишем ошибки сразу, так как высока вероятность что буфер будет записан целиком полезными данными без ошибок
                 break;
             }
-            ctx->rx_data.read_bytes[ctx->rx_data.read_bytes_count] = byte;
+            ctx->rx_data.read_bytes[ctx->rx_data.read_bytes_count] = data.byte;
         }
         ctx->rx_data.read_bytes_count++;
         // Байт в итоге подходит по формату, извлекаем его из буфера
