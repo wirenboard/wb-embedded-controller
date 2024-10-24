@@ -266,10 +266,6 @@ void uart_regmap_collect_data_for_new_exchange(const struct uart_descr *u)
 {
     struct uart_ctx *ctx = u->ctx;
 
-    // if (ctx->ctrl.enable == 0) {
-    //     return;
-    // }
-
     if (circ_buffer_get_available_space(&ctx->circ_buf_tx.i) >= UART_REGMAP_BUFFER_SIZE) {
         ctx->rx_data.ready_for_tx = 1;
     }
