@@ -253,12 +253,6 @@ void uart_regmap_process_ctrl(const struct uart_descr *u, const struct uart_ctrl
     u->ctx->ctrl.ctrl_applyed = 1;
 }
 
-void uart_regmap_process_start_tx(const struct uart_descr *u, const struct uart_tx *tx)
-{
-    uart_put_tx_data_from_regmap_to_circ_buffer(u, tx);
-}
-
-
 void uart_regmap_process_exchange(const struct uart_descr *u, union uart_exchange *e)
 {
     // Это означает, что TX записали, а из RX всё прочитали за одну транзакцию
