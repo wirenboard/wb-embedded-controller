@@ -53,6 +53,9 @@ static void mod2_uart_irq_handler(void)
 
 static inline void set_irq_gpio_active(void)
 {
+    // Нужно обеспечивать минимальный интервал сбросом и повторной установкой линии прерывания,
+    // иначе линукс может не увидеть его
+    // Необходимый интервао около 200 мкс обеспечивается длительностью основого цикла
     irq_handled = true;
     GPIO_S_SET(usart_irq_gpio);
 }
