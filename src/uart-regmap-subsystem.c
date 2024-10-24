@@ -130,7 +130,7 @@ void uart_regmap_subsystem_do_periodic_work(void)
         struct uart_start_tx uart_tx_start;
         if (regmap_get_data_if_region_changed(uart_descr[i].start_tx_region, &uart_tx_start, sizeof(uart_tx_start))) {
             if (uart_tx_start.want_to_tx) {
-                uart_ctx[i].want_to_tx = 1;
+                uart_ctx[i].want_to_tx = true;
             }
         }
     }
