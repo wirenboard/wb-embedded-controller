@@ -44,6 +44,7 @@ struct uart_rx {
 
 struct uart_tx {
     uint8_t bytes_to_send_count;
+    // регистры 16 бит, зарезервируем 1 байт, чтобы данные начинались с нового регистра
     uint8_t reserved;
     uint8_t bytes_to_send[UART_REGMAP_BUFFER_SIZE];
 };
