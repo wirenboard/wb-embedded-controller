@@ -74,8 +74,30 @@ static inline void enable_txe_irq(const struct uart_descr *u)
 
 static inline void disable_txe_irq(const struct uart_descr *u)
 {
-    u->uart->CR1 &= ~USART_CR1_TXEIE_TXFNFIE;
-    u->ctx->tx_in_progress = false;
+    ATOMIC {
+        // нужно завернуть в atomic, т.к. содержимое регистра CR1 меняется в прерывании
+        // и может быть испорчено, если прерывание произойдет во время RMW
+        u->uart->CR1 &= ~USART_CR1_TXEIE_TXFNFIE;
+        u->ctx->tx_in_progress = false;
+    }
+}
+
+static inline void enable_rxne_irq(const struct uart_descr *u)
+{
+    ATOMIC {
+        // нужно завернуть в atomic, т.к. содержимое регистра CR1 меняется в прерывании
+        // и может быть испорчено, если прерывание произойдет во время RMW
+        u->uart->CR1 |= USART_CR1_RXNEIE_RXFNEIE;
+    }
+}
+
+static inline void disable_rxne_irq(const struct uart_descr *u)
+{
+    ATOMIC {
+        // нужно завернуть в atomic, т.к. содержимое регистра CR1 меняется в прерывании
+        // и может быть испорчено, если прерывание произойдет во время RMW
+        u->uart->CR1 &= ~USART_CR1_RXNEIE_RXFNEIE;
+    }
 }
 
 static void uart_put_tx_data_from_regmap_to_circ_buffer(const struct uart_descr *u, const struct uart_tx *tx)
@@ -275,9 +297,7 @@ void uart_regmap_collect_data_for_new_exchange(const struct uart_descr *u)
         ctx->rx_data.tx_completed = 1;
     }
 
-    ATOMIC {
-        u->uart->CR1 &= ~USART_CR1_RXNEIE_RXFNEIE;
-    }
+    disable_rxne_irq(u);
 
     if ((circ_buffer_get_used_space(&ctx->circ_buf_rx.i) > 0) &&
         (ctx->rx_data.read_bytes_count == 0))
@@ -323,9 +343,7 @@ void uart_regmap_collect_data_for_new_exchange(const struct uart_descr *u)
         // Байт в итоге подходит по формату, извлекаем его из буфера
         circ_buffer_tail_inc(&ctx->circ_buf_rx.i);
     }
-    ATOMIC {
-        u->uart->CR1 |= USART_CR1_RXNEIE_RXFNEIE;
-    }
+    enable_rxne_irq(u);
 }
 
 bool uart_regmap_is_irq_needed(const struct uart_descr *u)
