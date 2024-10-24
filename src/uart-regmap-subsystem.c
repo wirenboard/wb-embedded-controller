@@ -128,6 +128,8 @@ void uart_regmap_subsystem_do_periodic_work(void)
     // Обработка региона начала передачи
     for (int i = 0; i < MOD_COUNT; i++) {
         struct uart_start_tx uart_tx_start;
+        // регион START_TX по сути write-only, запись 1 поверх 1 также ставит флаг region_changed
+        // нет необходимости сбрасывать флаг в регмапе
         if (regmap_get_data_if_region_changed(uart_descr[i].start_tx_region, &uart_tx_start, sizeof(uart_tx_start))) {
             if (uart_tx_start.want_to_tx) {
                 // будет сброшен при установки линии прерывания в активное состояние
@@ -169,6 +171,8 @@ void uart_regmap_subsystem_do_periodic_work(void)
 
         for (int i = 0; i < MOD_COUNT; i++) {
             if (need_to_collect_data[i]) {
+                // нужно вызывать до тех пор, пока regmap_set_region_data не вернет true
+                // с каждым новым вызовом данные будут пополняться, если это возможно
                 uart_regmap_collect_data_for_new_exchange(&uart_descr[i]);
             }
             if (uart_regmap_is_irq_needed(&uart_descr[i])) {
