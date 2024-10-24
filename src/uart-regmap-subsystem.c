@@ -6,6 +6,7 @@
 #include "shared-gpio.h"
 #include "regmap-structs.h"
 #include "gpio.h"
+#include "bits.h"
 #include "uart-regmap.h"
 #include <string.h>
 
@@ -13,13 +14,22 @@
 
 static const gpio_pin_t usart_irq_gpio = { EC_GPIO_UART_INT };
 
+// Битовые флаги для обработки процесса обмена данными по spi
+// Необходимость этих флагов обусловлена тем, что регион exchange записывается линуксом за 1 раз для всех портов,
+// а собрать данные нужно по отдельности для каждого порта
+struct spi_exchange_flags {
+    // произведён обмен (exchange) данными
+    uint8_t exchange_received;
+    // необходимо собрать данные для нового обмена
+    uint8_t need_to_collect_data;
+    // новый обмен готов к передаче
+    uint8_t new_exchange_ready;
+};
+
 static bool irq_handled = false;
 static bool uart_subsystem_initialized = false;
 
-static bool exchange_received[MOD_COUNT];
-static bool need_to_collect_data[MOD_COUNT];
-static bool new_exchange_ready[MOD_COUNT];
-
+static struct spi_exchange_flags spi_exchange_flags;
 static struct uart_ctx uart_ctx[MOD_COUNT] = {};
 
 static const struct uart_descr uart_descr[MOD_COUNT] = {
@@ -82,13 +92,13 @@ void uart_regmap_subsystem_init(void)
     NVIC_SetHandler(USART1_IRQn, mod1_uart_irq_handler);
     NVIC_SetHandler(USART2_IRQn, mod2_uart_irq_handler);
 
+    spi_exchange_flags.exchange_received = 0;
+    spi_exchange_flags.need_to_collect_data = BIT_MASK(MOD_COUNT);
+    spi_exchange_flags.new_exchange_ready = 0;
+
     for (int i = 0; i < MOD_COUNT; i++) {
         NVIC_DisableIRQ(uart_descr[i].irq_num);
         NVIC_ClearPendingIRQ(uart_descr[i].irq_num);
-
-        need_to_collect_data[i] = true;
-        exchange_received[i] = false;
-        new_exchange_ready[i] = false;
 
         memset(&uart_ctx[i], 0, sizeof(struct uart_ctx));
 
@@ -144,28 +154,22 @@ void uart_regmap_subsystem_do_periodic_work(void)
     // Обработка региона обмена
     if (irq_handled) {
         for (int i = 0; i < MOD_COUNT; i++) {
-            if (!exchange_received[i]) {
+            if ((spi_exchange_flags.exchange_received & BIT(i)) == 0) {
+                // если для порта ещё не получена структура exchange, то проверяем, есть ли она
                 union uart_exchange e;
                 if (regmap_get_data_if_region_changed(uart_descr[i].exchange_region, &e, sizeof(e))) {
                     uart_regmap_process_exchange(&uart_descr[i], &e);
-                    exchange_received[i] = true;
+                    // и устанавливаем флаг, что данные получены
+                    spi_exchange_flags.exchange_received |= BIT(i);
                 }
             }
         }
 
-        bool exchange_received_all = true;
-        for (int i = 0; i < MOD_COUNT; i++) {
-            if (!exchange_received[i]) {
-                exchange_received_all = false;
-            }
-        }
-
-        if (exchange_received_all) {
-            for (int i = 0; i < MOD_COUNT; i++) {
-                exchange_received[i] = false;
-                need_to_collect_data[i] = true;
-            }
-            // Прерывание нужно сбросить после того, как обработаны данные для всех портов
+        if (spi_exchange_flags.exchange_received == BIT_MASK(MOD_COUNT)) {
+            // получены данные для всех портов - нужно сбросить прерывание
+            spi_exchange_flags.exchange_received = 0;
+            // и выставить флаг, что пора собирать данные для нового обмена
+            spi_exchange_flags.need_to_collect_data = BIT_MASK(MOD_COUNT);
             set_irq_gpio_inactive();
         }
     } else {
@@ -173,7 +177,7 @@ void uart_regmap_subsystem_do_periodic_work(void)
         bool irq_needed = false;
 
         for (int i = 0; i < MOD_COUNT; i++) {
-            if (need_to_collect_data[i]) {
+            if (spi_exchange_flags.need_to_collect_data & BIT(i)) {
                 // нужно вызывать до тех пор, пока regmap_set_region_data не вернет true
                 // с каждым новым вызовом данные будут пополняться, если это возможно
                 uart_regmap_collect_data_for_new_exchange(&uart_descr[i]);
@@ -184,27 +188,24 @@ void uart_regmap_subsystem_do_periodic_work(void)
         }
 
         if (irq_needed) {
+            // если один из портов хочет прерывание - забираем из всех портов данные для exchange и помещаем в regmap
             for (int i = 0; i < MOD_COUNT; i++) {
-                if (need_to_collect_data[i]) {
+                if (spi_exchange_flags.need_to_collect_data & BIT(i)) {
                     if (regmap_set_region_data(uart_descr[i].exchange_region, &uart_descr[i].ctx->rx_data, sizeof(struct uart_rx))) {
-                        need_to_collect_data[i] = false;
-                        new_exchange_ready[i] = true;
+                        // сбрасываем флаг - данные в regmap, собирать их больше не нужно
+                        spi_exchange_flags.need_to_collect_data &= ~BIT(i);
+                        // и выставляем флаг, что порт готов к новому обмену
+                        spi_exchange_flags.new_exchange_ready |= BIT(i);
                     }
                 }
             }
 
-            bool new_exchange_ready_all = true;
-            for (int i = 0; i < MOD_COUNT; i++) {
-                if (!new_exchange_ready[i]) {
-                    new_exchange_ready_all = false;
-                }
-            }
-
-            if (new_exchange_ready_all) {
+            if (spi_exchange_flags.new_exchange_ready == BIT_MASK(MOD_COUNT)) {
+                // все порты готовы к новому обмену - устанавливаем прерывание и сбрасываем флаги
+                spi_exchange_flags.new_exchange_ready = 0;
+                spi_exchange_flags.need_to_collect_data = 0;
+                spi_exchange_flags.exchange_received = 0;
                 for (int i = 0; i < MOD_COUNT; i++) {
-                    new_exchange_ready[i] = false;
-                    need_to_collect_data[i] = false;
-                    exchange_received[i] = false;
                     uart_ctx[i].want_to_tx = false;
                 }
                 set_irq_gpio_active();
