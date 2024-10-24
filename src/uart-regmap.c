@@ -56,6 +56,12 @@
 
 static_assert(sizeof(struct uart_rx) == sizeof(struct uart_tx), "Size of uart_rx and uart_tx must be equal");
 
+// Порядок бит ошибок должен совпадать с порядком бит ошибок в регистре ISR
+static_assert(UART_RX_BYTE_ERROR_PE == USART_ISR_PE, "UART_RX_BYTE_ERROR_PE must be equal to USART_ISR_PE");
+static_assert(UART_RX_BYTE_ERROR_FE == USART_ISR_FE, "UART_RX_BYTE_ERROR_FE must be equal to USART_ISR_FE");
+static_assert(UART_RX_BYTE_ERROR_NE == USART_ISR_NE, "UART_RX_BYTE_ERROR_NE must be equal to USART_ISR_NE");
+static_assert(UART_RX_BYTE_ERROR_ORE == USART_ISR_ORE, "UART_RX_BYTE_ERROR_ORE must be equal to USART_ISR_ORE");
+
 
 static inline void enable_txe_irq(const struct uart_descr *u)
 {
@@ -202,28 +208,10 @@ void uart_regmap_process_irq(const struct uart_descr *u)
 
     if (u->uart->ISR & USART_ISR_RXNE_RXFNE) {
         uint8_t byte = u->uart->RDR;
-        uint8_t err_flags = 0;
+        // максимально быстро считываем флаги ошибок и сбрасываем их, разгребем потом
+        uint8_t err_flags = u->uart->ISR;
+        u->uart->ICR = USART_ICR_PECF | USART_ICR_FECF | USART_ICR_NECF | USART_ICR_ORECF;
 
-        if (u->uart->ISR & USART_ISR_PE) {
-            u->uart->ICR = USART_ICR_PECF;
-            err_flags |= UART_RX_BYTE_ERROR_PE;
-            ctx->errors.pe++;
-        }
-        if (u->uart->ISR & USART_ISR_FE) {
-            u->uart->ICR = USART_ICR_FECF;
-            err_flags |= UART_RX_BYTE_ERROR_FE;
-            ctx->errors.fe++;
-        }
-        if (u->uart->ISR & USART_ISR_NE) {
-            u->uart->ICR = USART_ICR_NECF;
-            err_flags |= UART_RX_BYTE_ERROR_NE;
-            ctx->errors.ne++;
-        }
-        if (u->uart->ISR & USART_ISR_ORE) {
-            u->uart->ICR = USART_ICR_ORECF;
-            err_flags |= UART_RX_BYTE_ERROR_ORE;
-            ctx->errors.ore++;
-        }
         if (ctx->rx_buf_overflow) {
             ctx->rx_buf_overflow = false;
             err_flags |= UART_RX_BYTE_ERROR_ORE;
@@ -327,6 +315,12 @@ void uart_regmap_collect_data_for_new_exchange(const struct uart_descr *u)
         uint8_t byte, err_flags;
         // Нельзя сразу извлекать байт из буфера, т.к. он может не подойти по формату
         circ_buffer_rx_get(&ctx->circ_buf_rx, &byte, &err_flags);
+
+        // В err_flags лежит содержимое регистра ISR
+        // используем тот факт, что биты ошибок в регистре ISR совпадают с битами ошибок в UART_RX_BYTE_ERROR_*
+        // и просто обнулим лишние биты
+        err_flags &= (UART_RX_BYTE_ERROR_PE | UART_RX_BYTE_ERROR_FE | UART_RX_BYTE_ERROR_NE | UART_RX_BYTE_ERROR_ORE);
+
         if (ctx->rx_data.data_format == 1) {
             ctx->rx_data.bytes_with_errors[ctx->rx_data.read_bytes_count].byte = byte;
             ctx->rx_data.bytes_with_errors[ctx->rx_data.read_bytes_count].err_flags = err_flags;

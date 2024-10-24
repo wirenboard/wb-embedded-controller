@@ -17,12 +17,6 @@ struct uart_ctx {
     bool rx_during_tx;
     bool rx_buf_overflow;
     int tx_bytes_count_in_prev_exchange;
-    struct {
-        uint16_t pe;
-        uint16_t fe;
-        uint16_t ne;
-        uint16_t ore;
-    } errors;
 };
 
 struct uart_descr {
