@@ -94,6 +94,9 @@
 // Один USB разъем на DEBUG и NETWORK
 #define EC_USB_HUB_DEBUG_NETWORK
 
+// EC управляет gpio на MOD1 и MOD2
+#define EC_MOD1_MOD2_GPIO_CONTROL
+
 // Поддержка spi-uart
 #define EC_UART_REGMAP_SUPPORT
 

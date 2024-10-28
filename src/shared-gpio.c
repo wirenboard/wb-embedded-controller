@@ -1,4 +1,7 @@
 #include "shared-gpio.h"
+
+#if defined EC_MOD1_MOD2_GPIO_CONTROL
+
 #include "gpio.h"
 
 #define GPIO_AF_UART                    1   // the same for MOD1 and MOD2
@@ -116,3 +119,5 @@ void shared_gpio_init(void)
         }
     }
 }
+
+#endif
