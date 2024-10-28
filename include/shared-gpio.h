@@ -1,6 +1,9 @@
 #pragma once
 #include <stdint.h>
 #include <stdbool.h>
+#include "config.h"
+
+#ifdef EC_MOD1_MOD2_GPIO_CONTROL
 
 enum mod {
     MOD1,
@@ -35,3 +38,9 @@ enum mod_gpio_mode shared_gpio_get_mode(enum mod mod, enum mod_gpio mod_gpio);
 
 bool shared_gpio_test(enum mod mod, enum mod_gpio mod_gpio);
 void shared_gpio_set_value(enum mod mod, enum mod_gpio mod_gpio, bool value);
+
+#else
+
+static inline void shared_gpio_init(void) {}
+
+#endif

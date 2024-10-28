@@ -48,10 +48,12 @@ static const uint16_t outputs_only_gpios = (
     BIT(EC_EXT_GPIO_V_OUT)
 );
 
-static const enum ec_ext_gpio mod_gpio_base[MOD_COUNT] = {
-    [MOD1] = EC_EXT_GPIO_MOD1_TX,
-    [MOD2] = EC_EXT_GPIO_MOD2_TX
-};
+#if defined EC_MOD1_MOD2_GPIO_CONTROL
+    static const enum ec_ext_gpio mod_gpio_base[MOD_COUNT] = {
+        [MOD1] = EC_EXT_GPIO_MOD1_TX,
+        [MOD2] = EC_EXT_GPIO_MOD2_TX
+    };
+#endif
 
 static const gpio_pin_t v_out_gpio = { EC_GPIO_VOUT_EN };
 
@@ -98,42 +100,46 @@ static void set_mod_gpio_dir(void)
     gpio_ctx.gpio_dir &= ~inputs_only_gpios;
     gpio_ctx.gpio_dir |= outputs_only_gpios;
 
-    for (unsigned mod = 0; mod < MOD_COUNT; mod++) {
-        for (unsigned mod_gpio = 0; mod_gpio < MOD_GPIO_COUNT; mod_gpio++) {
-            uint8_t mod_gpio_index = mod * MOD_GPIO_COUNT + mod_gpio;
-            enum ec_ext_gpio global_gpio_index = mod_gpio_base[mod] + mod_gpio;
-            // Можно менять режим работы пина MODx, только если он не используется как UART
-            uint8_t af = (gpio_ctx.gpio_af >> (mod_gpio_index * 2)) & BIT_FIELD_MASK(2);
-            if (af == GPIO_REGMAP_AF_GPIO) {
-                enum mod_gpio_mode mode = MOD_GPIO_MODE_INPUT;
-                if (gpio_is_output(global_gpio_index)) {
-                    mode = MOD_GPIO_MODE_OUTPUT;
+    #if defined EC_MOD1_MOD2_GPIO_CONTROL
+        for (unsigned mod = 0; mod < MOD_COUNT; mod++) {
+            for (unsigned mod_gpio = 0; mod_gpio < MOD_GPIO_COUNT; mod_gpio++) {
+                uint8_t mod_gpio_index = mod * MOD_GPIO_COUNT + mod_gpio;
+                enum ec_ext_gpio global_gpio_index = mod_gpio_base[mod] + mod_gpio;
+                // Можно менять режим работы пина MODx, только если он не используется как UART
+                uint8_t af = (gpio_ctx.gpio_af >> (mod_gpio_index * 2)) & BIT_FIELD_MASK(2);
+                if (af == GPIO_REGMAP_AF_GPIO) {
+                    enum mod_gpio_mode mode = MOD_GPIO_MODE_INPUT;
+                    if (gpio_is_output(global_gpio_index)) {
+                        mode = MOD_GPIO_MODE_OUTPUT;
+                    }
+                    shared_gpio_set_mode(mod, mod_gpio, mode);
+                } else {
+                    gpio_ctx.gpio_ctrl &= ~BIT(global_gpio_index);
                 }
-                shared_gpio_set_mode(mod, mod_gpio, mode);
-            } else {
-                gpio_ctx.gpio_ctrl &= ~BIT(global_gpio_index);
             }
         }
-    }
+    #endif
 }
 
 static void set_mod_gpio_af(void)
 {
-    for (unsigned mod = 0; mod < MOD_COUNT; mod++) {
-        for (unsigned mod_gpio = 0; mod_gpio < MOD_GPIO_COUNT; mod_gpio++) {
-            enum ec_ext_gpio gpio = mod_gpio_base[mod] + mod_gpio;
-            uint8_t af = (gpio_ctx.gpio_af >> ((mod * MOD_GPIO_COUNT + mod_gpio) * 2)) & BIT_FIELD_MASK(2);
-            if (af == GPIO_REGMAP_AF_GPIO) {
-                if (gpio_is_output(gpio)) {
-                    shared_gpio_set_mode(mod, mod_gpio, MOD_GPIO_MODE_OUTPUT);
-                } else {
-                    shared_gpio_set_mode(mod, mod_gpio, MOD_GPIO_MODE_INPUT);
+    #if defined EC_MOD1_MOD2_GPIO_CONTROL
+        for (unsigned mod = 0; mod < MOD_COUNT; mod++) {
+            for (unsigned mod_gpio = 0; mod_gpio < MOD_GPIO_COUNT; mod_gpio++) {
+                enum ec_ext_gpio gpio = mod_gpio_base[mod] + mod_gpio;
+                uint8_t af = (gpio_ctx.gpio_af >> ((mod * MOD_GPIO_COUNT + mod_gpio) * 2)) & BIT_FIELD_MASK(2);
+                if (af == GPIO_REGMAP_AF_GPIO) {
+                    if (gpio_is_output(gpio)) {
+                        shared_gpio_set_mode(mod, mod_gpio, MOD_GPIO_MODE_OUTPUT);
+                    } else {
+                        shared_gpio_set_mode(mod, mod_gpio, MOD_GPIO_MODE_INPUT);
+                    }
+                } else if (af == GPIO_REGMAP_AF_UART) {
+                    shared_gpio_set_mode(mod, mod_gpio, MOD_GPIO_MODE_AF_UART);
                 }
-            } else if (af == GPIO_REGMAP_AF_UART) {
-                shared_gpio_set_mode(mod, mod_gpio, MOD_GPIO_MODE_AF_UART);
             }
         }
-    }
+    #endif
 }
 
 static void control_v_out(void)
@@ -148,14 +154,16 @@ static void set_gpio_values(void)
     // V_OUT нужно мониторить постоянно, т.к. его состояние зависит от входного напряжения
     control_v_out();
 
-    for (unsigned mod = 0; mod < MOD_COUNT; mod++) {
-        for (unsigned mod_gpio = 0; mod_gpio < MOD_GPIO_COUNT; mod_gpio++) {
-            enum ec_ext_gpio gpio = mod_gpio_base[mod] + mod_gpio;
-            if (shared_gpio_get_mode(mod, mod_gpio) == MOD_GPIO_MODE_OUTPUT) {
-                shared_gpio_set_value(mod, mod_gpio, get_gpio_ctrl(gpio));
+    #if defined EC_MOD1_MOD2_GPIO_CONTROL
+        for (unsigned mod = 0; mod < MOD_COUNT; mod++) {
+            for (unsigned mod_gpio = 0; mod_gpio < MOD_GPIO_COUNT; mod_gpio++) {
+                enum ec_ext_gpio gpio = mod_gpio_base[mod] + mod_gpio;
+                if (shared_gpio_get_mode(mod, mod_gpio) == MOD_GPIO_MODE_OUTPUT) {
+                    shared_gpio_set_value(mod, mod_gpio, get_gpio_ctrl(gpio));
+                }
             }
         }
-    }
+    #endif
 }
 
 static void collect_gpio_states(void)
@@ -169,22 +177,24 @@ static void collect_gpio_states(void)
         BIT(EC_EXT_GPIO_A4)
     );
 
-    for (unsigned mod = 0; mod < MOD_COUNT; mod++) {
-        for (unsigned mod_gpio = 0; mod_gpio < MOD_GPIO_COUNT; mod_gpio++) {
-            enum ec_ext_gpio gpio = mod_gpio_base[mod] + mod_gpio;
-            bool state = false;
-            if (shared_gpio_get_mode(mod, mod_gpio) == MOD_GPIO_MODE_INPUT) {
-                state = shared_gpio_test(mod, mod_gpio);
-            } else if (shared_gpio_get_mode(mod, mod_gpio) == MOD_GPIO_MODE_OUTPUT) {
-                state = get_gpio_ctrl(gpio);
-            }
-            if (state) {
-                gpio_ctx.gpio_ctrl |= BIT(gpio);
-            } else {
-                gpio_ctx.gpio_ctrl &= ~BIT(gpio);
+    #if defined EC_MOD1_MOD2_GPIO_CONTROL
+        for (unsigned mod = 0; mod < MOD_COUNT; mod++) {
+            for (unsigned mod_gpio = 0; mod_gpio < MOD_GPIO_COUNT; mod_gpio++) {
+                enum ec_ext_gpio gpio = mod_gpio_base[mod] + mod_gpio;
+                bool state = false;
+                if (shared_gpio_get_mode(mod, mod_gpio) == MOD_GPIO_MODE_INPUT) {
+                    state = shared_gpio_test(mod, mod_gpio);
+                } else if (shared_gpio_get_mode(mod, mod_gpio) == MOD_GPIO_MODE_OUTPUT) {
+                    state = get_gpio_ctrl(gpio);
+                }
+                if (state) {
+                    gpio_ctx.gpio_ctrl |= BIT(gpio);
+                } else {
+                    gpio_ctx.gpio_ctrl &= ~BIT(gpio);
+                }
             }
         }
-    }
+    #endif
 }
 
 void gpio_init(void)
