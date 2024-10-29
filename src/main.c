@@ -17,14 +17,26 @@
 #include "rcc.h"
 #include "mcu-pwr.h"
 #include "test_subsystem.h"
+#include "hwrev.h"
+#include "buzzer.h"
+#include "temperature-control.h"
+#include "wbmz-common.h"
+#include "wbmz-subsystem.h"
+#include "software_i2c.h"
+#include "uart-regmap-subsystem.h"
+#include "wdt-stm32.h"
 
 int main(void)
 {
     RCC->APBENR1 |= RCC_APBENR1_PWREN;
+    RCC->APBENR2 |= RCC_APBENR2_SYSCFGEN;
     RCC->IOPENR |= RCC_IOPENR_GPIOAEN;
     RCC->IOPENR |= RCC_IOPENR_GPIOBEN;
     RCC->IOPENR |= RCC_IOPENR_GPIOCEN;
     RCC->IOPENR |= RCC_IOPENR_GPIODEN;
+    RCC->IOPENR |= RCC_IOPENR_GPIOFEN;
+
+    watchdog_init();
     system_led_init();
 
     // При включении начинаем всегда с low power run
@@ -42,10 +54,17 @@ int main(void)
     // Это нужно для того, чтобы измерить напряжение на линии +5В и решить что делать дальше
     // Измерение проиходит в wbec_init()
     adc_init(ADC_CLOCK_NO_DIV, ADC_VREF_INT);
+    while (!adc_get_ready()) {};
+
+    mcu_init_poweron_reason();
+
+    hwrev_init_and_check();
+
+    // WBMZ нужно инициализировать до wbec_init, т.к. возможно что нужно будет включаться от WBMZ
+    wbmz_init();
 
     // Первым инициализируется WBEC, т.к. он в начале проверяет причину включения
     // и может заснуть обратно, если решит.
-    // И переинициализуется АЦП на внешний VREF
     wbec_init();
 
     // Дальше попадаем, только если хотим включаться
@@ -55,13 +74,21 @@ int main(void)
 
     // Init drivers
     gpio_init();
+    temperature_control_init();
     spi_slave_init();
     regmap_init();
-    usart_init();
+    usart_tx_init();
+
+    #if defined WBEC_WBMZ6_SUPPORT
+        software_i2c_init();
+    #endif
+
+    hwrev_put_hw_info_to_regmap();
 
     // Init subsystems
     irq_init();
     vmon_init();
+    buzzer_init();
 
     // Кнопка питания инициализируется последней, т.к.
     // при настройке её как источника пробуждения может быть
@@ -76,15 +103,24 @@ int main(void)
         pwrkey_do_periodic_work();
         wdt_do_periodic_work();
         gpio_do_periodic_work();
+        temperature_control_do_periodic_work();
 
         // Sybsystems
         rtc_alarm_do_periodic_work();
         irq_do_periodic_work();
         vmon_do_periodic_work();
         test_do_periodic_work();
+        buzzer_subsystem_do_periodic_work();
+        wbmz_subsystem_do_periodic_work();
+
+        #if defined EC_UART_REGMAP_SUPPORT
+            uart_regmap_subsystem_do_periodic_work();
+        #endif
 
         // Main algorithm
         linux_cpu_pwr_seq_do_periodic_work();
         wbec_do_periodic_work();
+
+        watchdog_reload();
     }
 }

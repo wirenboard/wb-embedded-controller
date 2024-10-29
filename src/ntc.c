@@ -79,7 +79,7 @@ static fix16_t ntc_get_res_kohm(fix16_t adc_val)
     return r_ntc_kom;
 }
 
-static fix16_t ntc_kohm_to_temp(fix16_t ntc_kohm)
+fix16_t ntc_kohm_to_temp(fix16_t ntc_kohm)
 {
     const uint32_t table_size = ARRAY_SIZE(table_ntc);
 

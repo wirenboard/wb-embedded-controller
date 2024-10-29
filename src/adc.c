@@ -51,7 +51,7 @@ struct adc_ctx {
     fix16_t int_vref_coeff;
 };
 
-struct adc_ctx adc_ctx = {};
+static struct adc_ctx adc_ctx = {};
 
 #define ADC_CHANNEL_DATA(alias, ch_num, port, pin, rc_factor, k, offset_mv) \
     { ADC_CHSELR_CHSEL##ch_num, port, pin, rc_factor, ADC_CH_FULL_SCALE_MV(k), offset_mv },
@@ -69,7 +69,7 @@ struct adc_config_record {
     int16_t offset_mv;
 };
 
-struct adc_config_record adc_cfg[ADC_CHANNEL_COUNT] = {
+static const struct adc_config_record adc_cfg[ADC_CHANNEL_COUNT] = {
     ADC_CHANNELS_DESC(ADC_CHANNEL_DATA)
 };
 
@@ -193,7 +193,14 @@ void adc_init(enum adc_clock clock_divider, enum adc_vref vref)
     for (uint8_t i = 0; i < ADC_CHANNEL_COUNT; i++) {
         // Configure ADC GPIOs
         if (adc_cfg[i].port != ADC_NO_GPIO_PIN) {
-            GPIO_SET_ANALOG(adc_cfg[i].port, adc_cfg[i].pin);
+            #if defined DEBUG
+                if (i != ADC_CHANNEL_ADC_HW_VER) {
+                    // ADC_HW_VER connected to GPIOA, 13 (SWDIO) and can't be used in debug mode
+                    GPIO_SET_ANALOG(adc_cfg[i].port, adc_cfg[i].pin);
+                }
+            #else
+                GPIO_SET_ANALOG(adc_cfg[i].port, adc_cfg[i].pin);
+            #endif
         }
         // Enable all ADC channels
         ADC1->CHSELR |= adc_cfg[i].channel;
@@ -235,7 +242,7 @@ fix16_t adc_get_ch_adc_raw(enum adc_channel channel)
 }
 
 // Возвращает милливольты с учётом делителя (K) и оффсета после lowpass фильтра
-uint32_t adc_get_ch_mv(enum adc_channel channel)
+int32_t adc_get_ch_mv(enum adc_channel channel)
 {
     uint8_t ch_index_in_dma_buff = ADC_CHANNEL_INDEX(channel);
     fix16_t ch_raw = adc_ctx.lowpass_values[ch_index_in_dma_buff];
@@ -249,8 +256,23 @@ uint32_t adc_get_ch_mv(enum adc_channel channel)
         raw_value = fix16_to_int(ch_raw);
     }
     // full_scale_mv - коэффициент из расчета, референс АЦП равен ADC_EXT_VREF_MV
-    uint32_t mv = (raw_value * adc_cfg[channel].full_scale_mv) >> ADC_RESOLUTION_BIT;
+    int32_t mv = (raw_value * adc_cfg[channel].full_scale_mv) >> ADC_RESOLUTION_BIT;
     return mv + adc_cfg[channel].offset_mv;
+}
+
+// Возвращает милливольты с учётом делителя (K) и оффсета в формате fix16
+// Максимальное значение 32767 мВ, переполнение не проверяется!
+fix16_t adc_get_ch_mv_f16(enum adc_channel channel)
+{
+    uint8_t ch_index_in_dma_buff = ADC_CHANNEL_INDEX(channel);
+    fix16_t ch_raw = adc_ctx.lowpass_values[ch_index_in_dma_buff];
+
+    if (adc_ctx.vref == ADC_VREF_INT) {
+        ch_raw = fix16_mul(ch_raw, adc_ctx.int_vref_coeff);
+    }
+    fix16_t k = fix16_div(fix16_from_int(adc_cfg[channel].full_scale_mv), F16(4095));
+    fix16_t mv = fix16_mul(ch_raw, k);
+    return mv;
 }
 
 bool adc_get_ready(void)

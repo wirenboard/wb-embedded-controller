@@ -2,6 +2,8 @@
 #include "regmap-int.h"
 #include "console.h"
 #include "rtc.h"
+#include "temperature-control.h"
+#include "wbmz-common.h"
 
 /**
  * Выполняет разные тестовые функции, в обычной работе не участвует.
@@ -17,10 +19,8 @@ static struct test_ctx {
 
 void test_do_periodic_work(void)
 {
-    if (regmap_is_region_changed(REGMAP_REGION_TEST)) {
-        struct REGMAP_TEST test = {};
-        regmap_get_region_data(REGMAP_REGION_TEST, &test, sizeof(test));
-
+    struct REGMAP_TEST test = {};
+    if (regmap_get_data_if_region_changed(REGMAP_REGION_TEST, &test, sizeof(test))) {
         if (test.send_test_message) {
             console_print("\r\n");
             console_print_w_prefix("Test message\r\n\n");
@@ -40,7 +40,11 @@ void test_do_periodic_work(void)
             test.reset_rtc = 0;
         }
 
-        regmap_clear_changed(REGMAP_REGION_TEST);
+        temperature_control_heater_force_control(test.heater_force_enable);
+
+        wbmz_set_charging_force_control(test.wbmz_force_control, test.wbmz_charge_en);
+        wbmz_set_stepup_force_control(test.wbmz_force_control, test.wbmz_stepup_en);
+
         regmap_set_region_data(REGMAP_REGION_TEST, &test, sizeof(test));
     }
 }
