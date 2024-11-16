@@ -65,7 +65,7 @@ struct gpio_ctx {
 
 static struct gpio_ctx gpio_ctx = {
     .gpio_ctrl = 0,
-    .gpio_dir = outputs_only_gpios,
+    .gpio_dir = BIT(EC_EXT_GPIO_V_OUT),
 };
 
 static inline void set_v_out_state(bool state)
