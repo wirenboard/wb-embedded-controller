@@ -25,6 +25,7 @@
 #include "software_i2c.h"
 #include "uart-regmap-subsystem.h"
 #include "wdt-stm32.h"
+#include "jump-to-bootloader.h"
 
 int main(void)
 {
@@ -116,6 +117,8 @@ int main(void)
         #if defined EC_UART_REGMAP_SUPPORT
             uart_regmap_subsystem_do_periodic_work();
         #endif
+
+        jump_to_bootloader_do_periodic_work();
 
         // Main algorithm
         linux_cpu_pwr_seq_do_periodic_work();

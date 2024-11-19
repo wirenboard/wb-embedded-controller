@@ -137,6 +137,10 @@ for FIRMWARE in $FIRMWARES_ORDER; do
         exit -1
     fi
 
+    echo "jump to bootloader"
+    echo "wbec: 0xFF 0x3CD2" > /sys/kernel/debug/wbec/write_reg
+    sleep 0.5
+
     # Kill processes that use wbec-uart ports
     if [[ -x "$(which fuser)" ]]; then
         fuser -k -TERM /dev/ttyWBE* || true
@@ -161,13 +165,13 @@ for FIRMWARE in $FIRMWARES_ORDER; do
     echo "I2C bus: $I2C_BUS"
 
     # Reset to bootloader
-    gpioset $GPIO_BOOT0_NUM=1
-    sleep 0.1
-    gpioset $GPIO_RESET_NUM=1
-    sleep 0.1
-    gpioset $GPIO_RESET_NUM=0
-    sleep 0.5
-    gpioset $GPIO_BOOT0_NUM=0
+    # gpioset $GPIO_BOOT0_NUM=1
+    # sleep 0.1
+    # gpioset $GPIO_RESET_NUM=1
+    # sleep 0.1
+    # gpioset $GPIO_RESET_NUM=0
+    # sleep 0.5
+    # gpioset $GPIO_BOOT0_NUM=0
 
     # Check, bootloader is running
     stm32flash $I2C_BUS -a$BOOTLOADER_I2C_ADDR || {

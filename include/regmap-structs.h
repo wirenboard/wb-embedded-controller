@@ -144,6 +144,10 @@
         /* 0xF0 */  uint16_t wbmz_stepup_en : 1; \
         /* 0xF0 */  uint16_t wbmz_charge_en : 1; \
     ) \
+    /*     Addr     Name            RO/RW */ \
+    m(     0xFF,    JUMP_TO_BOOT,   RW, \
+        /* 0xFF */  uint16_t jump_cmd; \
+    ) \
     /* UARTs */ \
     /*     Addr     Name            RO/RW */ \
     m(     0x100,   UART_CTRL_MOD1, RW, \
