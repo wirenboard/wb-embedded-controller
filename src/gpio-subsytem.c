@@ -15,6 +15,10 @@
  */
 
 // Значения в регионе GPIO_AF (по 2 бита на пин)
+
+#define INPUTS_ONLY_GPIOS (BIT(EC_EXT_GPIO_A1) | BIT(EC_EXT_GPIO_A2) | BIT(EC_EXT_GPIO_A3) | BIT(EC_EXT_GPIO_A4))
+#define OUTPUTS_ONLY_GPIOS (BIT(EC_EXT_GPIO_V_OUT))
+
 enum gpio_regmap_af {
     GPIO_REGMAP_AF_GPIO = 0,
     GPIO_REGMAP_AF_UART = 1,
@@ -37,17 +41,6 @@ enum ec_ext_gpio {
     EC_EXT_GPIO_COUNT
 };
 
-static const uint16_t inputs_only_gpios = (
-    BIT(EC_EXT_GPIO_A1) |
-    BIT(EC_EXT_GPIO_A2) |
-    BIT(EC_EXT_GPIO_A3) |
-    BIT(EC_EXT_GPIO_A4)
-);
-
-static const uint16_t outputs_only_gpios = (
-    BIT(EC_EXT_GPIO_V_OUT)
-);
-
 #if defined EC_MOD1_MOD2_GPIO_CONTROL
     static const enum ec_ext_gpio mod_gpio_base[MOD_COUNT] = {
         [MOD1] = EC_EXT_GPIO_MOD1_TX,
@@ -65,7 +58,7 @@ struct gpio_ctx {
 
 static struct gpio_ctx gpio_ctx = {
     .gpio_ctrl = 0,
-    .gpio_dir = BIT(EC_EXT_GPIO_V_OUT),
+    .gpio_dir = OUTPUTS_ONLY_GPIOS,
 };
 
 static inline void set_v_out_state(bool state)
@@ -97,8 +90,8 @@ static inline bool gpio_is_output(enum ec_ext_gpio gpio)
 
 static void set_mod_gpio_dir(void)
 {
-    gpio_ctx.gpio_dir &= ~inputs_only_gpios;
-    gpio_ctx.gpio_dir |= outputs_only_gpios;
+    gpio_ctx.gpio_dir &= ~INPUTS_ONLY_GPIOS;
+    gpio_ctx.gpio_dir |= OUTPUTS_ONLY_GPIOS;
 
     #if defined EC_MOD1_MOD2_GPIO_CONTROL
         for (unsigned mod = 0; mod < MOD_COUNT; mod++) {
@@ -170,12 +163,7 @@ static void collect_gpio_states(void)
 {
     // Планировали сделать гистерезис на Analog Watchdog
     // вместо использования аппаратных внешних компараторов
-    gpio_ctx.gpio_ctrl &= ~(
-        BIT(EC_EXT_GPIO_A1) |
-        BIT(EC_EXT_GPIO_A2) |
-        BIT(EC_EXT_GPIO_A3) |
-        BIT(EC_EXT_GPIO_A4)
-    );
+    gpio_ctx.gpio_ctrl &= ~INPUTS_ONLY_GPIOS;
 
     #if defined EC_MOD1_MOD2_GPIO_CONTROL
         for (unsigned mod = 0; mod < MOD_COUNT; mod++) {
@@ -212,9 +200,9 @@ void gpio_init(void)
 void gpio_reset(void)
 {
     // Зануляем всё кроме V_OUT - он не должен сбрасываться при перезагрузке
-    gpio_ctx.gpio_ctrl &= BIT(EC_EXT_GPIO_V_OUT);
+    gpio_ctx.gpio_ctrl &= OUTPUTS_ONLY_GPIOS;
     // Все пины по умолчанию на вход (кроме V_OUT)
-    gpio_ctx.gpio_dir = outputs_only_gpios;
+    gpio_ctx.gpio_dir = OUTPUTS_ONLY_GPIOS;
     // Все пины по умолчанию на GPIO
     gpio_ctx.gpio_af = 0;
 
