@@ -1,3 +1,9 @@
+wb-ec-firmware (2.0.1) stable; urgency=medium
+
+  * Initialize gpio_dir as constant
+
+ -- Ilia Skochilov <ilia.skochilov@wirenboard.com>  Tue, 19 Nov 2024 10:02:10 +0300
+
 wb-ec-firmware (2.0.0) stable; urgency=medium
 
   * Add WB8.5 target
