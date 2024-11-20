@@ -16,8 +16,12 @@
 
 // Значения в регионе GPIO_AF (по 2 бита на пин)
 
-#define INPUTS_ONLY_GPIOS (BIT(EC_EXT_GPIO_A1) | BIT(EC_EXT_GPIO_A2) | BIT(EC_EXT_GPIO_A3) | BIT(EC_EXT_GPIO_A4))
-#define OUTPUTS_ONLY_GPIOS (BIT(EC_EXT_GPIO_V_OUT))
+#define INPUTS_ONLY_GPIOS \
+    (BIT(EC_EXT_GPIO_A1) | \
+     BIT(EC_EXT_GPIO_A2) | \
+     BIT(EC_EXT_GPIO_A3) | \
+     BIT(EC_EXT_GPIO_A4))
+#define OUTPUTS_ONLY_GPIOS              (BIT(EC_EXT_GPIO_V_OUT))
 
 enum gpio_regmap_af {
     GPIO_REGMAP_AF_GPIO = 0,
