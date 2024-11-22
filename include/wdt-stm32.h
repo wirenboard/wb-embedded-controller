@@ -8,7 +8,7 @@
 
 // период в 10 секунд выбран, т.к. ЕС уходит в спячку и не может обработать watchdog
 // спит он максимум 5 секунд
-#define WDG_PERIOD_MS                       2000
+#define WDG_PERIOD_MS                       10000
 
 static inline void watchdog_init(void)
 {
