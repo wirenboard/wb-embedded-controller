@@ -1,4 +1,10 @@
-wb-ec-firmware (2.0.1) stable; urgency=medium
+wb-ec-firmware (2.0.2) stable; urgency=medium
+
+  * Define INPUTS_ONLY_GPIOS and OUTPUTS_ONLY_GPIOS as macros
+
+ -- Ilia Skochilov <ilia.skochilov@wirenboard.com>  Tue, 22 Nov 2024 10:02:10 +0300
+
+ wb-ec-firmware (2.0.1) stable; urgency=medium
 
   * fix stm32 watchdog period: set to 10 seconds
 
