@@ -38,6 +38,9 @@ void mcu_goto_standby(uint16_t wakeup_after_s)
     }
     rtc_set_periodic_wakeup(wakeup_after_s);
 
+    // Подробнее про особенности перехода в standby тут:
+    // https://community.st.com/t5/stm32-mcus-embedded-software/how-to-enter-standby-or-shutdown-mode-on-stm32/td-p/145849
+
     // Clear WKUP flags
     // PWR->SCR = PWR_SCR_CWUF;
     // странная история, порядок бит в даташите и в заголовочнике не совпадает
@@ -49,9 +52,13 @@ void mcu_goto_standby(uint16_t wakeup_after_s)
 
     // 011: Standby mode
     PWR->CR1 |= PWR_CR1_LPMS_0 | PWR_CR1_LPMS_1;
+    // Ensure that the previous PWR register operations have been completed
+    (void)PWR->CR1;
 
-    __WFI();
-    while (1) {};
+    while (1) {
+        __DSB();
+        __WFI();
+    };
 }
 
 enum mcu_vcc_5v_state mcu_get_vcc_5v_last_state(void)
