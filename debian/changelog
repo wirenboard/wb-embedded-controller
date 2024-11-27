@@ -1,3 +1,9 @@
+wb-ec-firmware (2.0.2-rc1) stable; urgency=medium
+
+  * fix standby mode entering
+
+ -- Pavel Gasheev <pavel.gasheev@wirenboard.com>  Wed, 27 Nov 2024 17:24:08 +0300
+
 wb-ec-firmware (2.0.1) stable; urgency=medium
 
   * fix stm32 watchdog period: set to 10 seconds
