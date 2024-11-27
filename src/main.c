@@ -58,6 +58,15 @@ int main(void)
 
     mcu_init_poweron_reason();
 
+    // Кнопка питания инициализируется после mcu_init_poweron_reason, т.к.
+    // при настройке её как источника пробуждения может быть
+    // установлен флаг WKUP, а он проверяется в mcu_init_poweron_reason()
+    // Errata 2.2.2
+    // Ещё особенность: при длинном нажатии EC_RESET причина включения переопределяется
+    // на RTC_PERIODIC_WAKEUP и в этом случае pwrkey_init тоже нужно вызывать.
+    // То есть оно должно быть до wbec_init()
+    pwrkey_init();
+
     hwrev_init_and_check();
 
     // WBMZ нужно инициализировать до wbec_init, т.к. возможно что нужно будет включаться от WBMZ
@@ -89,12 +98,6 @@ int main(void)
     irq_init();
     vmon_init();
     buzzer_init();
-
-    // Кнопка питания инициализируется последней, т.к.
-    // при настройке её как источника пробуждения может быть
-    // установлен флаг WKUP, а он проверяется в wbec_init()
-    // Errata 2.2.2
-    pwrkey_init();
 
     while (1) {
         // Drivers

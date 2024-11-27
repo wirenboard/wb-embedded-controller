@@ -205,7 +205,6 @@ void wbec_init(void)
         // Если включились от кнопки
         // Нужно проверить на антидребезг и включиться в обычном режиме
         // (просто идём дальше)
-        pwrkey_init();
         while (!pwrkey_ready()) {
             pwrkey_do_periodic_work();
             watchdog_reload();
