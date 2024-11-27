@@ -14,7 +14,10 @@ void mcu_init_poweron_reason(void)
             PWR->SCR = (1 << (EC_GPIO_PWRKEY_WKUP_NUM - 1 + PWR_SCR_CWUF1));
             mcu_poweron_reason = MCU_POWERON_REASON_POWER_KEY;
         } else if (PWR->SR1 & PWR_SR1_WUFI) {
-            PWR->SCR = PWR_SR1_WUFI;
+            // PWR->SCR = PWR_SCR_CWUF;
+            // странная история, порядок бит в даташите и в заголовочнике не совпадает
+            // используем даташит
+            PWR->SCR = 0x003F;
             if (RTC->SR & RTC_SR_WUTF) {
                 mcu_poweron_reason = MCU_POWERON_REASON_RTC_PERIODIC_WAKEUP;
             } else {
