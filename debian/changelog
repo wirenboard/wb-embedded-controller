@@ -1,4 +1,4 @@
-wb-ec-firmware (2.0.2-rc2) stable; urgency=medium
+wb-ec-firmware (2.0.2) stable; urgency=medium
 
   * fix standby mode entering
   * fix pwrkey init: if EC_RESET was longpressed, pwrkey was not initialized
