@@ -1,4 +1,5 @@
 #include "system-led.h"
+#include "regmap-int.h"
 #include "config.h"
 #include "gpio.h"
 #include "systick.h"
@@ -88,24 +89,21 @@ void system_led_blink(uint16_t on_ms, uint16_t off_ms)
     led_ctx.timestamp = systick_get_system_time_ms();
 }
 
+static void system_led_update_from_regmap(void) {
+    struct REGMAP_LED_CTRL regmap_led;
+    regmap_get_region_data(REGMAP_REGION_LED_CTRL, &regmap_led, sizeof(regmap_led));
+
+    if (regmap_led.led_state) {
+        system_led_enable();
+    } else {
+        system_led_disable();
+    }
+}
+
 void system_led_do_periodic_work(void)
 {
-    if (led_ctx.mode != LED_BLINK) {
-        return;
+    if (regmap_is_region_changed(REGMAP_REGION_LED_CTRL)) {
+        system_led_update_from_regmap();
+        regmap_clear_changed(REGMAP_REGION_LED_CTRL);
     }
-
-    // state принимает значения 0 или 1, используем его как индекс массива для получения
-    // времени ожидания
-    // Если светодиод сейчас выключен (state == 0), нужно получить время до включения (LED_TIME_ON == 0)
-    systime_t delay = led_ctx.time[led_ctx.state];
-    if (systick_get_time_since_timestamp(led_ctx.timestamp) < delay) {
-        return;
-    }
-
-    if (led_ctx.state) {
-        led_gpio_off();
-    } else {
-        led_gpio_on();
-    }
-    led_ctx.timestamp = systick_get_system_time_ms();
 }
