@@ -178,7 +178,6 @@ static void set_mod_gpio_values(uint16_t new_ctrl)
             }
         }
     #endif
-
 }
 
 static void collect_gpio_states(void)
@@ -261,5 +260,6 @@ void gpio_do_periodic_work(void)
     control_v_out();
 
     collect_gpio_states();
+
     regmap_set_region_data(REGMAP_REGION_GPIO_CTRL, &gpio_ctx.gpio_ctrl, sizeof(gpio_ctx.gpio_ctrl));
 }
