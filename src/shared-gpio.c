@@ -39,8 +39,10 @@ static void shared_gpio_set_pa9_remap(enum pa9_remap remap)
     }
 }
 
-void shared_gpio_set_mode(enum mod mod, enum mod_gpio mod_gpio, enum mod_gpio_mode mode)
+static inline void apply_gpio_mode(enum mod mod, enum mod_gpio mod_gpio, enum mod_gpio_mode mode)
 {
+    mod_gpio_modes[mod][mod_gpio] = mode;
+
     if ((mod == MOD1) && (mod_gpio == MOD_GPIO_TX)) {
         if (mode == MOD_GPIO_MODE_PA9_AF_DEBUG_UART) {
             shared_gpio_set_pa9_remap(PA9_REMAP_DEBUG_UART);
@@ -48,8 +50,6 @@ void shared_gpio_set_mode(enum mod mod, enum mod_gpio mod_gpio, enum mod_gpio_mo
             shared_gpio_set_pa9_remap(PA9_REMAP_MOD1);
         }
     }
-
-    mod_gpio_modes[mod][mod_gpio] = mode;
 
     const gpio_pin_t g = mod_gpios[mod][mod_gpio];
 
@@ -69,10 +69,19 @@ void shared_gpio_set_mode(enum mod mod, enum mod_gpio mod_gpio, enum mod_gpio_mo
         break;
 
     case MOD_GPIO_MODE_AF_UART:
-    case MOD_GPIO_MODE_PA9_AF_DEBUG_UART:
         GPIO_S_SET_AF(g, GPIO_AF_UART);
         break;
     }
+}
+
+void shared_gpio_set_mode(enum mod mod, enum mod_gpio mod_gpio, enum mod_gpio_mode mode)
+{
+    if (mode == mod_gpio_modes[mod][mod_gpio]) {
+        // Нужно, чтобы не было лишних переключений режимов
+        return;
+    }
+
+    apply_gpio_mode(mod, mod_gpio, mode);
 }
 
 enum mod_gpio_mode shared_gpio_get_mode(enum mod mod, enum mod_gpio mod_gpio)
@@ -97,11 +106,10 @@ bool shared_gpio_test(enum mod mod, enum mod_gpio mod_gpio)
 
 void shared_gpio_set_value(enum mod mod, enum mod_gpio mod_gpio, bool value)
 {
-    if ((mod_gpio_modes[mod][mod_gpio] != MOD_GPIO_MODE_OUTPUT) &&
-        (mod_gpio_modes[mod][mod_gpio] != MOD_GPIO_MODE_OPENDRAIN))
-    {
-        return;
-    }
+    // Не проверяем режим GPIO. В случае с INPUT или AF не произойдет ничего.
+    // Это нужно для исключения ложных импульсов при переключении режима.
+    // То есть сначала нужно подготовить нужное состояние, а только потом переключать в OUTPUT.
+
     gpio_pin_t g = mod_gpios[mod][mod_gpio];
 
     if (value) {
@@ -115,7 +123,7 @@ void shared_gpio_init(void)
 {
     for (size_t i = 0; i < MOD_COUNT; i++) {
         for (size_t j = 0; j < MOD_GPIO_COUNT; j++) {
-            shared_gpio_set_mode(i, j, MOD_GPIO_MODE_DEFAULT);
+            apply_gpio_mode(i, j, MOD_GPIO_MODE_DEFAULT);
         }
     }
 }
