@@ -1,3 +1,9 @@
+wb-ec-firmware (2.0.3) stable; urgency=medium
+
+  * fix MODx gpio control in case of first calling of gpioset
+
+ -- Pavel Gasheev <pavel.gasheev@wirenboard.com>  Fri, 07 Feb 2025 16:38:17 +0300
+
 wb-ec-firmware (2.0.2) stable; urgency=medium
 
   * fix standby mode entering
