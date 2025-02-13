@@ -5,7 +5,7 @@
 #include "config.h"
 
 /* ADC channels names generation*/
-#define ADC_ENUM(alias, ch_num, port, pin, rc_factor, k, offset_mv)     ADC_CHANNEL_##alias,
+#define ADC_ENUM(alias, ch_num, port, pin, rc_factor, k)     ADC_CHANNEL_##alias,
 
 enum adc_channel {
     ADC_CHANNELS_DESC(ADC_ENUM)
@@ -34,6 +34,7 @@ enum adc_vref {
 
 void adc_init(enum adc_clock clock_divider, enum adc_vref vref);
 void adc_set_lowpass_rc(enum adc_channel channel, uint16_t rc_ms);
+void adc_set_offset_mv(enum adc_channel channel, int16_t offset_mv);
 fix16_t adc_get_ch_adc_raw(enum adc_channel channel);
 int32_t adc_get_ch_mv(enum adc_channel channel);
 fix16_t adc_get_ch_mv_f16(enum adc_channel channel);
