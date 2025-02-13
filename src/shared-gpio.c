@@ -69,6 +69,7 @@ static inline void apply_gpio_mode(enum mod mod, enum mod_gpio mod_gpio, enum mo
         break;
 
     case MOD_GPIO_MODE_AF_UART:
+    case MOD_GPIO_MODE_PA9_AF_DEBUG_UART:
         GPIO_S_SET_AF(g, GPIO_AF_UART);
         break;
     }
