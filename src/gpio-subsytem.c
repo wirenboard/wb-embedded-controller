@@ -78,15 +78,6 @@ static inline void set_v_out_state(bool state)
     }
 }
 
-static inline bool get_bit_value(unsigned index, uint16_t bits)
-{
-    if (bits & BIT(index)) {
-        return true;
-    } else {
-        return false;
-    }
-}
-
 static void set_mod_gpio_dir(uint16_t new_dir)
 {
     new_dir &= ~inputs_only_gpios;
@@ -96,34 +87,48 @@ static void set_mod_gpio_dir(uint16_t new_dir)
         for (unsigned mod = 0; mod < MOD_COUNT; mod++) {
             for (unsigned mod_gpio = 0; mod_gpio < MOD_GPIO_COUNT; mod_gpio++) {
                 enum ec_ext_gpio global_gpio_index = mod_gpio_base[mod] + mod_gpio;
+                const uint16_t global_gpio_mask = BIT(global_gpio_index);
 
-                if ((new_dir ^ gpio_ctx.gpio_dir) & BIT(global_gpio_index)) {
+                // смотрим, поменялось ли направление на пине MODx
+                // для этого сравниваем биты в new_dir и gpio_ctx.gpio_dir
+                // и проверяем, изменился ли бит, соответствующий пину MODx (global_gpio_index)
+                if ((new_dir ^ gpio_ctx.gpio_dir) & global_gpio_mask) {
                     uint8_t mod_gpio_index = mod * MOD_GPIO_COUNT + mod_gpio;
                     uint8_t af = (gpio_ctx.gpio_af >> (mod_gpio_index * 2)) & BIT_FIELD_MASK(2);
                     // Можно менять режим работы пина MODx, только если он не используется как UART
                     if (af == GPIO_REGMAP_AF_GPIO) {
                         enum mod_gpio_mode mode = MOD_GPIO_MODE_INPUT;
-                        if (get_bit_value(global_gpio_index, new_dir)) {
+                        if (new_dir & global_gpio_mask) {
                             mode = MOD_GPIO_MODE_OUTPUT;
-
-                            // Надо проверить, был ли запрос с линукса на установку значения
-                            // этого пина перед сменой на OUTPUT.
-                            // Если был - ставим значение оттуда, если нет - берем из регистра
-                            bool value;
-                            if (gpio_ctx.gpio_ctrl_req_mask & BIT(global_gpio_index)) {
-                                value = get_bit_value(global_gpio_index, gpio_ctx.gpio_ctrl_req_val);
-                                gpio_ctx.gpio_ctrl_req_mask &= ~BIT(global_gpio_index);
+                            /**
+                            * Линукс делает слудующие действия, если хочет изменить режим пина с входа на выход:
+                            * 1) читает текущее состояние пина
+                            *    1.1) если оно уже нужное - состоние не записывает
+                            *    1.2) если нет - записывает в gpio_ctrl (при этом пин всё ещё вход)
+                            * 2) меняет направление на выход
+                            *
+                            * В случае 1.2 будет проблема - между пунктами 1.2 и 2 состояние переопределится
+                            * текущим состояние входа и записанное значение в 1.2 потеряется.
+                            *
+                            * Надо проверить, был ли запрос с линукса на установку значения
+                            * этого пина перед сменой на OUTPUT.
+                            * Если был - ставим значение оттуда, если нет - берем из регистра
+                            */
+                            bool value = gpio_ctx.gpio_ctrl & global_gpio_mask;
+                            if (gpio_ctx.gpio_ctrl_req_mask & global_gpio_mask) {
+                                // Был запрос с линукса - берем значение оттуда
+                                value = gpio_ctx.gpio_ctrl_req_val & global_gpio_mask;
+                                // Сбросим бит в маске запроса
+                                gpio_ctx.gpio_ctrl_req_mask &= ~global_gpio_mask;
                                 // Обновим бит в регистре
-                                gpio_ctx.gpio_ctrl &= ~BIT(global_gpio_index);
-                                gpio_ctx.gpio_ctrl |= gpio_ctx.gpio_ctrl_req_val & BIT(global_gpio_index);
-                            } else {
-                                value = get_bit_value(global_gpio_index, gpio_ctx.gpio_ctrl);
+                                gpio_ctx.gpio_ctrl &= ~global_gpio_mask;
+                                gpio_ctx.gpio_ctrl |= gpio_ctx.gpio_ctrl_req_val & global_gpio_mask;
                             }
                             shared_gpio_set_value(mod, mod_gpio, value);
                         }
                         shared_gpio_set_mode(mod, mod_gpio, mode);
                     } else {
-                        gpio_ctx.gpio_ctrl &= ~BIT(global_gpio_index);
+                        gpio_ctx.gpio_ctrl &= ~global_gpio_mask;
                     }
                 }
             }
@@ -141,7 +146,7 @@ static void set_mod_gpio_af(void)
                 enum ec_ext_gpio gpio = mod_gpio_base[mod] + mod_gpio;
                 uint8_t af = (gpio_ctx.gpio_af >> ((mod * MOD_GPIO_COUNT + mod_gpio) * 2)) & BIT_FIELD_MASK(2);
                 if (af == GPIO_REGMAP_AF_GPIO) {
-                    if (get_bit_value(gpio, gpio_ctx.gpio_dir)) {
+                    if (gpio_ctx.gpio_dir & BIT(gpio)) {
                         shared_gpio_set_mode(mod, mod_gpio, MOD_GPIO_MODE_OUTPUT);
                     } else {
                         shared_gpio_set_mode(mod, mod_gpio, MOD_GPIO_MODE_INPUT);
@@ -157,7 +162,7 @@ static void set_mod_gpio_af(void)
 static void control_v_out(void)
 {
     bool v_in_is_in_proper_range = vmon_get_ch_status(VMON_CHANNEL_V_OUT);
-    bool v_out_ctrl = get_bit_value(EC_EXT_GPIO_V_OUT, gpio_ctx.gpio_ctrl);
+    bool v_out_ctrl = gpio_ctx.gpio_ctrl & BIT(EC_EXT_GPIO_V_OUT);
     set_v_out_state(v_in_is_in_proper_range && v_out_ctrl);
 }
 
@@ -173,7 +178,8 @@ static void set_mod_gpio_values(uint16_t new_ctrl)
                 enum ec_ext_gpio gpio = mod_gpio_base[mod] + mod_gpio;
 
                 if (gpio_ctx.gpio_ctrl_req_mask & BIT(gpio)) {
-                    shared_gpio_set_value(mod, mod_gpio, get_bit_value(gpio, gpio_ctx.gpio_ctrl));
+                    const bool value = gpio_ctx.gpio_ctrl & BIT(gpio);
+                    shared_gpio_set_value(mod, mod_gpio, value);
                 }
             }
         }
