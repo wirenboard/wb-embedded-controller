@@ -48,13 +48,14 @@ struct adc_ctx {
     uint16_t raw_values[ADC_CHANNEL_COUNT];
     fix16_t  lowpass_values[ADC_CHANNEL_COUNT];
     fix16_t  lowpass_factors[ADC_CHANNEL_COUNT];
+    int16_t offset_mv[ADC_CHANNEL_COUNT];
     fix16_t int_vref_coeff;
 };
 
 static struct adc_ctx adc_ctx = {};
 
-#define ADC_CHANNEL_DATA(alias, ch_num, port, pin, rc_factor, k, offset_mv) \
-    { ADC_CHSELR_CHSEL##ch_num, port, pin, rc_factor, ADC_CH_FULL_SCALE_MV(k), offset_mv },
+#define ADC_CHANNEL_DATA(alias, ch_num, port, pin, rc_factor, k) \
+    { ADC_CHSELR_CHSEL##ch_num, port, pin, rc_factor, ADC_CH_FULL_SCALE_MV(k) },
 
 /* This buffer contain order number in dma read sequence adc channels for each record in struct adc_channel adc_ch. It is set in runtime in adc_init() */
 static uint8_t chan_index_in_dma_buff[ADC_CHANNEL_COUNT] = {};
@@ -66,7 +67,6 @@ struct adc_config_record {
     uint8_t pin;
     uint32_t rc_factor;
     uint32_t full_scale_mv;
-    int16_t offset_mv;
 };
 
 static const struct adc_config_record adc_cfg[ADC_CHANNEL_COUNT] = {
@@ -231,6 +231,11 @@ void adc_set_lowpass_rc(enum adc_channel channel, uint16_t rc_ms)
     adc_ctx.lowpass_factors[ch_index_in_dma_buff] = calculate_rc_factor(rc_ms);
 }
 
+void adc_set_offset_mv(enum adc_channel channel, int16_t offset_mv)
+{
+    adc_ctx.offset_mv[channel] = offset_mv;
+}
+
 // Возвращает единицы АЦП после lowpass фильтра
 // [0, 4095] в целой части
 // и результат усреднения в дробной части
@@ -257,7 +262,7 @@ int32_t adc_get_ch_mv(enum adc_channel channel)
     }
     // full_scale_mv - коэффициент из расчета, референс АЦП равен ADC_EXT_VREF_MV
     int32_t mv = (raw_value * adc_cfg[channel].full_scale_mv) >> ADC_RESOLUTION_BIT;
-    return mv + adc_cfg[channel].offset_mv;
+    return mv + adc_ctx.offset_mv[channel];
 }
 
 // Возвращает милливольты с учётом делителя (K) и оффсета в формате fix16

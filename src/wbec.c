@@ -116,6 +116,13 @@ static inline const char * get_poweron_reason_string(enum linux_poweron_reason r
 
 static inline void collect_adc_data(struct REGMAP_ADC_DATA * adc)
 {
+    // При питании от WBMZ не нужно учитывать падение на диоде
+    if (wbmz_is_powered_from_wbmz()) {
+        adc_set_offset_mv(ADC_CHANNEL_ADC_V_IN, 0);
+    } else {
+        adc_set_offset_mv(ADC_CHANNEL_ADC_V_IN, ADC_V_IN_DIODE_DROP_MV);
+    }
+
     // Get voltages
     adc->v_a1 = adc_get_ch_mv(ADC_CHANNEL_ADC_IN1);
     adc->v_a2 = adc_get_ch_mv(ADC_CHANNEL_ADC_IN2);
