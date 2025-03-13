@@ -106,13 +106,6 @@ static inline void disable_rxne_irq(const struct uart_descr *u)
     }
 }
 
-// оставляем только флаги ошибок
-static inline uint8_t uart_isr_get_only_error_flags(uint8_t isr)
-{
-    uint8_t err_flags = isr & (USART_ISR_PE | USART_ISR_FE | USART_ISR_NE | USART_ISR_ORE);
-    return err_flags;
-}
-
 static void uart_put_tx_data_from_regmap_to_circ_buffer(const struct uart_descr *u, const struct uart_tx *tx)
 {
     if ((u->ctx->rx_data.ready_for_tx) && (tx->bytes_to_send_count > 0)) {
@@ -217,7 +210,7 @@ void uart_regmap_process_irq(const struct uart_descr *u)
         union uart_rx_byte_w_errors rx_data;
         rx_data.byte = u->uart->RDR;
         // максимально быстро считываем флаги ошибок и сбрасываем их, разгребем потом
-        rx_data.err_flags = u->uart->ISR;
+        rx_data.err_flags = u->uart->ISR & (USART_ISR_PE | USART_ISR_FE | USART_ISR_NE | USART_ISR_ORE);
         u->uart->ICR = USART_ICR_PECF | USART_ICR_FECF | USART_ICR_NECF | USART_ICR_ORECF;
 
         if (ctx->rx_buf_overflow) {
@@ -302,8 +295,6 @@ void uart_regmap_collect_data_for_new_exchange(const struct uart_descr *u)
         union uart_rx_byte_w_errors data;
         circ_buffer_rx_pop(&ctx->circ_buf_rx, &data);
 
-        data.err_flags = uart_isr_get_only_error_flags(data.err_flags);
-
         if (data.err_flags) {
             ctx->rx_data.data_format = 1;
             ctx->rx_data.bytes_with_errors[0].byte_w_errors = data.byte_w_errors;
@@ -325,11 +316,6 @@ void uart_regmap_collect_data_for_new_exchange(const struct uart_descr *u)
         union uart_rx_byte_w_errors data;
         // Нельзя сразу извлекать байт из буфера, т.к. он может не подойти по формату
         circ_buffer_rx_get(&ctx->circ_buf_rx, &data);
-
-        // В err_flags лежит содержимое регистра ISR
-        // используем тот факт, что биты ошибок в регистре ISR совпадают с битами ошибок в UART_RX_BYTE_ERROR_*
-        // и просто обнулим лишние биты
-        data.err_flags = uart_isr_get_only_error_flags(data.err_flags);
 
         if (ctx->rx_data.data_format == 1) {
             ctx->rx_data.bytes_with_errors[ctx->rx_data.read_bytes_count].byte_w_errors = data.byte_w_errors;
