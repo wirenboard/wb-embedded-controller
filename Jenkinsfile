@@ -1,1 +1,1 @@
-buildDebSbuild defaultTargets: 'bullseye-armhf'
+buildDebSbuild defaultWbdevImage: 'registry.wirenboard.lan/contactless/devenv_test:trixie'
