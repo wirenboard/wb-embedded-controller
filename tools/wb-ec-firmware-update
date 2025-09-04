@@ -104,11 +104,11 @@ is_wbec_running() {
 }
 
 # Try to find GPIO
-GPIO_RESET_NUM=$(gpiofind "$GPIO_RESET") || {
+GPIO_RESET_NUM=$(gpioinfo "$GPIO_RESET" | awk '{print $1,$2}') || {
     echo "GPIO $GPIO_RESET not found"
     exit -1
 }
-GPIO_BOOT0_NUM=$(gpiofind "$GPIO_BOOT0") || {
+GPIO_BOOT0_NUM=$(gpioinfo "$GPIO_BOOT0" | awk '{print $1,$2}') || {
     echo "GPIO $GPIO_BOOT0 not found"
     exit -1
 }
