@@ -565,11 +565,26 @@ void wbec_do_periodic_work(void)
         // В результате PMIC выключается, но питание на линии 5В остаётся.
         // Ограничение по числу попыток нужно, чтобы избежать циклического перезапуска.
         if (!vmon_get_ch_status(VMON_CHANNEL_V33)) {
+            console_print_w_prefix("3.3V is lost\r\n");
+
             if (!vmon_get_ch_status(VMON_CHANNEL_V50)) {
                 // Если при этом нет напряжения на линии 5В - это означает, что выдернули питание
                 // и не надо пытаться включиться заново
                 linux_cpu_pwr_seq_hard_off();
                 new_state(WBEC_STATE_POWER_OFF_SEQUENCE_WAIT);
+            } else if ((wbmz_is_powered_from_wbmz()) && (!wbmz_is_vbat_ok())) {
+                // Может быть ситуация, особенно если нагрузка высокая, когда при полном разряде АКБ +5В
+                // пропадает кратковременно (на 5 мс) и это не детектируется.
+                // При этом +3.3В пропадает, нагрузка снимается, Vbat растет, WB начинает перезагружаться и
+                // так несколько раз, пока WBMZ не разрядится окончательно.
+                // Поэтому, надо проверить, какое напряжение было на WBMZ в момент пропадания +3.3В.
+                // Если оно слишком низкое - значит надо выключить WBMZ. Далее всё выключиться само,
+                // если после отключения WBMZ пропадет +5В (нет внешнего питания или USB).
+                // А если есть внешнее питание - то продолжит работать от него.
+                console_print_w_prefix("WBMZ battery is fully discharged, disable WBMZ to prevent reboot loop\r\n");
+                wbmz_disable_stepup();
+                linux_cpu_pwr_seq_hard_reset();
+                new_state(WBEC_STATE_POWER_ON_SEQUENCE_WAIT);
             } else {
                 if (systick_get_time_since_timestamp(wbec_ctx.power_loss_timestamp) < (WBEC_POWER_LOSS_TIMEOUT_MIN * 60 * 1000)) {
                     wbec_ctx.power_loss_cnt++;
@@ -583,7 +598,7 @@ void wbec_do_periodic_work(void)
                     linux_cpu_pwr_seq_hard_off();
                     new_state(WBEC_STATE_POWER_OFF_SEQUENCE_WAIT);
                 } else {
-                    console_print_w_prefix("3.3V is lost, try to reset power\r\n");
+                    console_print_w_prefix("Try to reset power\r\n");
                     console_print_w_prefix("Enable WBMZ to prevent power loss under load\r\n");
                     wbec_ctx.poweron_reason = REASON_PMIC_OFF;
                     wbmz_enable_stepup();
