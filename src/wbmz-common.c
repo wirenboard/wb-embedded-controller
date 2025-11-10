@@ -56,7 +56,6 @@
         return charge_enabled;
     }
 
-    #include "console.h"
     bool wbmz_is_vbat_ok(void)
     {
         return vmon_get_ch_status(VMON_CHANNEL_VBAT);
