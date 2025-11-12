@@ -56,6 +56,11 @@
         return charge_enabled;
     }
 
+    bool wbmz_is_vbat_ok(void)
+    {
+        return vmon_get_ch_status(VMON_CHANNEL_VBAT);
+    }
+
     void wbmz_set_charging_force_control(bool force_control, bool en)
     {
         if (force_control) {
@@ -70,6 +75,11 @@
     static void wbmz_charging_control(void) {}
     bool wbmz_is_charging_enabled(void) {
         // Если нет управления зарядом, то заряд всегда включен схемотехникой
+        return true;
+    }
+    bool wbmz_is_vbat_ok(void)
+    {
+        // Если не знаем напряжение на батарее, считаем что оно в норме
         return true;
     }
     void wbmz_set_charging_force_control(bool force_control, bool en)
