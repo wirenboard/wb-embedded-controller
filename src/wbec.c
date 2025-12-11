@@ -22,6 +22,7 @@
 #include "temperature-control.h"
 #include "wbmz-common.h"
 #include "wdt-stm32.h"
+#include "spi-slave.h"
 
 #define LINUX_POWERON_REASON(m) \
     m(REASON_POWER_ON,        "Power supply on"        ) \
@@ -607,6 +608,13 @@ void wbec_do_periodic_work(void)
                 }
             }
         }
+
+        if (spi_slave_get_time_since_last_transaction() > WBEC_SPI_SLAVE_INACTIVITY_TIMEOUT_MS) {
+            // Если не было активности по SPI длительное время - сбрасываем регмап
+            buzzer_beep(EC_BUZZER_BEEP_FREQ, 500);
+            console_print_w_prefix("No SPI activity detected\r\n");
+        }
+
         break;
 
     case WBEC_STATE_POWER_OFF_SEQUENCE_WAIT:

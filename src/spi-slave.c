@@ -3,6 +3,7 @@
 #include "gpio.h"
 #include "regmap-ext.h"
 #include "config.h"
+#include "systick.h"
 
 /**
  * Реализация SPI Slave с размером слова 16 бит
@@ -61,6 +62,7 @@ enum spi_slave_op {
 };
 
 static enum spi_slave_op spi_op;
+static uint32_t last_spi_transaction_timestamp = 0;
 
 #if defined SPI_SLAVE_PAD_WORDS_COUNT
     static unsigned spi_tx_pad_words_cnt;
@@ -146,6 +148,11 @@ void spi_slave_init(void)
     NVIC_SetPriority(SPI2_IRQn, 0);
 }
 
+uint32_t spi_slave_get_time_since_last_transaction(void)
+{
+    return systick_get_time_since_timestamp(last_spi_transaction_timestamp);
+}
+
 static void spi_irq_handler(void)
 {
     if (SPI2->SR & SPI_SR_RXNE) {
@@ -196,6 +203,8 @@ static void spi_irq_handler(void)
         #endif
         spi_tx_u16(w);
     }
+
+    last_spi_transaction_timestamp = systick_get_system_time_ms();
 }
 
 static void exti_irq_handler(void)
