@@ -1,3 +1,9 @@
+wb-ec-firmware (2.0.6) stable; urgency=medium
+
+  * beep if no SPI requests for 1000 ms
+
+ -- Pavel Gasheev <pavel.gasheev@wirenboard.com>  Thu, 11 Dec 2025 15:34:27 +0300
+
 wb-ec-firmware (2.0.5) stable; urgency=medium
 
   * fix reboot loop when WBMZ is discharged
