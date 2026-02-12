@@ -3,6 +3,15 @@
 
 #define UART_REGMAP_BUFFER_SIZE             64
 
+enum uart_word_length {
+    // values according to STM32G0 reference manual
+    UART_WORD_LEN_8 = 0,
+    UART_WORD_LEN_9 = 1,
+    UART_WORD_LEN_7 = 2,
+
+    UART_WORD_LEN_MAX_VALUE = UART_WORD_LEN_7
+};
+
 enum uart_parity {
     UART_PARITY_NONE = 0,
     UART_PARITY_EVEN = 1,
@@ -61,6 +70,7 @@ struct uart_ctrl {
     /* offset 0x01 */
     uint16_t baud_x100;
     /* offset 0x02 */
+    uint16_t word_length : 2;
     uint16_t parity : 2;
     uint16_t stop_bits : 2;
     uint16_t rs485_enabled : 1;

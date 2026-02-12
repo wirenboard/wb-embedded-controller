@@ -140,20 +140,38 @@ void uart_apply_ctrl(const struct uart_descr *u, bool enable_req)
     u->uart->CR2 &= ~USART_CR2_STOP;
     u->uart->CR2 |= (ctrl->stop_bits << USART_CR2_STOP_Pos);
 
+    // word length:
+    switch (ctrl->word_length)
+    {
+        default:
+        case: UART_WORD_LEN_8:
+            u->uart->CR1 &= ~USART_CR1_M;
+            break;
+        case: UART_WORD_LEN_9:
+            u->uart->CR1 &= ~USART_CR1_M1;
+            u->uart->CR1 |= USART_CR1_M0;
+            break;
+        case: UART_WORD_LEN_7:
+            u->uart->CR1 &= ~USART_CR1_M0;
+            u->uart->CR1 |= USART_CR1_M1;
+            break;
+
+    }
+
     // parity
     switch (ctrl->parity) {
     default:
     case UART_PARITY_NONE:
-        u->uart->CR1 &= ~(USART_CR1_PCE | USART_CR1_PS | USART_CR1_M);
+        u->uart->CR1 &= ~(USART_CR1_PCE | USART_CR1_PS);
         break;
 
     case UART_PARITY_EVEN:
         u->uart->CR1 &= ~USART_CR1_PS;
-        u->uart->CR1 |= USART_CR1_PCE | USART_CR1_M0;
+        u->uart->CR1 |= USART_CR1_PCE;
         break;
 
     case UART_PARITY_ODD:
-        u->uart->CR1 |= USART_CR1_PCE | USART_CR1_PS | USART_CR1_M0;
+        u->uart->CR1 |= USART_CR1_PCE | USART_CR1_PS;
         break;
     }
 
@@ -243,6 +261,10 @@ void uart_regmap_process_ctrl(const struct uart_descr *u, const struct uart_ctrl
     // valid baud 1200..115200
     if ((ctrl->baud_x100 >= 12) && (ctrl->baud_x100 <= 1152)) {
         ctx->ctrl.baud_x100 = ctrl->baud_x100;
+    }
+
+    if (ctrl->word_length <= UART_WORD_LEN_MAX_VALUE) {
+        ctx->ctrl.word_length = ctrl->word_length;
     }
 
     if (ctrl->parity <= UART_PARITY_MAX_VALUE) {
