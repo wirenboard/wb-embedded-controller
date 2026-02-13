@@ -8,9 +8,9 @@ enum uart_word_length {
     // Такая логика выбрана для обратной совместимости (ранее было всегда 8 бит), чтобы
     // при активации бита чётности не изменялась фактическая длина данных на передачу/приём,
     // а просто добавлялся бит контроля чётности.
-    UART_WORD_LEN_6 = 6,
-    UART_WORD_LEN_7 = 7,
-    UART_WORD_LEN_8 = 8,
+    UART_WORD_LEN_6 = 0,
+    UART_WORD_LEN_7 = 1,
+    UART_WORD_LEN_8 = 2,
 
     UART_WORD_LEN_MAX_VALUE = UART_WORD_LEN_8
 };

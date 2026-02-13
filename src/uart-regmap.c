@@ -141,26 +141,27 @@ void uart_apply_ctrl(const struct uart_descr *u, bool enable_req)
     u->uart->CR2 |= (ctrl->stop_bits << USART_CR2_STOP_Pos);
 
     // word length:
-    int word_len_data_with_parity = ctrl->word_length;
+    // Если включен контроль четности, то фактическая длина данных на передачу/прием увеличивается на 1 бит
+    // Разершённые комбинации 6 + 1, 7 + 0, 7 + 1, 8 + 0, 8 + 1 бит данных + контроль четности.
+    // Комбинация 6 + 0 бит данных не поддерживается и отсеивается в uart_regmap_process_ctrl.
+    int word_len_data_with_parity = 6 + ctrl->word_length;
     if(ctrl->parity != UART_PARITY_NONE) {
-        // Если включен контроль четности, то фактическая длина данных на передачу/прием увеличивается на 1 бит
         word_len_data_with_parity++;
     }
     // STM32 задаёт количество бит данных с учётом бита чётности
-    switch (word_len_data_with_parity)
-    {
-        case UART_WORD_LEN_6 + 1:
-            u->uart->CR1 &= ~USART_CR1_M0;
-            u->uart->CR1 |= USART_CR1_M1;
-            break;
-        default:
-        case UART_WORD_LEN_7 + 1:
-            u->uart->CR1 &= ~USART_CR1_M;
-            break;
-        case UART_WORD_LEN_8 + 1:
-            u->uart->CR1 &= ~USART_CR1_M1;
-            u->uart->CR1 |= USART_CR1_M0;
-            break;
+    switch (word_len_data_with_parity) {
+    case 7:
+        u->uart->CR1 &= ~USART_CR1_M0;
+        u->uart->CR1 |= USART_CR1_M1;
+        break;
+    default:
+    case 8:
+        u->uart->CR1 &= ~USART_CR1_M;
+        break;
+    case 9:
+        u->uart->CR1 &= ~USART_CR1_M1;
+        u->uart->CR1 |= USART_CR1_M0;
+        break;
     }
 
     // parity
@@ -271,10 +272,8 @@ void uart_regmap_process_ctrl(const struct uart_descr *u, const struct uart_ctrl
     if(ctrl->word_length == UART_WORD_LEN_7 ||
        ctrl->word_length == UART_WORD_LEN_8 ||
        (ctrl->word_length == UART_WORD_LEN_6 && ctrl->parity != UART_PARITY_NONE)) {
-        if (ctrl->word_length <= UART_WORD_LEN_MAX_VALUE) {
-            ctx->ctrl.word_length = ctrl->word_length;
-        }
         if (ctrl->parity <= UART_PARITY_MAX_VALUE) {
+            ctx->ctrl.word_length = ctrl->word_length;
             ctx->ctrl.parity = ctrl->parity;
         }
     }
