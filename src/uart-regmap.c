@@ -141,21 +141,26 @@ void uart_apply_ctrl(const struct uart_descr *u, bool enable_req)
     u->uart->CR2 |= (ctrl->stop_bits << USART_CR2_STOP_Pos);
 
     // word length:
-    switch (ctrl->word_length)
+    int word_len_data_with_parity = ctrl->word_length;
+    if(ctrl->parity != UART_PARITY_NONE) {
+        // Если включен контроль четности, то фактическая длина данных на передачу/прием увеличивается на 1 бит
+        word_len_data_with_parity++;
+    }
+    // STM32 задаёт количество бит данных с учётом бита чётности
+    switch (word_len_data_with_parity)
     {
-        default:
-        case: UART_WORD_LEN_8:
-            u->uart->CR1 &= ~USART_CR1_M;
-            break;
-        case: UART_WORD_LEN_9:
-            u->uart->CR1 &= ~USART_CR1_M1;
-            u->uart->CR1 |= USART_CR1_M0;
-            break;
-        case: UART_WORD_LEN_7:
+        case UART_WORD_LEN_6 + 1:
             u->uart->CR1 &= ~USART_CR1_M0;
             u->uart->CR1 |= USART_CR1_M1;
             break;
-
+        default:
+        case UART_WORD_LEN_7 + 1:
+            u->uart->CR1 &= ~USART_CR1_M;
+            break;
+        case UART_WORD_LEN_8 + 1:
+            u->uart->CR1 &= ~USART_CR1_M1;
+            u->uart->CR1 |= USART_CR1_M0;
+            break;
     }
 
     // parity
@@ -263,12 +268,15 @@ void uart_regmap_process_ctrl(const struct uart_descr *u, const struct uart_ctrl
         ctx->ctrl.baud_x100 = ctrl->baud_x100;
     }
 
-    if (ctrl->word_length <= UART_WORD_LEN_MAX_VALUE) {
-        ctx->ctrl.word_length = ctrl->word_length;
-    }
-
-    if (ctrl->parity <= UART_PARITY_MAX_VALUE) {
-        ctx->ctrl.parity = ctrl->parity;
+    if(ctrl->word_length == UART_WORD_LEN_7 ||
+       ctrl->word_length == UART_WORD_LEN_8 ||
+       (ctrl->word_length == UART_WORD_LEN_6 && ctrl->parity != UART_PARITY_NONE)) {
+        if (ctrl->word_length <= UART_WORD_LEN_MAX_VALUE) {
+            ctx->ctrl.word_length = ctrl->word_length;
+        }
+        if (ctrl->parity <= UART_PARITY_MAX_VALUE) {
+            ctx->ctrl.parity = ctrl->parity;
+        }
     }
 
     // all values are valid

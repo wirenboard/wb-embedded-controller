@@ -4,12 +4,15 @@
 #define UART_REGMAP_BUFFER_SIZE             64
 
 enum uart_word_length {
-    // values according to STM32G0 reference manual
-    UART_WORD_LEN_8 = 0,
-    UART_WORD_LEN_9 = 1,
-    UART_WORD_LEN_7 = 2,
+    // Имеется в виду количество бит данных без учёта бита чётности, даже если он включён.
+    // Такая логика выбрана для обратной совместимости (ранее было всегда 8 бит), чтобы
+    // при активации бита чётности не изменялась фактическая длина данных на передачу/приём,
+    // а просто добавлялся бит контроля чётности.
+    UART_WORD_LEN_6 = 6,
+    UART_WORD_LEN_7 = 7,
+    UART_WORD_LEN_8 = 8,
 
-    UART_WORD_LEN_MAX_VALUE = UART_WORD_LEN_7
+    UART_WORD_LEN_MAX_VALUE = UART_WORD_LEN_8
 };
 
 enum uart_parity {
@@ -70,11 +73,11 @@ struct uart_ctrl {
     /* offset 0x01 */
     uint16_t baud_x100;
     /* offset 0x02 */
-    uint16_t word_length : 2;
     uint16_t parity : 2;
     uint16_t stop_bits : 2;
     uint16_t rs485_enabled : 1;
     uint16_t rs485_rx_during_tx : 1;
+    uint16_t word_length : 2;
 };
 
 union uart_exchange {
