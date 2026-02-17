@@ -233,6 +233,19 @@ void uart_regmap_process_irq(const struct uart_descr *u)
     if (u->uart->ISR & USART_ISR_RXNE_RXFNE) {
         union uart_rx_byte_w_errors rx_data;
         rx_data.byte = u->uart->RDR;
+        if(u->uart->CR1 & USART_CR1_PCE) { // If parity enabled
+            switch (u->uart->CR1 & USART_CR1_M) {
+            default:
+            case USART_CR1_M0: // 8 data bits (without parity)
+                break;
+            case 0:            // 7 data bits (without parity)
+                rx_data.byte &= 0x7F;
+                break;
+            case USART_CR1_M1: // 6 data bits (without parity)
+                rx_data.byte &= 0x3F;
+                break;
+            }
+        }
         // максимально быстро считываем флаги ошибок и сбрасываем их, разгребем потом
         rx_data.err_flags = u->uart->ISR & (USART_ISR_PE | USART_ISR_FE | USART_ISR_NE | USART_ISR_ORE);
         u->uart->ICR = USART_ICR_PECF | USART_ICR_FECF | USART_ICR_NECF | USART_ICR_ORECF;
