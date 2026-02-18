@@ -142,27 +142,9 @@ void uart_apply_ctrl(const struct uart_descr *u, bool enable_req)
 
     // word length:
     // Если включен контроль четности, то фактическая длина данных на передачу/прием увеличивается на 1 бит
-    // Разершённые комбинации 6 + 1, 7 + 0, 7 + 1, 8 + 0, 8 + 1 бит данных + контроль четности.
-    // Комбинация 6 + 0 бит данных не поддерживается и отсеивается в uart_regmap_process_ctrl.
-    int word_len_data_with_parity = 6 + ctrl->word_length;
-    if(ctrl->parity != UART_PARITY_NONE) {
-        word_len_data_with_parity++;
-    }
-    // STM32 задаёт количество бит данных с учётом бита чётности
-    switch (word_len_data_with_parity) {
-    case 7:
-        u->uart->CR1 &= ~USART_CR1_M0;
-        u->uart->CR1 |= USART_CR1_M1;
-        break;
-    default:
-    case 8:
-        u->uart->CR1 &= ~USART_CR1_M;
-        break;
-    case 9:
-        u->uart->CR1 &= ~USART_CR1_M1;
-        u->uart->CR1 |= USART_CR1_M0;
-        break;
-    }
+    // Разершённые комбинации (7 + 0), (7 + 1), (8 + 0), (8 + 1) (бит данных + бит четности).
+    // Остальные комбинации не поддерживается и отсеивается в uart_regmap_process_ctrl.
+    int word_len_data_with_parity = 8 - ctrl->word_length; // добавим бит чётности ниже...
 
     // parity
     switch (ctrl->parity) {
@@ -172,12 +154,30 @@ void uart_apply_ctrl(const struct uart_descr *u, bool enable_req)
         break;
 
     case UART_PARITY_EVEN:
+        ++word_len_data_with_parity;
         u->uart->CR1 &= ~USART_CR1_PS;
         u->uart->CR1 |= USART_CR1_PCE;
         break;
 
     case UART_PARITY_ODD:
+        ++word_len_data_with_parity;
         u->uart->CR1 |= USART_CR1_PCE | USART_CR1_PS;
+        break;
+    }
+
+    // STM32 задаёт количество бит данных с учётом бита чётности
+    switch (word_len_data_with_parity) {
+    case 9: // 8e, 8o modes
+        u->uart->CR1 &= ~USART_CR1_M1;
+        u->uart->CR1 |= USART_CR1_M0;
+        break;
+    default:
+    case 8: // 8n, 7e, 7o modes
+        u->uart->CR1 &= ~USART_CR1_M;
+        break;
+    case 7: // 7n mode
+        u->uart->CR1 &= ~USART_CR1_M0;
+        u->uart->CR1 |= USART_CR1_M1;
         break;
     }
 
@@ -233,18 +233,11 @@ void uart_regmap_process_irq(const struct uart_descr *u)
     if (u->uart->ISR & USART_ISR_RXNE_RXFNE) {
         union uart_rx_byte_w_errors rx_data;
         rx_data.byte = u->uart->RDR;
-        if(u->uart->CR1 & USART_CR1_PCE) { // If parity enabled
-            switch (u->uart->CR1 & USART_CR1_M) {
-            default:
-            case USART_CR1_M0: // 8 data bits (without parity)
-                break;
-            case 0:            // 7 data bits (without parity)
-                rx_data.byte &= 0x7F;
-                break;
-            case USART_CR1_M1: // 6 data bits (without parity)
-                rx_data.byte &= 0x3F;
-                break;
-            }
+        // 7e, 7o, 7n modes need zeroing MSB bit in received byte:
+        // STM32 can also obtain 6e, 6o and 9n modes, but we dont use it in our software.
+        if ((u->uart->CR1 & (USART_CR1_M | USART_CR1_PCE) == USART_CR1_PCE) || // 7e, 7o modes
+           (u->uart->CR1 & USART_CR1_M == USART_CR1_M1)) {  // 7n mode
+            rx_data.byte &= 0x7F;
         }
         // максимально быстро считываем флаги ошибок и сбрасываем их, разгребем потом
         rx_data.err_flags = u->uart->ISR & (USART_ISR_PE | USART_ISR_FE | USART_ISR_NE | USART_ISR_ORE);
@@ -282,13 +275,12 @@ void uart_regmap_process_ctrl(const struct uart_descr *u, const struct uart_ctrl
         ctx->ctrl.baud_x100 = ctrl->baud_x100;
     }
 
-    if(ctrl->word_length == UART_WORD_LEN_7 ||
-       ctrl->word_length == UART_WORD_LEN_8 ||
-       (ctrl->word_length == UART_WORD_LEN_6 && ctrl->parity != UART_PARITY_NONE)) {
-        if (ctrl->parity <= UART_PARITY_MAX_VALUE) {
-            ctx->ctrl.word_length = ctrl->word_length;
-            ctx->ctrl.parity = ctrl->parity;
-        }
+    if (ctrl->word_length <= UART_WORD_LEN_MAX_VALUE) {
+        ctx->ctrl.word_length = ctrl->word_length;
+    }
+
+    if (ctrl->parity <= UART_PARITY_MAX_VALUE) {
+        ctx->ctrl.parity = ctrl->parity;
     }
 
     // all values are valid
