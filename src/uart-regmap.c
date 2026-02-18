@@ -235,8 +235,8 @@ void uart_regmap_process_irq(const struct uart_descr *u)
         rx_data.byte = u->uart->RDR;
         // 7e, 7o, 7n modes need zeroing MSB bit in received byte:
         // STM32 can also obtain 6e, 6o and 9n modes, but we dont use it in our software.
-        if ((u->uart->CR1 & (USART_CR1_M | USART_CR1_PCE) == USART_CR1_PCE) || // 7e, 7o modes
-           (u->uart->CR1 & USART_CR1_M == USART_CR1_M1)) {  // 7n mode
+        if (((u->uart->CR1 & (USART_CR1_M | USART_CR1_PCE)) == USART_CR1_PCE) || // 7e, 7o modes
+           ((u->uart->CR1 & USART_CR1_M) == USART_CR1_M1)) {  // 7n mode
             rx_data.byte &= 0x7F;
         }
         // максимально быстро считываем флаги ошибок и сбрасываем их, разгребем потом
