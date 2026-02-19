@@ -3,6 +3,17 @@
 
 #define UART_REGMAP_BUFFER_SIZE             64
 
+enum uart_word_length {
+    // Имеется в виду количество бит данных без учёта бита чётности, даже если он включён.
+    // Такая логика выбрана для обратной совместимости (ранее было всегда 8 бит), чтобы
+    // при активации бита чётности не изменялась фактическая длина данных на передачу/приём,
+    // а просто добавлялся бит контроля чётности.
+    UART_WORD_LEN_8 = 0,
+    UART_WORD_LEN_7 = 1,
+
+    UART_WORD_LEN_MAX_VALUE = UART_WORD_LEN_7
+};
+
 enum uart_parity {
     UART_PARITY_NONE = 0,
     UART_PARITY_EVEN = 1,
@@ -65,6 +76,7 @@ struct uart_ctrl {
     uint16_t stop_bits : 2;
     uint16_t rs485_enabled : 1;
     uint16_t rs485_rx_during_tx : 1;
+    uint16_t word_length : 2; // reserve 2 bits for 0/1 value for optional adding 6-,9-data bits modes in future
 };
 
 union uart_exchange {

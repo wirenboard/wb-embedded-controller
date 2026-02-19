@@ -140,20 +140,44 @@ void uart_apply_ctrl(const struct uart_descr *u, bool enable_req)
     u->uart->CR2 &= ~USART_CR2_STOP;
     u->uart->CR2 |= (ctrl->stop_bits << USART_CR2_STOP_Pos);
 
+    // word length:
+    // Если включен контроль четности, то фактическая длина данных на передачу/прием увеличивается на 1 бит
+    // Разершённые комбинации (7 + 0), (7 + 1), (8 + 0), (8 + 1) (бит данных + бит четности).
+    // Остальные комбинации не поддерживается и отсеивается в uart_regmap_process_ctrl.
+    int word_len_data_with_parity = 8 - ctrl->word_length; // добавим бит чётности ниже...
+
     // parity
     switch (ctrl->parity) {
     default:
     case UART_PARITY_NONE:
-        u->uart->CR1 &= ~(USART_CR1_PCE | USART_CR1_PS | USART_CR1_M);
+        u->uart->CR1 &= ~(USART_CR1_PCE | USART_CR1_PS);
         break;
 
     case UART_PARITY_EVEN:
+        ++word_len_data_with_parity;
         u->uart->CR1 &= ~USART_CR1_PS;
-        u->uart->CR1 |= USART_CR1_PCE | USART_CR1_M0;
+        u->uart->CR1 |= USART_CR1_PCE;
         break;
 
     case UART_PARITY_ODD:
-        u->uart->CR1 |= USART_CR1_PCE | USART_CR1_PS | USART_CR1_M0;
+        ++word_len_data_with_parity;
+        u->uart->CR1 |= USART_CR1_PCE | USART_CR1_PS;
+        break;
+    }
+
+    // STM32 задаёт количество бит данных с учётом бита чётности
+    switch (word_len_data_with_parity) {
+    case 9: // 8e, 8o modes
+        u->uart->CR1 &= ~USART_CR1_M1;
+        u->uart->CR1 |= USART_CR1_M0;
+        break;
+    default:
+    case 8: // 8n, 7e, 7o modes
+        u->uart->CR1 &= ~USART_CR1_M;
+        break;
+    case 7: // 7n mode
+        u->uart->CR1 &= ~USART_CR1_M0;
+        u->uart->CR1 |= USART_CR1_M1;
         break;
     }
 
@@ -209,6 +233,12 @@ void uart_regmap_process_irq(const struct uart_descr *u)
     if (u->uart->ISR & USART_ISR_RXNE_RXFNE) {
         union uart_rx_byte_w_errors rx_data;
         rx_data.byte = u->uart->RDR;
+        // 7e, 7o, 7n modes need zeroing MSB bit in received byte:
+        // STM32 can also obtain 6e, 6o and 9n modes, but we dont use it in our software.
+        if (((u->uart->CR1 & (USART_CR1_M | USART_CR1_PCE)) == USART_CR1_PCE) || // 7e, 7o modes
+           ((u->uart->CR1 & USART_CR1_M) == USART_CR1_M1)) {  // 7n mode
+            rx_data.byte &= 0x7F;
+        }
         // максимально быстро считываем флаги ошибок и сбрасываем их, разгребем потом
         rx_data.err_flags = u->uart->ISR & (USART_ISR_PE | USART_ISR_FE | USART_ISR_NE | USART_ISR_ORE);
         u->uart->ICR = USART_ICR_PECF | USART_ICR_FECF | USART_ICR_NECF | USART_ICR_ORECF;
@@ -243,6 +273,10 @@ void uart_regmap_process_ctrl(const struct uart_descr *u, const struct uart_ctrl
     // valid baud 1200..115200
     if ((ctrl->baud_x100 >= 12) && (ctrl->baud_x100 <= 1152)) {
         ctx->ctrl.baud_x100 = ctrl->baud_x100;
+    }
+
+    if (ctrl->word_length <= UART_WORD_LEN_MAX_VALUE) {
+        ctx->ctrl.word_length = ctrl->word_length;
     }
 
     if (ctrl->parity <= UART_PARITY_MAX_VALUE) {

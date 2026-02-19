@@ -1,3 +1,9 @@
+wb-ec-firmware (2.1.0-rc1) stable; urgency=medium
+
+  * add support for various uart word length 7 bit
+
+ -- Egor Panchenko <egor.panchenko@wirenboard.com>  Thu, 12 Feb 2026 18:11:00 +0300
+
 wb-ec-firmware (2.0.5) stable; urgency=medium
 
   * fix reboot loop when WBMZ is discharged

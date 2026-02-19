@@ -105,6 +105,7 @@ void uart_regmap_subsystem_init(void)
         uart_ctx[i].ctrl.baud_x100 = 1152;
         uart_ctx[i].ctrl.parity = UART_PARITY_NONE;
         uart_ctx[i].ctrl.stop_bits = UART_STOP_BITS_1;
+        uart_ctx[i].ctrl.word_length = UART_WORD_LEN_8;
 
         uart_ctx[i].rx_data.ready_for_tx = 1;
 
