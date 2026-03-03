@@ -3,4 +3,7 @@ release/
 release_internal/
 build/
 *.svd
-unittests/regmap_test
+unittests/**/build/
+unittests/**/covr_report/
+covr_report/
+covr_report_project/

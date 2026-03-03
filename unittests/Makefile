@@ -1,13 +1,21 @@
+# This test name
+TEST_NAME = regmap_test
 
-UNIT_FOLDER = ../src
+# Project root directory
+PROJ_DIR = ..
+
+# Source files to be checked
+TESTED_SRC += $(PROJ_DIR)/src/regmap.c
+
+# Include directories
+INC += .
+INC += $(PROJ_DIR)/include
+INC += $(PROJ_DIR)/system/include
+
+# List of tests
 TEST_LIST = regmap_test
-INC = . ../include ../system/include
 
-all: $(TEST_LIST)
+# This test does not use Unity framework
+NO_USE_UNITY = 1
 
-%_test: %_test.c $(UNIT_FOLDER)/%.c
-	gcc $(addprefix -D, $(DEFS)) $(addprefix -I, $(INC)) $^ -o $@
-	./$@
-
-clean:
-	rm -f $(TEST_LIST)
+include $(PROJ_DIR)/system/build_unittests.mk

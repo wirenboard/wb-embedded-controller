@@ -3,20 +3,37 @@
 DEFS += $(MODEL_DEFINE)
 
 #######################################
+# macOS compatibility
+#######################################
+
+UNAME_S := $(shell uname -s)
+ifeq ($(UNAME_S),Darwin)
+    # macOS - use GNU tools if available, fallback to BSD versions
+    SED_CMD := $(shell which gsed 2>/dev/null || which sed)
+    GREP_CMD := $(shell which ggrep 2>/dev/null || which grep)
+    FIND_CMD := $(shell which gfind 2>/dev/null || which find)
+else
+    # Linux systems
+    SED_CMD := sed
+    GREP_CMD := grep
+    FIND_CMD := find
+endif
+
+#######################################
 # version parsing
 #######################################
 
 # get version string from ChangeLog if VERSION_STRING is not defined
-VERSION_STRING ?= $(shell cat ChangeLog | grep version: | head -n 1 | sed 's/.*version:[ ]*//')
+VERSION_STRING ?= $(shell cat ChangeLog | $(GREP_CMD) version: | head -n 1 | $(SED_CMD) 's/.*version:[ ]*//')
 
 # check version string format using regexp
 VERSION := $(shell echo $(VERSION_STRING) | awk '/[0-9]+\.[0-9]+\.[0-9]+(\+wb[1-9][0-9]*|-rc[1-9][0-9]*)?$$/{print $$0}')
 
 # split version into digits
-VERSION_MAJOR := $(shell echo $(VERSION) | sed 's/[/.].*//')
-VERSION_MINOR := $(shell echo $(VERSION) | sed 's/[0-9]*[/.]//' | sed 's/[/.].*//')
-VERSION_PATCH := $(shell echo $(VERSION) | sed 's/[0-9]*[/.][0-9]*[/.]//' | sed 's/[-\+].*//')
-VERSION_SUFFIX := $(shell echo $(VERSION) | sed 's/[0-9]*[/.][0-9]*[/.][0-9]*//' | sed 's/[\+a-zA-Z]*//g')
+VERSION_MAJOR := $(shell echo $(VERSION) | $(SED_CMD) 's/[/.].*//')
+VERSION_MINOR := $(shell echo $(VERSION) | $(SED_CMD) 's/[0-9]*[/.]//' | $(SED_CMD) 's/[/.].*//')
+VERSION_PATCH := $(shell echo $(VERSION) | $(SED_CMD) 's/[0-9]*[/.][0-9]*[/.]//' | $(SED_CMD) 's/[-\+].*//')
+VERSION_SUFFIX := $(shell echo $(VERSION) | $(SED_CMD) 's/[0-9]*[/.][0-9]*[/.][0-9]*//' | $(SED_CMD) 's/[\+a-zA-Z]*//g')
 
 ifndef VERSION_SUFFIX
 VERSION_SUFFIX := 0
@@ -31,7 +48,7 @@ endif
 
 # global defines with version in different formats
 DEFS += FW_VERSION_NUMBERS=$(VERSION_MAJOR),$(VERSION_MINOR),$(VERSION_PATCH),$(VERSION_SUFFIX)
-DEFS += FW_VERSION_STRING=$(shell echo $(VERSION) | sed "s/./\\\\\'&\\\\\',/g" | sed 's/.$$//')
+DEFS += FW_VERSION_STRING=$(shell echo $(VERSION) | $(SED_CMD) "s/./\\\\\'&\\\\\',/g" | $(SED_CMD) 's/.$$//')
 DEFS += FW_VERSION=$(shell echo $$(( ($(VERSION_MAJOR) << 24) + ($(VERSION_MINOR) << 16) + ($(VERSION_PATCH) << 8) + $(VERSION_SUFFIX_M) )))
 
 #######################################
@@ -44,7 +61,7 @@ BUILD_DIR = $(TARGET_DIR)/build
 RELEASE_DIR = release
 
 GIT_HASH := $(shell git rev-parse HEAD | cut -c -7 )
-GIT_BRANCH := $(shell git rev-parse --abbrev-ref HEAD | sed "s/\//_/")
+GIT_BRANCH := $(shell git rev-parse --abbrev-ref HEAD | $(SED_CMD) "s/\//_/")
 GIT_INFO := $(shell echo "$(GIT_HASH)"_"$(GIT_BRANCH)" | head -c 56)
 GIT_INFO := $(shell echo "\\\"$(GIT_INFO)\\\"")
 
@@ -60,7 +77,8 @@ C_SOURCES += system/startup.c
 C_SOURCES += $(wildcard $(SRC_DIR)/*.c)
 
 # add submodules
-C_SOURCES += $(wildcard $(addsuffix /*.c, $(SUBMODULES_DIR)))
+SUBMODULE_C_SOURCES = $(wildcard $(addsuffix /*.c, $(SUBMODULES_DIR)))
+C_SOURCES += $(SUBMODULE_C_SOURCES)
 
 C_INCLUDES = $(INCLUDE_DIR) $(SUBMODULES_DIR)
 
@@ -102,8 +120,20 @@ LDFLAGS += -Wl,--print-memory-usage
 #######################################
 
 # Не запускаем тесты libfixmath, т.к. мы не меняем этот репозиторий
-UNITTESTS_DIRS += $(shell find -type d | grep unittests | grep -v libfixmath)
+DISABLE_UNITTESTS += libfixmath
+
+UNITTESTS_DIRS += $(shell \
+    $(FIND_CMD) . -type d | $(GREP_CMD) unittests | \
+    $(GREP_CMD) -v $(foreach pattern,$(DISABLE_UNITTESTS),-e $(pattern)) \
+)
 UNITTESTS_TARGETS = $(addprefix UNITTEST_, $(UNITTESTS_DIRS))
+
+# Project-only unittests (excluding submodules)
+PROJECT_UNITTESTS_DIRS = $(shell [ -d ./unittests ] && $(FIND_CMD) ./unittests -type f -name Makefile -exec dirname {} \; || true)
+
+SUBMODULE_UNITTESTS_DIRS = $(filter-out libfixmath . , \
+    $(sort $(foreach dir,$(SUBMODULES_DIR),$(firstword $(subst /, ,$(dir)))))\
+)
 
 #######################################
 # targets
@@ -153,7 +183,7 @@ $(BUILD_DIR): $(TARGET_DIR)
 $(RELEASE_DIR):
 	mkdir -p $@
 
-clean:
+clean: remove_report_dir remove_project_report_dir
 	rm -rf build
 	rm -rf $(RELEASE_DIR)
 	@for dir in $(UNITTESTS_DIRS); do \
@@ -167,5 +197,8 @@ version:
 
 version_check:
 	@if [ -z $(VERSION) ]; then echo "ERROR: No version detected in Changelog" && exit 1; fi
+
+# Include coverage definitions and targets
+include system/build_common_coverage.mk
 
 -include $(wildcard $(BUILD_DIR)/*.d)
