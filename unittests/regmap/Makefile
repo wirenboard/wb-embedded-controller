@@ -2,13 +2,14 @@
 TEST_NAME = regmap_test
 
 # Project root directory
-PROJ_DIR = ..
+PROJ_DIR = ../..
 
 # Source files to be checked
 TESTED_SRC += $(PROJ_DIR)/src/regmap.c
 
 # Include directories
 INC += .
+INC += ..
 INC += $(PROJ_DIR)/include
 INC += $(PROJ_DIR)/system/include
 
