@@ -1,3 +1,6 @@
 [submodule "libfixmath"]
 	path = libfixmath
 	url = git@github.com:PetteriAimonen/libfixmath.git
+[submodule "system/Unity"]
+	path = system/Unity
+	url = https://github.com/ThrowTheSwitch/Unity.git
