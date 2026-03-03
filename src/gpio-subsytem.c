@@ -37,16 +37,16 @@ enum ec_ext_gpio {
     EC_EXT_GPIO_COUNT
 };
 
-static const uint16_t inputs_only_gpios = (
-    BIT(EC_EXT_GPIO_A1) |
-    BIT(EC_EXT_GPIO_A2) |
-    BIT(EC_EXT_GPIO_A3) |
-    BIT(EC_EXT_GPIO_A4)
-);
+#define INPUTS_ONLY_GPIOS   (   \
+    BIT(EC_EXT_GPIO_A1) |       \
+    BIT(EC_EXT_GPIO_A2) |       \
+    BIT(EC_EXT_GPIO_A3) |       \
+    BIT(EC_EXT_GPIO_A4)         \
+)
 
-static const uint16_t outputs_only_gpios = (
-    BIT(EC_EXT_GPIO_V_OUT)
-);
+#define OUTPUTS_ONLY_GPIOS  (   \
+    BIT(EC_EXT_GPIO_V_OUT)      \
+)
 
 #if defined EC_MOD1_MOD2_GPIO_CONTROL
     static const enum ec_ext_gpio mod_gpio_base[MOD_COUNT] = {
@@ -66,7 +66,7 @@ struct gpio_ctx {
 };
 
 static struct gpio_ctx gpio_ctx = {
-    .gpio_dir = outputs_only_gpios,
+    .gpio_dir = OUTPUTS_ONLY_GPIOS,
 };
 
 static inline void set_v_out_state(bool state)
@@ -80,8 +80,8 @@ static inline void set_v_out_state(bool state)
 
 static void set_mod_gpio_dir(uint16_t new_dir)
 {
-    new_dir &= ~inputs_only_gpios;
-    new_dir |= outputs_only_gpios;
+    new_dir &= ~INPUTS_ONLY_GPIOS;
+    new_dir |= OUTPUTS_ONLY_GPIOS;
 
     #if defined EC_MOD1_MOD2_GPIO_CONTROL
         for (unsigned mod = 0; mod < MOD_COUNT; mod++) {
@@ -235,7 +235,7 @@ void gpio_reset(void)
     gpio_ctx.gpio_af = 0;
 
     // Все пины по умолчанию на вход (кроме V_OUT)
-    set_mod_gpio_dir(outputs_only_gpios);
+    set_mod_gpio_dir(OUTPUTS_ONLY_GPIOS);
     set_mod_gpio_af();
 
     regmap_set_region_data(REGMAP_REGION_GPIO_CTRL, &gpio_ctx.gpio_ctrl, sizeof(gpio_ctx.gpio_ctrl));
