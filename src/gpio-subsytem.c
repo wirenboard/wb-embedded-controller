@@ -65,7 +65,9 @@ struct gpio_ctx {
     uint16_t gpio_af;
 };
 
-static struct gpio_ctx gpio_ctx;
+static struct gpio_ctx gpio_ctx = {
+    .gpio_dir = outputs_only_gpios,
+};
 
 static inline void set_v_out_state(bool state)
 {
@@ -215,9 +217,6 @@ static void collect_gpio_states(void)
 
 void gpio_init(void)
 {
-    // Инициализируем gpio_dir значением по умолчанию
-    gpio_ctx.gpio_dir = outputs_only_gpios;
-
     // V_OUT управляет транзистором, нужен выход push-pull
     set_v_out_state(0);
     GPIO_S_SET_PUSHPULL(v_out_gpio);
