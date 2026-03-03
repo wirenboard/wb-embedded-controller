@@ -67,6 +67,7 @@ int main(void)
     const enum regmap_region last_region = REGMAP_REGION_COUNT - 1;
 
     // Check regions overlap
+    printf("Testing regions for overlap...\n");
     for (int r = 0; r < last_region - 1; r++) {
         if ((region_first_reg(r) + region_reg_count(r)) > region_first_reg(r + 1)) {
             printf("ERROR: Region %d overlaps next region\n", r);
@@ -75,12 +76,14 @@ int main(void)
     }
 
     // Check last region
+    printf("Testing last region bounds...\n");
     if ((region_first_reg(last_region) + region_reg_count(last_region)) >= REGMAP_TOTAL_REGS_COUNT) {
         printf("ERROR: Last region overlaps max address 0xFF\n");
         return -EADDRINUSE;
     }
 
     // Write data to regions
+    printf("Writing test data to all regions...\n");
     uint16_t autoinc = 0;
     for (int r = 0; r < REGMAP_REGION_COUNT; r++)
     {
@@ -95,6 +98,7 @@ int main(void)
     }
 
     // Readback data from regs throught all regmap with autoinc
+    printf("Reading back data with autoinc through entire regmap...\n");
     autoinc = 0;
     regmap_ext_prepare_operation(0);
     for (int reg = 0; reg < REGMAP_TOTAL_REGS_COUNT; reg++) {
@@ -125,6 +129,7 @@ int main(void)
     regmap_ext_end_operation();
 
     // Check region RO/RW
+    printf("Testing RO/RW region protection...\n");
     // Write all regs with data
     uint16_t autodec = UINT16_MAX;
     regmap_ext_prepare_operation(0);
@@ -135,6 +140,7 @@ int main(void)
     regmap_ext_end_operation();
 
     // Check that only RW region written
+    printf("Verifying that only RW regions were modified...\n");
     autodec = UINT16_MAX;
     autoinc = 0;
     regmap_ext_prepare_operation(0);
@@ -174,6 +180,7 @@ int main(void)
     regmap_ext_end_operation();
 
     // Check is_changed flags
+    printf("Testing is_changed flags...\n");
     for (int r = 0; r < REGMAP_REGION_COUNT; r++) {
         if (is_region_rw(r)) {
             if (!regmap_get_data_if_region_changed(r, NULL, 0)) {
