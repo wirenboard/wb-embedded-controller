@@ -6,4 +6,3 @@ build/
 unittests/**/build/
 unittests/**/covr_report/
 covr_report/
-covr_report_project/

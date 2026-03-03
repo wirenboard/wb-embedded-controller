@@ -128,13 +128,6 @@ UNITTESTS_DIRS += $(shell \
 )
 UNITTESTS_TARGETS = $(addprefix UNITTEST_, $(UNITTESTS_DIRS))
 
-# Project-only unittests (excluding submodules)
-PROJECT_UNITTESTS_DIRS = $(shell [ -d ./unittests ] && $(FIND_CMD) ./unittests -type f -name Makefile -exec dirname {} \; || true)
-
-SUBMODULE_UNITTESTS_DIRS = $(filter-out libfixmath . , \
-    $(sort $(foreach dir,$(SUBMODULES_DIR),$(firstword $(subst /, ,$(dir)))))\
-)
-
 #######################################
 # targets
 #######################################
@@ -183,7 +176,7 @@ $(BUILD_DIR): $(TARGET_DIR)
 $(RELEASE_DIR):
 	mkdir -p $@
 
-clean: remove_report_dir remove_project_report_dir
+clean: remove_report_dir
 	rm -rf build
 	rm -rf $(RELEASE_DIR)
 	@for dir in $(UNITTESTS_DIRS); do \
