@@ -9,7 +9,7 @@ TESTED_SRC += $(PROJ_DIR)/src/regmap.c
 
 # Include directories
 INC += .
-INC += ..
+INC += ../utest_helpers
 INC += $(PROJ_DIR)/include
 INC += $(PROJ_DIR)/system/include
 
