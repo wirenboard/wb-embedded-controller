@@ -120,10 +120,10 @@ static void test_get_temperature_negative(void)
 {
     LOG_INFO("Testing get temperature - negative values");
 
-    utest_ntc_set_temperature(F16(EC_HEATER_ON_TEMP));
+    utest_ntc_set_temperature(F16(-15.5));
 
     int16_t temp_x100 = temperature_control_get_temperature_c_x100();
-    TEST_ASSERT_EQUAL_INT16_MESSAGE((int16_t)(EC_HEATER_ON_TEMP * 100), temp_x100, "Temperature x100 should match EC_HEATER_ON_TEMP");
+    TEST_ASSERT_EQUAL_INT16_MESSAGE(-1550, temp_x100, "Temperature x100 should be -1550 for -15.5°C");
 }
 
 

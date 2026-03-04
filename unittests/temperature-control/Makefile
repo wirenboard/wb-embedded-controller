@@ -34,6 +34,9 @@ INC += $(PROJ_DIR)/libfixmath/libfixmath
 TEST_LIST = temperature_control_test
 
 # Compiler defs
-DEFS += UNITY_OUTPUT_COLOR MODEL_WB85
+DEFS += UNITY_OUTPUT_COLOR
+
+# List of targets
+TARGETS_LIST = MODEL_WB74 MODEL_WB85
 
 include $(PROJ_DIR)/system/build_unittests.mk
