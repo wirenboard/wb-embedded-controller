@@ -266,6 +266,60 @@ static void test_heater_hysteresis(void)
 }
 
 
+static void test_heater_turns_off_when_wbmz_power_enabled_during_heating(void)
+{
+    LOG_INFO("Testing heater turns off when switched to WBMZ power during heating");
+
+    temperature_control_init();
+
+    // Set low temperature and proper power conditions to enable heater
+    utest_ntc_set_temperature(F16(EC_HEATER_ON_TEMP - 1.0));
+    utest_wbmz_set_powered_from_wbmz(false);
+    utest_vmon_set_ch_status(VMON_CHANNEL_V_IN, true);
+
+    temperature_control_do_periodic_work();
+
+    // Verify heater turned on
+    uint32_t state = utest_gpio_get_output_state(heater_pin);
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(1, state, "Heater should be ON at low temperature with Vin");
+
+    // Now switch to WBMZ power while heater is running
+    utest_wbmz_set_powered_from_wbmz(true);
+    temperature_control_do_periodic_work();
+
+    // Heater should automatically turn off
+    state = utest_gpio_get_output_state(heater_pin);
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, state, "Heater should turn OFF when switched to WBMZ power");
+}
+
+
+static void test_heater_turns_off_when_vin_lost_during_heating(void)
+{
+    LOG_INFO("Testing heater turns off when Vin is lost during heating");
+
+    temperature_control_init();
+
+    // Set low temperature and proper power conditions to enable heater
+    utest_ntc_set_temperature(F16(EC_HEATER_ON_TEMP - 1.0));
+    utest_wbmz_set_powered_from_wbmz(false);
+    utest_vmon_set_ch_status(VMON_CHANNEL_V_IN, true);
+
+    temperature_control_do_periodic_work();
+
+    // Verify heater turned on
+    uint32_t state = utest_gpio_get_output_state(heater_pin);
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(1, state, "Heater should be ON at low temperature with Vin");
+
+    // Now lose Vin while heater is running
+    utest_vmon_set_ch_status(VMON_CHANNEL_V_IN, false);
+    temperature_control_do_periodic_work();
+
+    // Heater should automatically turn off
+    state = utest_gpio_get_output_state(heater_pin);
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, state, "Heater should turn OFF when Vin is lost");
+}
+
+
 static void test_heater_force_control_enable(void)
 {
     LOG_INFO("Testing heater force control enable");
@@ -330,6 +384,8 @@ int main(void)
     RUN_TEST(test_heater_turns_off_at_high_temperature);
     RUN_TEST(test_heater_stays_off_when_powered_from_wbmz);
     RUN_TEST(test_heater_stays_off_when_vin_not_present);
+    RUN_TEST(test_heater_turns_off_when_wbmz_power_enabled_during_heating);
+    RUN_TEST(test_heater_turns_off_when_vin_lost_during_heating);
     RUN_TEST(test_heater_hysteresis);
     RUN_TEST(test_heater_force_control_enable);
     RUN_TEST(test_heater_force_control_disable);
