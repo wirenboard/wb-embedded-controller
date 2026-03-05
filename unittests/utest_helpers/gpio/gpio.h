@@ -6,6 +6,8 @@
 
 #define __IO volatile
 
+#define BIT_FIELD_MASK(len)                     ((1U << len) - 1U)
+
 typedef struct {
     __IO uint32_t MODER;       /*!< GPIO port mode register,               Address offset: 0x00      */
     __IO uint32_t OTYPER;      /*!< GPIO port output type register,        Address offset: 0x04      */
