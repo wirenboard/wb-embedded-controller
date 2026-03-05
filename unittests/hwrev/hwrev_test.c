@@ -37,6 +37,16 @@ static void watchdog_reload_callback_trigger_reset(void)
 #define HWREV_ADC_VALUE_EXPECTED(res_up, res_down) \
     ((res_down) * 4096 / ((res_up) + (res_down)))
 
+#define HWREV_ADC_VALUE_MIN(res_up, res_down) \
+    HWREV_ADC_VALUE_EXPECTED(res_up, res_down) - \
+    (HWREV_ADC_VALUE_EXPECTED(res_up, res_down) * WBEC_HWREV_DIFF_PERCENT / 100) - \
+    WBEC_HWREV_DIFF_ADC
+
+#define HWREV_ADC_VALUE_MAX(res_up, res_down) \
+    HWREV_ADC_VALUE_EXPECTED(res_up, res_down) + \
+    (HWREV_ADC_VALUE_EXPECTED(res_up, res_down) * WBEC_HWREV_DIFF_PERCENT / 100) + \
+    WBEC_HWREV_DIFF_ADC
+
 // Helper macro for getting revision code
 #define __HWREV_CODE(hwrev_name, hwrev_code, res_up, res_down) hwrev_code,
 static const uint16_t hwrev_codes[HWREV_COUNT] = {
@@ -48,6 +58,20 @@ static const uint16_t hwrev_codes[HWREV_COUNT] = {
     HWREV_ADC_VALUE_EXPECTED(res_up, res_down),
 static const int16_t hwrev_adc_values[HWREV_COUNT] = {
     WBEC_HWREV_DESC(__HWREV_ADC_VALUES)
+};
+
+// Helper macro for getting ADC min values
+#define __HWREV_ADC_MIN_VALUES(hwrev_name, hwrev_code, res_up, res_down) \
+    HWREV_ADC_VALUE_MIN(res_up, res_down),
+static const int16_t hwrev_adc_min_values[HWREV_COUNT] = {
+    WBEC_HWREV_DESC(__HWREV_ADC_MIN_VALUES)
+};
+
+// Helper macro for getting ADC max values
+#define __HWREV_ADC_MAX_VALUES(hwrev_name, hwrev_code, res_up, res_down) \
+    HWREV_ADC_VALUE_MAX(res_up, res_down),
+static const int16_t hwrev_adc_max_values[HWREV_COUNT] = {
+    WBEC_HWREV_DESC(__HWREV_ADC_MAX_VALUES)
 };
 
 void setUp(void)
@@ -433,14 +457,127 @@ static void test_hwrev_nvic_reset_on_mismatch(void)
 }
 
 
+// Test hwrev detection at ADC range boundaries
+static void test_hwrev_adc_range_min_boundary(void)
+{
+    LOG_INFO("Testing hwrev detection at adc_min boundary");
+
+    // Set ADC value to exactly adc_min for current hardware
+    utest_adc_set_ch_raw(ADC_CHANNEL_ADC_HW_VER, fix16_from_int(hwrev_adc_min_values[WBEC_HWREV]));
+
+    hwrev_init_and_check();
+
+    // Should be correctly detected at min boundary
+    enum hwrev rev = hwrev_get();
+    TEST_ASSERT_EQUAL_MESSAGE(WBEC_HWREV, rev, "hwrev should be detected at adc_min boundary");
+}
+
+
+static void test_hwrev_adc_range_max_boundary(void)
+{
+    LOG_INFO("Testing hwrev detection at adc_max boundary");
+
+    // Set ADC value to exactly adc_max for current hardware
+    utest_adc_set_ch_raw(ADC_CHANNEL_ADC_HW_VER, fix16_from_int(hwrev_adc_max_values[WBEC_HWREV]));
+
+    hwrev_init_and_check();
+
+    // Should be correctly detected at max boundary
+    enum hwrev rev = hwrev_get();
+    TEST_ASSERT_EQUAL_MESSAGE(WBEC_HWREV, rev, "hwrev should be detected at adc_max boundary");
+}
+
+
+static void test_hwrev_adc_range_below_min(void)
+{
+    LOG_INFO("Testing hwrev detection below adc_min boundary");
+
+    // Set ADC value below adc_min for current hardware
+    // This value should not match any known revision
+    int16_t test_value = hwrev_adc_min_values[WBEC_HWREV] - 1;
+
+    // Ensure the value doesn't fall into another revision's range
+    for (int i = 0; i < HWREV_COUNT; i++) {
+        if (i != WBEC_HWREV && test_value >= hwrev_adc_min_values[i] && test_value <= hwrev_adc_max_values[i]) {
+            TEST_FAIL_MESSAGE("Test value falls into another revision's range, test is invalid");
+            return;
+        }
+    }
+
+    utest_adc_set_ch_raw(ADC_CHANNEL_ADC_HW_VER, fix16_from_int(test_value));
+
+    // Call hwrev_init_and_check() - it should detect unknown hwrev and enter infinite loop
+    utest_mcu_set_poweron_reason(MCU_POWERON_REASON_POWER_ON);
+    utest_systick_set_time_ms(5000);
+    utest_watchdog_set_reload_callback(watchdog_reload_callback_trigger_reset);
+
+    jmp_buf exit_jmp;
+    utest_nvic_set_exit_jmp(&exit_jmp);
+
+    if (setjmp(exit_jmp) == 0) {
+        hwrev_init_and_check();
+        TEST_FAIL_MESSAGE("Should not reach this point - NVIC_SystemReset should be called");
+    }
+
+    utest_nvic_set_exit_jmp(NULL);
+
+    // Should not be detected (remains HWREV_UNKNOWN)
+    enum hwrev rev = hwrev_get();
+    TEST_ASSERT_EQUAL_MESSAGE(HWREV_UNKNOWN, rev, "hwrev should remain HWREV_UNKNOWN when ADC value is below adc_min");
+}
+
+
+static void test_hwrev_adc_range_above_max(void)
+{
+    LOG_INFO("Testing hwrev detection above adc_max boundary");
+
+    // Set ADC value above adc_max for current hardware
+    // This value should not match any known revision
+    int16_t test_value = hwrev_adc_max_values[WBEC_HWREV] + 1;
+
+    // Ensure the value doesn't fall into another revision's range
+    for (int i = 0; i < HWREV_COUNT; i++) {
+        if (i != WBEC_HWREV && test_value >= hwrev_adc_min_values[i] && test_value <= hwrev_adc_max_values[i]) {
+            TEST_FAIL_MESSAGE("Test value falls into another revision's range, test is invalid");
+            return;
+        }
+    }
+
+    utest_adc_set_ch_raw(ADC_CHANNEL_ADC_HW_VER, fix16_from_int(test_value));
+
+    // Call hwrev_init_and_check() - it should detect unknown hwrev and enter infinite loop
+    utest_mcu_set_poweron_reason(MCU_POWERON_REASON_POWER_ON);
+    utest_systick_set_time_ms(5000);
+    utest_watchdog_set_reload_callback(watchdog_reload_callback_trigger_reset);
+
+    jmp_buf exit_jmp;
+    utest_nvic_set_exit_jmp(&exit_jmp);
+
+    if (setjmp(exit_jmp) == 0) {
+        hwrev_init_and_check();
+        TEST_FAIL_MESSAGE("Should not reach this point - NVIC_SystemReset should be called");
+    }
+
+    utest_nvic_set_exit_jmp(NULL);
+
+    // Should not be detected as WBEC_HWREV
+    enum hwrev rev = hwrev_get();
+    TEST_ASSERT_EQUAL_MESSAGE(HWREV_UNKNOWN, rev, "hwrev should remain HWREV_UNKNOWN when ADC value is above adc_max");
+}
+
+
 int main(void)
 {
     UNITY_BEGIN();
 
     RUN_TEST(test_hwrev_get_default);
-    RUN_TEST(test_hwrev_unknown_adc_value); // Must run early while hwrev is still HWREV_UNKNOWN
+    RUN_TEST(test_hwrev_unknown_adc_value);     // Must run early while hwrev is still HWREV_UNKNOWN
+    RUN_TEST(test_hwrev_adc_range_below_min);   // Must run early while hwrev is still HWREV_UNKNOWN
+    RUN_TEST(test_hwrev_adc_range_above_max);   // Must run early while hwrev is still HWREV_UNKNOWN
     RUN_TEST(test_hwrev_init);
     RUN_TEST(test_hwrev_init_non_poweron);
+    RUN_TEST(test_hwrev_adc_range_min_boundary);
+    RUN_TEST(test_hwrev_adc_range_max_boundary);
     RUN_TEST(test_hwrev_put_hw_info_to_regmap_correct);
     RUN_TEST(test_hwrev_put_hw_info_to_regmap_incorrect);
     RUN_TEST(test_hwrev_nvic_reset_on_mismatch);
