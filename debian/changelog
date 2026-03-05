@@ -2,7 +2,8 @@ wb-ec-firmware (2.1.1) stable; urgency=medium
 
   * add environment for unittests and coverage metering
   * gpio-subsystem: fix build error on old compiler
-  * regmap: full coverage
+  * regmap: full unittests coverage
+  * add unittests: voltage-monitor
 
  -- Maxim Toropov <maxim.toropov@wirenboard.com>  Tue, 03 Mar 2026 16:21:00 +0300
 
