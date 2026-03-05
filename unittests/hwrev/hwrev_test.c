@@ -94,6 +94,51 @@ static void test_hwrev_init(void)
 }
 
 
+static void test_hwrev_init_non_poweron(void)
+{
+    LOG_INFO("Testing hwrev init with non-POWER_ON reason (skip hwrev check)");
+
+    // Set poweron reason to RTC_ALARM (not POWER_ON)
+    utest_mcu_set_poweron_reason(MCU_POWERON_REASON_RTC_ALARM);
+
+    // Set ADC value for WRONG hardware to verify that hwrev check is skipped
+#ifdef MODEL_WB74
+    enum hwrev wrong_hwrev = HWREV_WB85;
+#elif defined(MODEL_WB85)
+    enum hwrev wrong_hwrev = HWREV_WB74;
+#else
+    #error "Unknown model"
+#endif
+    utest_adc_set_ch_raw(ADC_CHANNEL_ADC_HW_VER, fix16_from_int(hwrev_adc_values[wrong_hwrev]));
+
+    // Call hwrev_init_and_check - it should skip hwrev check and just set WBEC_HWREV
+    hwrev_init_and_check();
+
+    // Verify that hwrev was set to WBEC_HWREV (not checked against ADC)
+    enum hwrev rev = hwrev_get();
+    TEST_ASSERT_EQUAL_MESSAGE(WBEC_HWREV, rev, "With non-POWER_ON reason, hwrev should be set to WBEC_HWREV without checking ADC");
+
+    // Read HW_INFO_PART1 to verify registers were filled correctly
+    struct REGMAP_HW_INFO_PART1 hw_info_1;
+    bool result = utest_regmap_get_region_data(REGMAP_REGION_HW_INFO_PART1, &hw_info_1, sizeof(hw_info_1));
+    TEST_ASSERT_TRUE_MESSAGE(result, "Should be able to read HW_INFO_PART1 region");
+
+    // Check that hwrev_code is set to correct model code (not error)
+    TEST_ASSERT_EQUAL_UINT16_MESSAGE(hwrev_codes[WBEC_HWREV], hw_info_1.hwrev_code, "hwrev_code should match current model code");
+
+    // Check that hwrev_error_flag is 0 (no error)
+    TEST_ASSERT_EQUAL_UINT16_MESSAGE(0, hw_info_1.hwrev_error_flag, "hwrev_error_flag should be 0 when hwrev check is skipped");
+
+    // Read HW_INFO_PART2
+    struct REGMAP_HW_INFO_PART2 hw_info_2;
+    result = utest_regmap_get_region_data(REGMAP_REGION_HW_INFO_PART2, &hw_info_2, sizeof(hw_info_2));
+    TEST_ASSERT_TRUE_MESSAGE(result, "Should be able to read HW_INFO_PART2 region");
+
+    // Check that hwrev_ok is set to WBEC_ID (success)
+    TEST_ASSERT_EQUAL_UINT16_MESSAGE(WBEC_ID, hw_info_2.hwrev_ok, "hwrev_ok should be WBEC_ID when hwrev check is skipped");
+}
+
+
 static void test_hwrev_put_hw_info_to_regmap_correct(void)
 {
     LOG_INFO("Testing hwrev_put_hw_info_to_regmap for correct revision");
@@ -395,6 +440,7 @@ int main(void)
     RUN_TEST(test_hwrev_get_default);
     RUN_TEST(test_hwrev_unknown_adc_value); // Must run early while hwrev is still HWREV_UNKNOWN
     RUN_TEST(test_hwrev_init);
+    RUN_TEST(test_hwrev_init_non_poweron);
     RUN_TEST(test_hwrev_put_hw_info_to_regmap_correct);
     RUN_TEST(test_hwrev_put_hw_info_to_regmap_incorrect);
     RUN_TEST(test_hwrev_nvic_reset_on_mismatch);
