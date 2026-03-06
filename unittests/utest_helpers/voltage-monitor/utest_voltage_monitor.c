@@ -4,6 +4,14 @@
 static bool vmon_channel_status[VMON_CHANNEL_COUNT] = {false};
 static bool vmon_is_ready = false;
 
+void utest_vmon_reset(void)
+{
+    vmon_is_ready = false;
+    for (int i = 0; i < VMON_CHANNEL_COUNT; i++) {
+        vmon_channel_status[i] = false;
+    }
+}
+
 void utest_vmon_set_ch_status(enum vmon_channel ch, bool status)
 {
     if (ch < VMON_CHANNEL_COUNT) {
