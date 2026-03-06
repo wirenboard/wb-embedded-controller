@@ -4,6 +4,7 @@
 #include "systick.h"
 #include "assert.h"
 #include "buzzer.h"
+#include "wbmcu_system.h"
 
 /**
  * Модуль ловит события с кнопки включения питания:
@@ -56,13 +57,13 @@ static struct pwrkey_logic_ctx logic_ctx;
 static inline enum pwrkey_state get_pwrkey_state(void)
 {
     #ifdef EC_GPIO_PWRKEY_ACTIVE_LOW
-        if GPIO_S_TEST(pwrkey_gpio) {
+        if (GPIO_S_TEST(pwrkey_gpio)) {
             return PWRKEY_RELEASED;
         } else {
             return PWRKEY_PRESSED;
         }
     #elif EC_GPIO_PWRKEY_ACTIVE_HIGH
-        if GPIO_S_TEST(pwrkey_gpio) {
+        if (GPIO_S_TEST(pwrkey_gpio)) {
             return PWRKEY_PRESSED;
         } else {
             return PWRKEY_RELEASED;
