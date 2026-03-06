@@ -10,9 +10,12 @@ static struct {
     bool changed[REGMAP_REGION_COUNT];
 } regmap_state;
 
+static bool regmap_init_called = false;
+
 void utest_regmap_reset(void)
 {
     memset(&regmap_state, 0, sizeof(regmap_state));
+    regmap_init_called = false;
 }
 
 void utest_regmap_mark_region_changed(enum regmap_region r)
@@ -40,6 +43,12 @@ bool utest_regmap_get_region_data(enum regmap_region r, void * data, size_t size
 void regmap_init(void)
 {
     utest_regmap_reset();
+    regmap_init_called = true;
+}
+
+bool utest_regmap_was_init_called(void)
+{
+    return regmap_init_called;
 }
 
 bool regmap_set_region_data(enum regmap_region r, const void * data, size_t size)
