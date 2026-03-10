@@ -468,6 +468,79 @@ static void test_pwrkey_multiple_short_presses(void)
     TEST_ASSERT_FALSE_MESSAGE(pwrkey_handle_short_press(), "No more short presses should be pending");
 }
 
+static void test_pwrkey_multiple_long_presses(void)
+{
+    LOG_INFO("Testing multiple long presses");
+
+    pwrkey_init();
+
+    // Start with button released
+    #ifdef EC_GPIO_PWRKEY_ACTIVE_LOW
+        utest_gpio_set_input_state(pwrkey_gpio, 1);  // High = released
+    #else
+        utest_gpio_set_input_state(pwrkey_gpio, 0);  // Low = released
+    #endif
+
+    // Start periodic work
+    pwrkey_do_periodic_work();
+
+    // Wait for initial debounce
+    utest_systick_advance_time_ms(PWRKEY_DEBOUNCE_MS + 1);
+    pwrkey_do_periodic_work();
+
+    // === First long press ===
+    #ifdef EC_GPIO_PWRKEY_ACTIVE_LOW
+        utest_gpio_set_input_state(pwrkey_gpio, 0);  // Press
+    #else
+        utest_gpio_set_input_state(pwrkey_gpio, 1);
+    #endif
+    pwrkey_do_periodic_work();
+    utest_systick_advance_time_ms(PWRKEY_DEBOUNCE_MS + 1);
+    pwrkey_do_periodic_work();
+
+    // Hold for long press duration
+    utest_systick_advance_time_ms(PWRKEY_LONG_PRESS_TIME_MS + 1);
+    pwrkey_do_periodic_work();
+
+    TEST_ASSERT_TRUE_MESSAGE(pwrkey_handle_long_press(), "First long press should be detected");
+
+    // Continue holding - long press should not repeat
+    utest_systick_advance_time_ms(PWRKEY_LONG_PRESS_TIME_MS);
+    pwrkey_do_periodic_work();
+
+    TEST_ASSERT_FALSE_MESSAGE(pwrkey_handle_long_press(), "Long press should not repeat while button is still held");
+
+    // Release button
+    #ifdef EC_GPIO_PWRKEY_ACTIVE_LOW
+        utest_gpio_set_input_state(pwrkey_gpio, 1);  // Release
+    #else
+        utest_gpio_set_input_state(pwrkey_gpio, 0);
+    #endif
+    pwrkey_do_periodic_work();
+    utest_systick_advance_time_ms(PWRKEY_DEBOUNCE_MS + 1);
+    pwrkey_do_periodic_work();
+
+    // No short press should be generated after long press
+    TEST_ASSERT_FALSE_MESSAGE(pwrkey_handle_short_press(), "No short press after long press");
+
+    // === Second long press ===
+    #ifdef EC_GPIO_PWRKEY_ACTIVE_LOW
+        utest_gpio_set_input_state(pwrkey_gpio, 0);  // Press
+    #else
+        utest_gpio_set_input_state(pwrkey_gpio, 1);
+    #endif
+    pwrkey_do_periodic_work();
+    utest_systick_advance_time_ms(PWRKEY_DEBOUNCE_MS + 1);
+    pwrkey_do_periodic_work();
+
+    // Hold for long press duration
+    utest_systick_advance_time_ms(PWRKEY_LONG_PRESS_TIME_MS + 1);
+    pwrkey_do_periodic_work();
+
+    TEST_ASSERT_TRUE_MESSAGE(pwrkey_handle_long_press(), "Second long press should be detected");
+    TEST_ASSERT_FALSE_MESSAGE(pwrkey_handle_long_press(), "No more long presses should be pending");
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -481,6 +554,7 @@ int main(void)
     RUN_TEST(test_pwrkey_long_press_detection);
     RUN_TEST(test_pwrkey_long_press_no_short_press);
     RUN_TEST(test_pwrkey_multiple_short_presses);
+    RUN_TEST(test_pwrkey_multiple_long_presses);
 
     return UNITY_END();
 }
