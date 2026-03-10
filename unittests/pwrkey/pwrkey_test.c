@@ -541,6 +541,81 @@ static void test_pwrkey_multiple_long_presses(void)
     TEST_ASSERT_FALSE_MESSAGE(pwrkey_handle_long_press(), "No more long presses should be pending");
 }
 
+static void test_pwrkey_pressed_on_boot(void)
+{
+    LOG_INFO("Testing button held pressed during boot (no events should be generated)");
+
+    pwrkey_init();
+
+    // Simulate button ALREADY PRESSED on boot (e.g., powered on by button and user holds it)
+    #ifdef EC_GPIO_PWRKEY_ACTIVE_LOW
+        utest_gpio_set_input_state(pwrkey_gpio, 0);  // Low = pressed
+    #else
+        utest_gpio_set_input_state(pwrkey_gpio, 1);  // High = pressed
+    #endif
+
+    // Start periodic work - this should register the initial pressed state
+    pwrkey_do_periodic_work();
+
+    // Wait for initial debounce
+    utest_systick_advance_time_ms(PWRKEY_DEBOUNCE_MS + 1);
+    pwrkey_do_periodic_work();
+
+    // Button should be detected as pressed
+    TEST_ASSERT_TRUE_MESSAGE(pwrkey_ready(), "pwrkey should be ready after debounce");
+    TEST_ASSERT_TRUE_MESSAGE(pwrkey_pressed(), "pwrkey should detect button as pressed");
+
+    // However, NO press events should be generated (neither short nor long)
+    TEST_ASSERT_FALSE_MESSAGE(pwrkey_handle_short_press(), "No short press should be detected when button held on boot");
+    TEST_ASSERT_FALSE_MESSAGE(pwrkey_handle_long_press(), "No long press should be detected when button held on boot");
+
+    // Continue holding button for long press duration
+    utest_systick_advance_time_ms(PWRKEY_LONG_PRESS_TIME_MS + 1);
+    pwrkey_do_periodic_work();
+
+    // Still no long press event should be generated
+    TEST_ASSERT_FALSE_MESSAGE(pwrkey_handle_long_press(), "No long press should be detected for button held since boot");
+
+    // Now release the button
+    #ifdef EC_GPIO_PWRKEY_ACTIVE_LOW
+        utest_gpio_set_input_state(pwrkey_gpio, 1);  // High = released
+    #else
+        utest_gpio_set_input_state(pwrkey_gpio, 0);  // Low = released
+    #endif
+    pwrkey_do_periodic_work();
+    utest_systick_advance_time_ms(PWRKEY_DEBOUNCE_MS + 1);
+    pwrkey_do_periodic_work();
+
+    // Still no short press should be generated after release
+    TEST_ASSERT_FALSE_MESSAGE(pwrkey_handle_short_press(), "No short press after releasing button held since boot");
+
+    // Now press the button again - THIS should generate press events
+    #ifdef EC_GPIO_PWRKEY_ACTIVE_LOW
+        utest_gpio_set_input_state(pwrkey_gpio, 0);  // Low = pressed
+    #else
+        utest_gpio_set_input_state(pwrkey_gpio, 1);  // High = pressed
+    #endif
+    pwrkey_do_periodic_work();
+    utest_systick_advance_time_ms(PWRKEY_DEBOUNCE_MS + 1);
+    pwrkey_do_periodic_work();
+
+    // Hold for short duration and release
+    utest_systick_advance_time_ms(PWRKEY_LONG_PRESS_TIME_MS / 2);
+    pwrkey_do_periodic_work();
+
+    #ifdef EC_GPIO_PWRKEY_ACTIVE_LOW
+        utest_gpio_set_input_state(pwrkey_gpio, 1);  // High = released
+    #else
+        utest_gpio_set_input_state(pwrkey_gpio, 0);  // Low = released
+    #endif
+    pwrkey_do_periodic_work();
+    utest_systick_advance_time_ms(PWRKEY_DEBOUNCE_MS + 1);
+    pwrkey_do_periodic_work();
+
+    // NOW short press should be detected
+    TEST_ASSERT_TRUE_MESSAGE(pwrkey_handle_short_press(), "Short press should be detected after proper button press (after boot-held button was released)");
+}
+
 int main(void)
 {
     #ifdef EC_GPIO_PWRKEY_ACTIVE_LOW
@@ -563,6 +638,7 @@ int main(void)
     RUN_TEST(test_pwrkey_long_press_no_short_press);
     RUN_TEST(test_pwrkey_multiple_short_presses);
     RUN_TEST(test_pwrkey_multiple_long_presses);
+    RUN_TEST(test_pwrkey_pressed_on_boot);
 
     return UNITY_END();
 }
