@@ -10,10 +10,7 @@ extern const uint32_t uid_base_mock[3];
 // Mock для NVIC_SystemReset
 void NVIC_SystemReset(void);
 
-
-// Mock для PWR peripheral
-#define __IO volatile
-
+// Mock для PWR (определяется в stm32g030xx.h)
 typedef struct {
   volatile uint32_t CR1;        /*!< PWR Power Control Register 1,                     Address offset: 0x00 */
   volatile uint32_t RESERVED0;  /*!< Reserved,                                         Address offset: 0x04 */

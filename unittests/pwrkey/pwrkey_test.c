@@ -1,10 +1,10 @@
 #include "unity.h"
 #include "pwrkey.h"
 #include "config.h"
-#include "gpio.h"
 #include "systick.h"
 #include "utest_systick.h"
 #include "utest_wbmcu_system.h"
+#include "utest_gpio.h"
 
 #define LOG_LEVEL LOG_LEVEL_INFO
 #include "console_log.h"
