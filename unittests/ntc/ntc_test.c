@@ -21,6 +21,26 @@ void tearDown(void)
 }
 
 
+static const char* get_ntc_table_monotonicity_test_message(fix16_t temp, fix16_t prev_temp, fix16_t resistance)
+{
+    static char msg[100] = {0};
+
+    int res_int = fix16_to_int(resistance);
+    int res_frac = (int)((resistance & 0xFFFF) * 1000 / 65536);
+
+    snprintf(
+        msg, sizeof(msg),
+        "Temperature should increase as resistance decreases. "
+        "At %d.%03dkΩ got %d°C, previous was %d°C",
+        res_int, res_frac,
+        fix16_to_int(temp),
+        fix16_to_int(prev_temp)
+    );
+
+    return msg;
+}
+
+
 static void test_ntc_table_monotonicity(void)
 {
     LOG_INFO("Testing NTC table monotonicity (resistance decreases with temperature)");
@@ -50,18 +70,11 @@ static void test_ntc_table_monotonicity(void)
     for (size_t i = 0; i < sizeof(resistances) / sizeof(resistances[0]); i++) {
         fix16_t temp = ntc_kohm_to_temp(resistances[i]);
 
-        char msg[100];
-        int res_int = fix16_to_int(resistances[i]);
-        int res_frac = (int)((resistances[i] & 0xFFFF) * 1000 / 65536);
+        TEST_ASSERT_GREATER_THAN_INT32_MESSAGE(
+            prev_temp, temp,
+            get_ntc_table_monotonicity_test_message(temp, prev_temp, resistances[i])
+        );
 
-        snprintf(msg, sizeof(msg),
-                 "Temperature should increase as resistance decreases. "
-                 "At %d.%03dkΩ got %d°C, previous was %d°C",
-                 res_int, res_frac,
-                 fix16_to_int(temp),
-                 fix16_to_int(prev_temp));
-
-        TEST_ASSERT_TRUE_MESSAGE(temp > prev_temp, msg);
         prev_temp = temp;
     }
 }
@@ -271,16 +284,37 @@ static void test_ntc_convert_adc_raw_to_temp_adc_max(void)
 }
 
 
+typedef struct {
+    int adc_value;
+    int expected_temp_min;
+    int expected_temp_max;
+} test_case_t;
+
+static const char* get_ntc_convert_adc_raw_to_temp_various_values_test_msg(
+    const test_case_t* test_case,
+    int temp
+)
+{
+    static char msg[100] = {0};
+
+    snprintf(
+        msg, sizeof(msg),
+        "ADC=%d should produce temp between %d and %d°C, got %d°C",
+        test_case->adc_value,
+        test_case->expected_temp_min,
+        test_case->expected_temp_max,
+        temp
+    );
+
+    return msg;
+}
+
 static void test_ntc_convert_adc_raw_to_temp_various_values(void)
 {
     LOG_INFO("Testing ntc_convert_adc_raw_to_temp with various ADC values");
 
     // Test a range of ADC values to ensure they produce reasonable temperatures
-    struct {
-        int adc_value;
-        int expected_temp_min;
-        int expected_temp_max;
-    } test_cases[] = {
+    test_case_t test_cases[] = {
         {100,  80,  150},  // Very low ADC -> hot
         {500,  40,  55},   // Low-mid ADC -> warm
         {1000, 15,  35},   // Mid ADC -> room temp
@@ -293,17 +327,11 @@ static void test_ntc_convert_adc_raw_to_temp_various_values(void)
         fix16_t temp = ntc_convert_adc_raw_to_temp(adc_val);
         int16_t temp_int = fix16_to_int(temp);
 
-        char msg[100];
-        snprintf(msg, sizeof(msg), "ADC=%d should produce temp between %d and %d°C, got %d°C",
-                 test_cases[i].adc_value,
-                 test_cases[i].expected_temp_min,
-                 test_cases[i].expected_temp_max,
-                 temp_int);
-
         TEST_ASSERT_TRUE_MESSAGE(
             temp_int >= test_cases[i].expected_temp_min &&
             temp_int <= test_cases[i].expected_temp_max,
-            msg);
+            get_ntc_convert_adc_raw_to_temp_various_values_test_msg(&test_cases[i], temp_int)
+        );
     }
 }
 
