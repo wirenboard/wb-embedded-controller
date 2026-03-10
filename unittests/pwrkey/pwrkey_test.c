@@ -196,6 +196,105 @@ static void test_pwrkey_debounce_glitch_rejection(void)
     TEST_ASSERT_FALSE_MESSAGE(pwrkey_pressed(), "Button should still be released after glitch rejection");
 }
 
+
+static void test_pwkrey_debounce_long_glith_rejection_press(void)
+{
+    LOG_INFO("Testing long time glitch rejection during press");
+
+    pwrkey_init();
+
+    // Start with button released
+    simulate_button_release_with_debounce();
+
+    // Simulate a glitch (brief presses)
+    systime_t glitch_time = 5;
+    unsigned time = 0;
+    while (time <= (PWRKEY_DEBOUNCE_MS + 1)) {
+        simulate_button_press();
+        pwrkey_do_periodic_work();
+        utest_systick_advance_time_ms(glitch_time);
+        pwrkey_do_periodic_work();
+
+        TEST_ASSERT_FALSE_MESSAGE(pwrkey_pressed(), "Button should still be released during glitch rejection");
+
+        simulate_button_release();
+        pwrkey_do_periodic_work();
+        utest_systick_advance_time_ms(glitch_time);
+        pwrkey_do_periodic_work();
+
+        TEST_ASSERT_FALSE_MESSAGE(pwrkey_pressed(), "Button should still be released during glitch rejection");
+
+        time += glitch_time;
+    }
+
+    // Now press button permanently
+    simulate_button_press();
+    pwrkey_do_periodic_work();
+
+    TEST_ASSERT_FALSE_MESSAGE(pwrkey_pressed(), "Button should still be released just after glitch rejection");
+
+    // Advance small amount of time
+    utest_systick_advance_time_ms(PWRKEY_DEBOUNCE_MS / 2);
+    pwrkey_do_periodic_work();
+
+    TEST_ASSERT_FALSE_MESSAGE(pwrkey_pressed(), "Button should still be released before debounce time elapsed");
+
+    // Advance time to reach the end of debounce interval
+    utest_systick_advance_time_ms(PWRKEY_DEBOUNCE_MS / 2 + 2);
+    pwrkey_do_periodic_work();
+
+    TEST_ASSERT_TRUE_MESSAGE(pwrkey_pressed(), "Button should be pressed after debounce time elapsed");
+}
+
+static void test_pwkrey_debounce_long_glith_rejection_release(void)
+{
+    LOG_INFO("Testing long time glitch rejection during release");
+
+    pwrkey_init();
+
+    // Start with button pressed
+    simulate_button_press_with_debounce();
+
+    // Simulate a glitch (brief presses)
+    systime_t glitch_time = 5;
+    unsigned time = 0;
+    while (time <= (PWRKEY_DEBOUNCE_MS + 1)) {
+        simulate_button_release();
+        pwrkey_do_periodic_work();
+        utest_systick_advance_time_ms(glitch_time);
+        pwrkey_do_periodic_work();
+
+        TEST_ASSERT_TRUE_MESSAGE(pwrkey_pressed(), "Button should still be pressed during glitch rejection");
+
+        simulate_button_press();
+        pwrkey_do_periodic_work();
+        utest_systick_advance_time_ms(glitch_time);
+        pwrkey_do_periodic_work();
+
+        TEST_ASSERT_TRUE_MESSAGE(pwrkey_pressed(), "Button should still be pressed during glitch rejection");
+
+        time += glitch_time;
+    }
+
+    // Now release button permanently
+    simulate_button_release();
+    pwrkey_do_periodic_work();
+
+    TEST_ASSERT_TRUE_MESSAGE(pwrkey_pressed(), "Button should still be pressed just after glitch rejection");
+
+    // Advance small amount of time
+    utest_systick_advance_time_ms(PWRKEY_DEBOUNCE_MS / 2);
+    pwrkey_do_periodic_work();
+
+    TEST_ASSERT_TRUE_MESSAGE(pwrkey_pressed(), "Button should still be pressed before debounce time elapsed");
+
+    // Advance time to reach the end of debounce interval
+    utest_systick_advance_time_ms(PWRKEY_DEBOUNCE_MS / 2 + 2);
+    pwrkey_do_periodic_work();
+
+    TEST_ASSERT_FALSE_MESSAGE(pwrkey_pressed(), "Button should be released after debounce time elapsed");
+}
+
 static void test_pwrkey_short_press_detection(void)
 {
     LOG_INFO("Testing short press detection");
@@ -417,6 +516,8 @@ int main(void)
     RUN_TEST(test_pwrkey_pressed_state);
     RUN_TEST(test_pwrkey_debounce_on_press);
     RUN_TEST(test_pwrkey_debounce_glitch_rejection);
+    RUN_TEST(test_pwkrey_debounce_long_glith_rejection_press);
+    RUN_TEST(test_pwkrey_debounce_long_glith_rejection_release);
     RUN_TEST(test_pwrkey_short_press_detection);
     RUN_TEST(test_pwrkey_long_press_detection);
     RUN_TEST(test_pwrkey_long_press_no_short_press);
