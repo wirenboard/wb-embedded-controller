@@ -23,11 +23,15 @@ INC += $(UTEST_HELPERS_DIR)/gpio
 INC += $(UTEST_HELPERS_DIR)/systick
 INC += $(PROJ_DIR)/include
 INC += $(PROJ_DIR)/system/include
+INC += $(PROJ_DIR)
 
 # List of tests
 TEST_LIST = pwrkey_test
 
+# List of targets - test both polarities
+TARGETS_LIST = ACTIVE_LOW ACTIVE_HIGH
+
 # Compiler defs
-DEFS += UNITY_OUTPUT_COLOR MODEL_WB74
+DEFS += UNITY_OUTPUT_COLOR
 
 include $(PROJ_DIR)/system/build_unittests.mk

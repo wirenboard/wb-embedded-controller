@@ -62,7 +62,7 @@ static inline enum pwrkey_state get_pwrkey_state(void)
         } else {
             return PWRKEY_PRESSED;
         }
-    #elif EC_GPIO_PWRKEY_ACTIVE_HIGH
+    #elif defined EC_GPIO_PWRKEY_ACTIVE_HIGH
         if (GPIO_S_TEST(pwrkey_gpio)) {
             return PWRKEY_PRESSED;
         } else {
@@ -151,7 +151,7 @@ void pwrkey_init(void)
         PWR->PUCRA |= (1 << pwrkey_gpio.pin);
         // Set falling edge as wakeup trigger
         PWR->CR4 |= (1 << (EC_GPIO_PWRKEY_WKUP_NUM - 1));
-    #elif EC_GPIO_PWRKEY_ACTIVE_HIGH
+    #elif defined EC_GPIO_PWRKEY_ACTIVE_HIGH
         PWR->PDCRA |= (1 << pwrkey_gpio.pin);
     #else
         #error "pwrkey polarity not defined"

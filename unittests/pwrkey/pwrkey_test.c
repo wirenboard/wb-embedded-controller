@@ -49,7 +49,7 @@ static void test_pwrkey_init(void)
         // Check falling edge trigger in CR4
         uint32_t cr4_expected = (1U << (EC_GPIO_PWRKEY_WKUP_NUM - 1));
         TEST_ASSERT_EQUAL_UINT32_MESSAGE(cr4_expected, PWR->CR4, "PWR->CR4 should have falling edge trigger set");
-    #elif EC_GPIO_PWRKEY_ACTIVE_HIGH
+    #elif defined EC_GPIO_PWRKEY_ACTIVE_HIGH
         // Check pull-down control register for port A
         uint32_t pdcra_expected = (1U << pwrkey_gpio.pin);
         TEST_ASSERT_EQUAL_UINT32_MESSAGE(pdcra_expected, PWR->PDCRA, "PWR->PDCRA should have pull-down set for PWRKEY pin");
@@ -543,6 +543,14 @@ static void test_pwrkey_multiple_long_presses(void)
 
 int main(void)
 {
+    #ifdef EC_GPIO_PWRKEY_ACTIVE_LOW
+        LOG_INFO("Running tests with active LOW power key configuration");
+    #else
+        LOG_INFO("Running tests with active HIGH power key configuration");
+    #endif
+
+    LOG_MESSAGE();
+
     UNITY_BEGIN();
 
     RUN_TEST(test_pwrkey_init);
