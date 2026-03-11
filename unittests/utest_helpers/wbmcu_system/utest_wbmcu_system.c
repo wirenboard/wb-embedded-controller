@@ -3,10 +3,10 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <setjmp.h>
+#include <string.h>
 
 // UID_BASE mock
 const uint32_t uid_base_mock[3] = {0x12345678, 0x9ABCDEF0, 0x11223344};
-PWR_TypeDef pwr_mock = {0};
 
 // Внутреннее состояние мока для NVIC
 static struct {
@@ -41,21 +41,10 @@ void utest_nvic_set_exit_jmp(jmp_buf *jmp)
     nvic_state.exit_jmp = jmp;
 }
 
+
+PWR_TypeDef _PWR_instance = {0};
+
 void utest_pwr_reset(void)
 {
-    pwr_mock.CR1 = 0;
-    pwr_mock.CR2 = 0;
-    pwr_mock.CR3 = 0;
-    pwr_mock.CR4 = 0;
-    pwr_mock.SR1 = 0;
-    pwr_mock.SR2 = 0;
-    pwr_mock.SCR = 0;
-    pwr_mock.PUCRA = 0;
-    pwr_mock.PDCRA = 0;
-    pwr_mock.PUCRB = 0;
-    pwr_mock.PDCRB = 0;
-    pwr_mock.PUCRC = 0;
-    pwr_mock.PDCRC = 0;
-    pwr_mock.PUCRD = 0;
-    pwr_mock.PDCRD = 0;
+    memset(&_PWR_instance, 0, sizeof(_PWR_instance));
 }

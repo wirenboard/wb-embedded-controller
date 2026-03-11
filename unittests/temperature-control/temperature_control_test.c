@@ -4,7 +4,7 @@
 #include "utest_wbmz_common.h"
 #include "utest_voltage_monitor.h"
 #include "voltage-monitor.h"
-#include "gpio.h"
+#include "utest_gpio.h"
 #include "config.h"
 
 #define LOG_LEVEL LOG_LEVEL_INFO
