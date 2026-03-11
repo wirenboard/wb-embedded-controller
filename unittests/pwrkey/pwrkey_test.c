@@ -30,6 +30,48 @@ void tearDown(void)
 {
 }
 
+static void simulate_button_press(void)
+{
+    #ifdef EC_GPIO_PWRKEY_ACTIVE_LOW
+        utest_gpio_set_input_state(pwrkey_gpio, 0);  // Low = pressed
+    #else
+        utest_gpio_set_input_state(pwrkey_gpio, 1);  // High = pressed
+    #endif
+}
+
+static void simulate_button_release(void)
+{
+    #ifdef EC_GPIO_PWRKEY_ACTIVE_LOW
+        utest_gpio_set_input_state(pwrkey_gpio, 1);  // High = released
+    #else
+        utest_gpio_set_input_state(pwrkey_gpio, 0);  // Low = released
+    #endif
+}
+
+static void simulate_button_press_with_debounce(void)
+{
+    simulate_button_press();
+
+    // Start periodic work with press
+    pwrkey_do_periodic_work();
+
+    // Wait for press debounce
+    utest_systick_advance_time_ms(PWRKEY_DEBOUNCE_MS + 1);
+    pwrkey_do_periodic_work();
+}
+
+static void simulate_button_release_with_debounce(void)
+{
+    simulate_button_release();
+
+    // Start periodic work
+    pwrkey_do_periodic_work();
+
+    // Wait for debounce
+    utest_systick_advance_time_ms(PWRKEY_DEBOUNCE_MS + 1);
+    pwrkey_do_periodic_work();
+}
+
 static void test_pwrkey_init(void)
 {
     LOG_INFO("Testing pwrkey initialization");
@@ -67,11 +109,7 @@ static void test_pwrkey_ready_after_debounce(void)
     pwrkey_init();
 
     // Simulate button released (active low)
-    #ifdef EC_GPIO_PWRKEY_ACTIVE_LOW
-        utest_gpio_set_input_state(pwrkey_gpio, 1);  // High = released
-    #else
-        utest_gpio_set_input_state(pwrkey_gpio, 0);  // Low = released
-    #endif
+    simulate_button_release();
 
     // Start periodic work to register initial state
     pwrkey_do_periodic_work();
@@ -97,34 +135,12 @@ static void test_pwrkey_pressed_state(void)
     pwrkey_init();
 
     // Simulate button released
-    #ifdef EC_GPIO_PWRKEY_ACTIVE_LOW
-        utest_gpio_set_input_state(pwrkey_gpio, 1);  // High = released
-    #else
-        utest_gpio_set_input_state(pwrkey_gpio, 0);  // Low = released
-    #endif
-
-    // Start periodic work
-    pwrkey_do_periodic_work();
-
-    // Wait for debounce
-    utest_systick_advance_time_ms(PWRKEY_DEBOUNCE_MS + 1);
-    pwrkey_do_periodic_work();
+    simulate_button_release_with_debounce();
 
     TEST_ASSERT_FALSE_MESSAGE(pwrkey_pressed(), "pwrkey_pressed() should return false when button is released");
 
     // Simulate button pressed
-    #ifdef EC_GPIO_PWRKEY_ACTIVE_LOW
-        utest_gpio_set_input_state(pwrkey_gpio, 0);  // Low = pressed
-    #else
-        utest_gpio_set_input_state(pwrkey_gpio, 1);  // High = pressed
-    #endif
-
-    // Start periodic work with new state
-    pwrkey_do_periodic_work();
-
-    // Wait for debounce
-    utest_systick_advance_time_ms(PWRKEY_DEBOUNCE_MS + 1);
-    pwrkey_do_periodic_work();
+    simulate_button_press_with_debounce();
 
     TEST_ASSERT_TRUE_MESSAGE(pwrkey_pressed(), "pwrkey_pressed() should return true when button is pressed");
 }
@@ -136,27 +152,12 @@ static void test_pwrkey_debounce_on_press(void)
     pwrkey_init();
 
     // Start with button released
-    #ifdef EC_GPIO_PWRKEY_ACTIVE_LOW
-        utest_gpio_set_input_state(pwrkey_gpio, 1);  // High = released
-    #else
-        utest_gpio_set_input_state(pwrkey_gpio, 0);  // Low = released
-    #endif
-
-    // Start periodic work
-    pwrkey_do_periodic_work();
-
-    // Wait for initial debounce
-    utest_systick_advance_time_ms(PWRKEY_DEBOUNCE_MS + 1);
-    pwrkey_do_periodic_work();
+    simulate_button_release_with_debounce();
 
     TEST_ASSERT_FALSE_MESSAGE(pwrkey_pressed(), "Initial state should be released");
 
     // Simulate button press
-    #ifdef EC_GPIO_PWRKEY_ACTIVE_LOW
-        utest_gpio_set_input_state(pwrkey_gpio, 0);  // Low = pressed
-    #else
-        utest_gpio_set_input_state(pwrkey_gpio, 1);  // High = pressed
-    #endif
+    simulate_button_press();
 
     pwrkey_do_periodic_work();
     TEST_ASSERT_FALSE_MESSAGE(pwrkey_pressed(), "Button should not register as pressed immediately");
@@ -179,25 +180,10 @@ static void test_pwrkey_debounce_glitch_rejection(void)
     pwrkey_init();
 
     // Start with button released
-    #ifdef EC_GPIO_PWRKEY_ACTIVE_LOW
-        utest_gpio_set_input_state(pwrkey_gpio, 1);  // High = released
-    #else
-        utest_gpio_set_input_state(pwrkey_gpio, 0);  // Low = released
-    #endif
-
-    // Start periodic work
-    pwrkey_do_periodic_work();
-
-    // Wait for initial debounce
-    utest_systick_advance_time_ms(PWRKEY_DEBOUNCE_MS + 1);
-    pwrkey_do_periodic_work();
+    simulate_button_release_with_debounce();
 
     // Simulate a glitch (brief press)
-    #ifdef EC_GPIO_PWRKEY_ACTIVE_LOW
-        utest_gpio_set_input_state(pwrkey_gpio, 0);  // Low = pressed
-    #else
-        utest_gpio_set_input_state(pwrkey_gpio, 1);  // High = pressed
-    #endif
+    simulate_button_press();
     pwrkey_do_periodic_work();
 
     // Advance small amount of time
@@ -205,18 +191,108 @@ static void test_pwrkey_debounce_glitch_rejection(void)
     pwrkey_do_periodic_work();
 
     // Glitch ends - button released again
-    #ifdef EC_GPIO_PWRKEY_ACTIVE_LOW
-        utest_gpio_set_input_state(pwrkey_gpio, 1);  // High = released
-    #else
-        utest_gpio_set_input_state(pwrkey_gpio, 0);  // Low = released
-    #endif
-    pwrkey_do_periodic_work();
-
-    // Advance time beyond glitch
-    utest_systick_advance_time_ms(PWRKEY_DEBOUNCE_MS);
-    pwrkey_do_periodic_work();
+    simulate_button_release_with_debounce();
 
     TEST_ASSERT_FALSE_MESSAGE(pwrkey_pressed(), "Button should still be released after glitch rejection");
+}
+
+
+static void test_pwkrey_debounce_long_glith_rejection_press(void)
+{
+    LOG_INFO("Testing long time glitch rejection during press");
+
+    pwrkey_init();
+
+    // Start with button released
+    simulate_button_release_with_debounce();
+
+    // Simulate a glitch (brief presses)
+    systime_t glitch_time = 5;
+    unsigned time = 0;
+    while (time <= (PWRKEY_DEBOUNCE_MS + 1)) {
+        simulate_button_press();
+        pwrkey_do_periodic_work();
+        utest_systick_advance_time_ms(glitch_time);
+        pwrkey_do_periodic_work();
+
+        TEST_ASSERT_FALSE_MESSAGE(pwrkey_pressed(), "Button should still be released during glitch rejection");
+
+        simulate_button_release();
+        pwrkey_do_periodic_work();
+        utest_systick_advance_time_ms(glitch_time);
+        pwrkey_do_periodic_work();
+
+        TEST_ASSERT_FALSE_MESSAGE(pwrkey_pressed(), "Button should still be released during glitch rejection");
+
+        time += glitch_time;
+    }
+
+    // Now press button permanently
+    simulate_button_press();
+    pwrkey_do_periodic_work();
+
+    TEST_ASSERT_FALSE_MESSAGE(pwrkey_pressed(), "Button should still be released just after glitch rejection");
+
+    // Advance small amount of time
+    utest_systick_advance_time_ms(PWRKEY_DEBOUNCE_MS / 2);
+    pwrkey_do_periodic_work();
+
+    TEST_ASSERT_FALSE_MESSAGE(pwrkey_pressed(), "Button should still be released before debounce time elapsed");
+
+    // Advance time to reach the end of debounce interval
+    utest_systick_advance_time_ms(PWRKEY_DEBOUNCE_MS / 2 + 2);
+    pwrkey_do_periodic_work();
+
+    TEST_ASSERT_TRUE_MESSAGE(pwrkey_pressed(), "Button should be pressed after debounce time elapsed");
+}
+
+static void test_pwkrey_debounce_long_glith_rejection_release(void)
+{
+    LOG_INFO("Testing long time glitch rejection during release");
+
+    pwrkey_init();
+
+    // Start with button pressed
+    simulate_button_press_with_debounce();
+
+    // Simulate a glitch (brief presses)
+    systime_t glitch_time = 5;
+    unsigned time = 0;
+    while (time <= (PWRKEY_DEBOUNCE_MS + 1)) {
+        simulate_button_release();
+        pwrkey_do_periodic_work();
+        utest_systick_advance_time_ms(glitch_time);
+        pwrkey_do_periodic_work();
+
+        TEST_ASSERT_TRUE_MESSAGE(pwrkey_pressed(), "Button should still be pressed during glitch rejection");
+
+        simulate_button_press();
+        pwrkey_do_periodic_work();
+        utest_systick_advance_time_ms(glitch_time);
+        pwrkey_do_periodic_work();
+
+        TEST_ASSERT_TRUE_MESSAGE(pwrkey_pressed(), "Button should still be pressed during glitch rejection");
+
+        time += glitch_time;
+    }
+
+    // Now release button permanently
+    simulate_button_release();
+    pwrkey_do_periodic_work();
+
+    TEST_ASSERT_TRUE_MESSAGE(pwrkey_pressed(), "Button should still be pressed just after glitch rejection");
+
+    // Advance small amount of time
+    utest_systick_advance_time_ms(PWRKEY_DEBOUNCE_MS / 2);
+    pwrkey_do_periodic_work();
+
+    TEST_ASSERT_TRUE_MESSAGE(pwrkey_pressed(), "Button should still be pressed before debounce time elapsed");
+
+    // Advance time to reach the end of debounce interval
+    utest_systick_advance_time_ms(PWRKEY_DEBOUNCE_MS / 2 + 2);
+    pwrkey_do_periodic_work();
+
+    TEST_ASSERT_FALSE_MESSAGE(pwrkey_pressed(), "Button should be released after debounce time elapsed");
 }
 
 static void test_pwrkey_short_press_detection(void)
@@ -226,35 +302,13 @@ static void test_pwrkey_short_press_detection(void)
     pwrkey_init();
 
     // Start with button released
-    #ifdef EC_GPIO_PWRKEY_ACTIVE_LOW
-        utest_gpio_set_input_state(pwrkey_gpio, 1);  // High = released
-    #else
-        utest_gpio_set_input_state(pwrkey_gpio, 0);  // Low = released
-    #endif
-
-    // Start periodic work
-    pwrkey_do_periodic_work();
-
-    // Wait for initial debounce
-    utest_systick_advance_time_ms(PWRKEY_DEBOUNCE_MS + 1);
-    pwrkey_do_periodic_work();
+    simulate_button_release_with_debounce();
 
     // No short press detected yet
     TEST_ASSERT_FALSE_MESSAGE(pwrkey_handle_short_press(), "No short press should be detected initially");
 
     // Simulate button press
-    #ifdef EC_GPIO_PWRKEY_ACTIVE_LOW
-        utest_gpio_set_input_state(pwrkey_gpio, 0);  // Low = pressed
-    #else
-        utest_gpio_set_input_state(pwrkey_gpio, 1);  // High = pressed
-    #endif
-
-    // Start periodic work with press
-    pwrkey_do_periodic_work();
-
-    // Wait for press debounce
-    utest_systick_advance_time_ms(PWRKEY_DEBOUNCE_MS + 1);
-    pwrkey_do_periodic_work();
+    simulate_button_press_with_debounce();
 
     TEST_ASSERT_FALSE_MESSAGE(pwrkey_handle_short_press(), "No short press while button is held");
 
@@ -263,18 +317,7 @@ static void test_pwrkey_short_press_detection(void)
     pwrkey_do_periodic_work();
 
     // Release button
-    #ifdef EC_GPIO_PWRKEY_ACTIVE_LOW
-        utest_gpio_set_input_state(pwrkey_gpio, 1);  // High = released
-    #else
-        utest_gpio_set_input_state(pwrkey_gpio, 0);  // Low = released
-    #endif
-
-    // Start periodic work with release
-    pwrkey_do_periodic_work();
-
-    // Wait for release debounce
-    utest_systick_advance_time_ms(PWRKEY_DEBOUNCE_MS + 1);
-    pwrkey_do_periodic_work();
+    simulate_button_release_with_debounce();
 
     // Short press should be detected
     TEST_ASSERT_TRUE_MESSAGE(pwrkey_handle_short_press(), "Short press should be detected after button release");
@@ -290,35 +333,13 @@ static void test_pwrkey_long_press_detection(void)
     pwrkey_init();
 
     // Start with button released
-    #ifdef EC_GPIO_PWRKEY_ACTIVE_LOW
-        utest_gpio_set_input_state(pwrkey_gpio, 1);  // High = released
-    #else
-        utest_gpio_set_input_state(pwrkey_gpio, 0);  // Low = released
-    #endif
-
-    // Start periodic work
-    pwrkey_do_periodic_work();
-
-    // Wait for initial debounce
-    utest_systick_advance_time_ms(PWRKEY_DEBOUNCE_MS + 1);
-    pwrkey_do_periodic_work();
+    simulate_button_release_with_debounce();
 
     // No long press detected yet
     TEST_ASSERT_FALSE_MESSAGE(pwrkey_handle_long_press(), "No long press should be detected initially");
 
     // Simulate button press
-    #ifdef EC_GPIO_PWRKEY_ACTIVE_LOW
-        utest_gpio_set_input_state(pwrkey_gpio, 0);  // Low = pressed
-    #else
-        utest_gpio_set_input_state(pwrkey_gpio, 1);  // High = pressed
-    #endif
-
-    // Start periodic work with press
-    pwrkey_do_periodic_work();
-
-    // Wait for press debounce
-    utest_systick_advance_time_ms(PWRKEY_DEBOUNCE_MS + 1);
-    pwrkey_do_periodic_work();
+    simulate_button_press_with_debounce();
 
     TEST_ASSERT_FALSE_MESSAGE(pwrkey_handle_long_press(), "No long press immediately after button press");
 
@@ -352,32 +373,10 @@ static void test_pwrkey_long_press_no_short_press(void)
     pwrkey_init();
 
     // Start with button released
-    #ifdef EC_GPIO_PWRKEY_ACTIVE_LOW
-        utest_gpio_set_input_state(pwrkey_gpio, 1);  // High = released
-    #else
-        utest_gpio_set_input_state(pwrkey_gpio, 0);  // Low = released
-    #endif
-
-    // Start periodic work
-    pwrkey_do_periodic_work();
-
-    // Wait for initial debounce
-    utest_systick_advance_time_ms(PWRKEY_DEBOUNCE_MS + 1);
-    pwrkey_do_periodic_work();
+    simulate_button_release_with_debounce();
 
     // Simulate button press
-    #ifdef EC_GPIO_PWRKEY_ACTIVE_LOW
-        utest_gpio_set_input_state(pwrkey_gpio, 0);  // Low = pressed
-    #else
-        utest_gpio_set_input_state(pwrkey_gpio, 1);  // High = pressed
-    #endif
-
-    // Start periodic work with press
-    pwrkey_do_periodic_work();
-
-    // Wait for press debounce
-    utest_systick_advance_time_ms(PWRKEY_DEBOUNCE_MS + 1);
-    pwrkey_do_periodic_work();
+    simulate_button_press_with_debounce();
 
     // Hold for long press duration
     utest_systick_advance_time_ms(PWRKEY_LONG_PRESS_TIME_MS + 1);
@@ -387,18 +386,7 @@ static void test_pwrkey_long_press_no_short_press(void)
     TEST_ASSERT_TRUE_MESSAGE(pwrkey_handle_long_press(), "Long press should be detected");
 
     // Release button
-    #ifdef EC_GPIO_PWRKEY_ACTIVE_LOW
-        utest_gpio_set_input_state(pwrkey_gpio, 1);  // High = released
-    #else
-        utest_gpio_set_input_state(pwrkey_gpio, 0);  // Low = released
-    #endif
-
-    // Start periodic work with release
-    pwrkey_do_periodic_work();
-
-    // Wait for release debounce
-    utest_systick_advance_time_ms(PWRKEY_DEBOUNCE_MS + 1);
-    pwrkey_do_periodic_work();
+    simulate_button_release_with_debounce();
 
     // Short press should NOT be detected (since it was a long press)
     TEST_ASSERT_FALSE_MESSAGE(pwrkey_handle_short_press(), "Short press should NOT be detected after long press");
@@ -411,58 +399,17 @@ static void test_pwrkey_multiple_short_presses(void)
     pwrkey_init();
 
     // Start with button released
-    #ifdef EC_GPIO_PWRKEY_ACTIVE_LOW
-        utest_gpio_set_input_state(pwrkey_gpio, 1);  // High = released
-    #else
-        utest_gpio_set_input_state(pwrkey_gpio, 0);  // Low = released
-    #endif
-
-    // Start periodic work
-    pwrkey_do_periodic_work();
-
-    // Wait for initial debounce
-    utest_systick_advance_time_ms(PWRKEY_DEBOUNCE_MS + 1);
-    pwrkey_do_periodic_work();
+    simulate_button_release_with_debounce();
 
     // First short press
-    #ifdef EC_GPIO_PWRKEY_ACTIVE_LOW
-        utest_gpio_set_input_state(pwrkey_gpio, 0);  // Press
-    #else
-        utest_gpio_set_input_state(pwrkey_gpio, 1);
-    #endif
-    pwrkey_do_periodic_work();
-    utest_systick_advance_time_ms(PWRKEY_DEBOUNCE_MS + 1);
-    pwrkey_do_periodic_work();
-
-    #ifdef EC_GPIO_PWRKEY_ACTIVE_LOW
-        utest_gpio_set_input_state(pwrkey_gpio, 1);  // Release
-    #else
-        utest_gpio_set_input_state(pwrkey_gpio, 0);
-    #endif
-    pwrkey_do_periodic_work();
-    utest_systick_advance_time_ms(PWRKEY_DEBOUNCE_MS + 1);
-    pwrkey_do_periodic_work();
+    simulate_button_press_with_debounce();
+    simulate_button_release_with_debounce();
 
     TEST_ASSERT_TRUE_MESSAGE(pwrkey_handle_short_press(), "First short press should be detected");
 
     // Second short press
-    #ifdef EC_GPIO_PWRKEY_ACTIVE_LOW
-        utest_gpio_set_input_state(pwrkey_gpio, 0);  // Press
-    #else
-        utest_gpio_set_input_state(pwrkey_gpio, 1);
-    #endif
-    pwrkey_do_periodic_work();
-    utest_systick_advance_time_ms(PWRKEY_DEBOUNCE_MS + 1);
-    pwrkey_do_periodic_work();
-
-    #ifdef EC_GPIO_PWRKEY_ACTIVE_LOW
-        utest_gpio_set_input_state(pwrkey_gpio, 1);  // Release
-    #else
-        utest_gpio_set_input_state(pwrkey_gpio, 0);
-    #endif
-    pwrkey_do_periodic_work();
-    utest_systick_advance_time_ms(PWRKEY_DEBOUNCE_MS + 1);
-    pwrkey_do_periodic_work();
+    simulate_button_press_with_debounce();
+    simulate_button_release_with_debounce();
 
     TEST_ASSERT_TRUE_MESSAGE(pwrkey_handle_short_press(), "Second short press should be detected");
     TEST_ASSERT_FALSE_MESSAGE(pwrkey_handle_short_press(), "No more short presses should be pending");
@@ -475,28 +422,10 @@ static void test_pwrkey_multiple_long_presses(void)
     pwrkey_init();
 
     // Start with button released
-    #ifdef EC_GPIO_PWRKEY_ACTIVE_LOW
-        utest_gpio_set_input_state(pwrkey_gpio, 1);  // High = released
-    #else
-        utest_gpio_set_input_state(pwrkey_gpio, 0);  // Low = released
-    #endif
-
-    // Start periodic work
-    pwrkey_do_periodic_work();
-
-    // Wait for initial debounce
-    utest_systick_advance_time_ms(PWRKEY_DEBOUNCE_MS + 1);
-    pwrkey_do_periodic_work();
+    simulate_button_release_with_debounce();
 
     // === First long press ===
-    #ifdef EC_GPIO_PWRKEY_ACTIVE_LOW
-        utest_gpio_set_input_state(pwrkey_gpio, 0);  // Press
-    #else
-        utest_gpio_set_input_state(pwrkey_gpio, 1);
-    #endif
-    pwrkey_do_periodic_work();
-    utest_systick_advance_time_ms(PWRKEY_DEBOUNCE_MS + 1);
-    pwrkey_do_periodic_work();
+    simulate_button_press_with_debounce();
 
     // Hold for long press duration
     utest_systick_advance_time_ms(PWRKEY_LONG_PRESS_TIME_MS + 1);
@@ -505,33 +434,19 @@ static void test_pwrkey_multiple_long_presses(void)
     TEST_ASSERT_TRUE_MESSAGE(pwrkey_handle_long_press(), "First long press should be detected");
 
     // Continue holding - long press should not repeat
-    utest_systick_advance_time_ms(PWRKEY_LONG_PRESS_TIME_MS);
+    utest_systick_advance_time_ms(PWRKEY_LONG_PRESS_TIME_MS + 1);
     pwrkey_do_periodic_work();
 
     TEST_ASSERT_FALSE_MESSAGE(pwrkey_handle_long_press(), "Long press should not repeat while button is still held");
 
     // Release button
-    #ifdef EC_GPIO_PWRKEY_ACTIVE_LOW
-        utest_gpio_set_input_state(pwrkey_gpio, 1);  // Release
-    #else
-        utest_gpio_set_input_state(pwrkey_gpio, 0);
-    #endif
-    pwrkey_do_periodic_work();
-    utest_systick_advance_time_ms(PWRKEY_DEBOUNCE_MS + 1);
-    pwrkey_do_periodic_work();
+    simulate_button_release_with_debounce();
 
     // No short press should be generated after long press
     TEST_ASSERT_FALSE_MESSAGE(pwrkey_handle_short_press(), "No short press after long press");
 
     // === Second long press ===
-    #ifdef EC_GPIO_PWRKEY_ACTIVE_LOW
-        utest_gpio_set_input_state(pwrkey_gpio, 0);  // Press
-    #else
-        utest_gpio_set_input_state(pwrkey_gpio, 1);
-    #endif
-    pwrkey_do_periodic_work();
-    utest_systick_advance_time_ms(PWRKEY_DEBOUNCE_MS + 1);
-    pwrkey_do_periodic_work();
+    simulate_button_press_with_debounce();
 
     // Hold for long press duration
     utest_systick_advance_time_ms(PWRKEY_LONG_PRESS_TIME_MS + 1);
@@ -548,18 +463,7 @@ static void test_pwrkey_pressed_on_boot(void)
     pwrkey_init();
 
     // Simulate button ALREADY PRESSED on boot (e.g., powered on by button and user holds it)
-    #ifdef EC_GPIO_PWRKEY_ACTIVE_LOW
-        utest_gpio_set_input_state(pwrkey_gpio, 0);  // Low = pressed
-    #else
-        utest_gpio_set_input_state(pwrkey_gpio, 1);  // High = pressed
-    #endif
-
-    // Start periodic work - this should register the initial pressed state
-    pwrkey_do_periodic_work();
-
-    // Wait for initial debounce
-    utest_systick_advance_time_ms(PWRKEY_DEBOUNCE_MS + 1);
-    pwrkey_do_periodic_work();
+    simulate_button_press_with_debounce();
 
     // Button should be detected as pressed
     TEST_ASSERT_TRUE_MESSAGE(pwrkey_ready(), "pwrkey should be ready after debounce");
@@ -577,40 +481,19 @@ static void test_pwrkey_pressed_on_boot(void)
     TEST_ASSERT_FALSE_MESSAGE(pwrkey_handle_long_press(), "No long press should be detected for button held since boot");
 
     // Now release the button
-    #ifdef EC_GPIO_PWRKEY_ACTIVE_LOW
-        utest_gpio_set_input_state(pwrkey_gpio, 1);  // High = released
-    #else
-        utest_gpio_set_input_state(pwrkey_gpio, 0);  // Low = released
-    #endif
-    pwrkey_do_periodic_work();
-    utest_systick_advance_time_ms(PWRKEY_DEBOUNCE_MS + 1);
-    pwrkey_do_periodic_work();
+    simulate_button_release_with_debounce();
 
     // Still no short press should be generated after release
     TEST_ASSERT_FALSE_MESSAGE(pwrkey_handle_short_press(), "No short press after releasing button held since boot");
 
     // Now press the button again - THIS should generate press events
-    #ifdef EC_GPIO_PWRKEY_ACTIVE_LOW
-        utest_gpio_set_input_state(pwrkey_gpio, 0);  // Low = pressed
-    #else
-        utest_gpio_set_input_state(pwrkey_gpio, 1);  // High = pressed
-    #endif
-    pwrkey_do_periodic_work();
-    utest_systick_advance_time_ms(PWRKEY_DEBOUNCE_MS + 1);
-    pwrkey_do_periodic_work();
+    simulate_button_press_with_debounce();
 
     // Hold for short duration and release
     utest_systick_advance_time_ms(PWRKEY_LONG_PRESS_TIME_MS / 2);
     pwrkey_do_periodic_work();
 
-    #ifdef EC_GPIO_PWRKEY_ACTIVE_LOW
-        utest_gpio_set_input_state(pwrkey_gpio, 1);  // High = released
-    #else
-        utest_gpio_set_input_state(pwrkey_gpio, 0);  // Low = released
-    #endif
-    pwrkey_do_periodic_work();
-    utest_systick_advance_time_ms(PWRKEY_DEBOUNCE_MS + 1);
-    pwrkey_do_periodic_work();
+    simulate_button_release_with_debounce();
 
     // NOW short press should be detected
     TEST_ASSERT_TRUE_MESSAGE(pwrkey_handle_short_press(), "Short press should be detected after proper button press (after boot-held button was released)");
@@ -633,6 +516,8 @@ int main(void)
     RUN_TEST(test_pwrkey_pressed_state);
     RUN_TEST(test_pwrkey_debounce_on_press);
     RUN_TEST(test_pwrkey_debounce_glitch_rejection);
+    RUN_TEST(test_pwkrey_debounce_long_glith_rejection_press);
+    RUN_TEST(test_pwkrey_debounce_long_glith_rejection_release);
     RUN_TEST(test_pwrkey_short_press_detection);
     RUN_TEST(test_pwrkey_long_press_detection);
     RUN_TEST(test_pwrkey_long_press_no_short_press);
