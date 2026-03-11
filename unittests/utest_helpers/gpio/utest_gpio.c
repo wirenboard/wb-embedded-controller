@@ -25,6 +25,15 @@ uint32_t utest_gpio_get_output_state(const gpio_pin_t pin)
     return (pin.port->ODR >> pin.pin) & 0x1;
 }
 
+void utest_gpio_set_input_state(const gpio_pin_t pin, uint32_t state)
+{
+    if (state) {
+        pin.port->IDR |= (1U << pin.pin);
+    } else {
+        pin.port->IDR &= ~(1U << pin.pin);
+    }
+}
+
 // GPIO mock function implementations
 // These provide basic functional implementations of GPIO operations
 
@@ -107,4 +116,9 @@ void GPIO_S_SET_AF(gpio_pin_t pin, uint8_t af)
 
     pin.port->AFR[afr_idx] &= ~(0xFU << afr_pos);
     pin.port->AFR[afr_idx] |= ((uint32_t)af << afr_pos);
+}
+
+uint32_t GPIO_S_TEST(gpio_pin_t pin)
+{
+    return (pin.port->IDR & (1 << pin.pin));
 }

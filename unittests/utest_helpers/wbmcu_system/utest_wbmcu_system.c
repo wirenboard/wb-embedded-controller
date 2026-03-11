@@ -3,6 +3,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <setjmp.h>
+#include <string.h>
 
 // UID_BASE mock
 const uint32_t uid_base_mock[3] = {0x12345678, 0x9ABCDEF0, 0x11223344};
@@ -38,4 +39,12 @@ void utest_nvic_reset(void)
 void utest_nvic_set_exit_jmp(jmp_buf *jmp)
 {
     nvic_state.exit_jmp = jmp;
+}
+
+
+PWR_TypeDef _PWR_instance = {0};
+
+void utest_pwr_reset(void)
+{
+    memset(&_PWR_instance, 0, sizeof(_PWR_instance));
 }

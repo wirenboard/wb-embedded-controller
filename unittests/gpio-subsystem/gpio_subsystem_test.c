@@ -1,7 +1,7 @@
 #include "unity.h"
 #include "gpio-subsystem.h"
 #include "config.h"
-#include "gpio.h"
+#include "utest_gpio.h"
 #include "regmap-int.h"
 #include "regmap-structs.h"
 #include "utest_regmap.h"
