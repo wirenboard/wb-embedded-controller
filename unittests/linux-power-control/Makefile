@@ -21,7 +21,6 @@ AUX_SRC += $(UTEST_HELPERS_DIR)/system-led/utest_system_led.c
 AUX_SRC += ./linux_power_control_test_stubs.c
 
 # Include directories
-INC += .
 INC += $(UTEST_HELPERS_DIR)
 INC += $(UTEST_HELPERS_DIR)/mcu-pwr
 INC += $(UTEST_HELPERS_DIR)/systick

@@ -77,8 +77,6 @@ static void goto_standby_and_save_5v_status(void)
     linux_cpu_pwr_seq_off_and_goto_standby(WBEC_PERIODIC_WAKEUP_FIRST_TIMEOUT_S);
 }
 
-
-
 /**
  * @brief Инициализирует GPIO управления питанием как выходы.
  * При включении питания WB питание на процессор не подается, пока не зарядится RC-цепочка
@@ -309,6 +307,15 @@ void linux_cpu_pwr_seq_do_periodic_work(void)
         break;
 
     default:
-        break;
+        break; // GCOVR_EXCL_LINE
     }
 }
+
+#ifdef __unittest_env__
+    #include <string.h>
+
+    void utest_linux_power_control_reset_state(void)
+    {
+        memset(&pwr_ctx, 0, sizeof(pwr_ctx));
+    }
+#endif
