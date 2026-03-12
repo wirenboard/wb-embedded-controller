@@ -617,3 +617,12 @@ void wbec_do_periodic_work(void)
         break;
     }
 }
+
+#ifdef __unittest_env__
+    #include <string.h>
+
+    void utest_wbec_reset_state(void)
+    {
+        memset(&wbec_ctx, 0, sizeof(wbec_ctx));
+    }
+#endif
