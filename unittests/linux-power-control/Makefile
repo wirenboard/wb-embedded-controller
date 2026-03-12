@@ -18,6 +18,7 @@ AUX_SRC += $(UTEST_HELPERS_DIR)/gpio/utest_gpio.c
 AUX_SRC += $(UTEST_HELPERS_DIR)/wbmcu_system/utest_wbmcu_system.c
 AUX_SRC += $(UTEST_HELPERS_DIR)/wdt-stm32/utest_wdt_stm32.c
 AUX_SRC += $(UTEST_HELPERS_DIR)/system-led/utest_system_led.c
+AUX_SRC += $(UTEST_HELPERS_DIR)/console/utest_console.c
 AUX_SRC += ./linux_power_control_test_stubs.c
 
 # Include directories

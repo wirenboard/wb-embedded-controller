@@ -48,16 +48,6 @@ uint32_t utest_linux_power_control_get_wbmz_disable_stepup_call_count(void)
     return wbmz_disable_stepup_call_count;
 }
 
-void console_print(const char str[])
-{
-    (void)str;
-}
-
-void console_print_w_prefix(const char str[])
-{
-    (void)str;
-}
-
 bool pwrkey_handle_long_press(void)
 {
     return pwrkey_long_press;
