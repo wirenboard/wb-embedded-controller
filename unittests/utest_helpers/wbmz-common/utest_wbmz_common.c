@@ -22,17 +22,17 @@ void utest_wbmz_set_powered_from_wbmz(bool powered)
     powered_from_wbmz = powered;
 }
 
-void utest_linux_power_control_set_wbmz_stepup_enabled(bool value)
+void utest_set_wbmz_stepup_enabled(bool value)
 {
     wbmz_stepup_enabled = value;
 }
 
-uint32_t utest_linux_power_control_get_wbmz_periodic_work_call_count(void)
+uint32_t utest_get_wbmz_periodic_work_call_count(void)
 {
     return wbmz_periodic_work_call_count;
 }
 
-uint32_t utest_linux_power_control_get_wbmz_disable_stepup_call_count(void)
+uint32_t utest_get_wbmz_disable_stepup_call_count(void)
 {
     return wbmz_disable_stepup_call_count;
 }
@@ -60,4 +60,3 @@ void wbmz_do_periodic_work(void)
 
 void wbmz_common_init(void) {}
 void wbmz_common_do_periodic_work(void) {}
-
