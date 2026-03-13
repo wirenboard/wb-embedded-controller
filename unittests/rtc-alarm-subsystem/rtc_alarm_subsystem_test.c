@@ -150,8 +150,12 @@ static void test_rtc_not_ready_read(void)
     memset(&regmap_time, 0xFF, sizeof(regmap_time));
     bool result = utest_regmap_get_region_data(REGMAP_REGION_RTC_TIME, &regmap_time, sizeof(regmap_time));
 
-    TEST_ASSERT_FALSE_MESSAGE(result && regmap_time.seconds != 0xFF,
-                              "No data should be written to regmap when RTC is not ready");
+    struct REGMAP_RTC_TIME expected_time;
+    memset(&expected_time, 0xFF, sizeof(expected_time));
+
+    TEST_ASSERT_FALSE_MESSAGE(result, "No data should be written to regmap when RTC is not ready");
+    TEST_ASSERT_EQUAL_MEMORY_MESSAGE(&expected_time, &regmap_time, sizeof(regmap_time),
+                                    "All fields should remain 0xFF when RTC is not ready");
 }
 
 // ============================================================================
@@ -302,6 +306,71 @@ static void test_regmap_not_changed(void)
                              "RTC offset should not be updated when regmap data hasn't changed");
 }
 
+/**
+ * Сценарий: все три региона (RTC_TIME, RTC_ALARM, RTC_CFG) помечены как измененные одновременно
+ * Ожидается: все три региона записываются в RTC с корректной конвертацией
+ */
+static void test_all_regions_changed_simultaneously(void)
+{
+    LOG_INFO("Testing simultaneous change of all three regmap regions");
+
+    struct REGMAP_RTC_TIME regmap_time = {
+        .seconds = 45,
+        .minutes = 30,
+        .hours = 14,
+        .days = 25,
+        .weekdays = 5,
+        .months = 11,
+        .years = 25
+    };
+    regmap_set_region_data(REGMAP_REGION_RTC_TIME, &regmap_time, sizeof(regmap_time));
+    utest_regmap_mark_region_changed(REGMAP_REGION_RTC_TIME);
+
+    struct REGMAP_RTC_ALARM regmap_alarm = {
+        .seconds = 0,
+        .minutes = 0,
+        .hours = 6,
+        .days = 1,
+        .en = 1
+    };
+    regmap_set_region_data(REGMAP_REGION_RTC_ALARM, &regmap_alarm, sizeof(regmap_alarm));
+    utest_regmap_mark_region_changed(REGMAP_REGION_RTC_ALARM);
+
+    struct REGMAP_RTC_CFG regmap_cfg = {
+        .offset = 0x1234
+    };
+    regmap_set_region_data(REGMAP_REGION_RTC_CFG, &regmap_cfg, sizeof(regmap_cfg));
+    utest_regmap_mark_region_changed(REGMAP_REGION_RTC_CFG);
+
+    rtc_alarm_do_periodic_work();
+
+    struct rtc_time rtc_time;
+    bool result_time = utest_rtc_get_was_datetime_set(&rtc_time);
+    TEST_ASSERT_TRUE_MESSAGE(result_time, "RTC time should be updated");
+    TEST_ASSERT_EQUAL_HEX8_MESSAGE(0x45, rtc_time.seconds, "Seconds should be converted to BCD");
+    TEST_ASSERT_EQUAL_HEX8_MESSAGE(0x30, rtc_time.minutes, "Minutes should be converted to BCD");
+    TEST_ASSERT_EQUAL_HEX8_MESSAGE(0x14, rtc_time.hours, "Hours should be converted to BCD");
+    TEST_ASSERT_EQUAL_HEX8_MESSAGE(0x25, rtc_time.days, "Days should be converted to BCD");
+    TEST_ASSERT_EQUAL_UINT8_MESSAGE(5, rtc_time.weekdays, "Weekdays should not be converted");
+    TEST_ASSERT_EQUAL_HEX8_MESSAGE(0x11, rtc_time.months, "Months should be converted to BCD");
+    TEST_ASSERT_EQUAL_HEX8_MESSAGE(0x25, rtc_time.years, "Years should be converted to BCD");
+
+    struct rtc_alarm rtc_alarm;
+    bool result_alarm = utest_rtc_get_was_alarm_set(&rtc_alarm);
+    TEST_ASSERT_TRUE_MESSAGE(result_alarm, "RTC alarm should be updated");
+    TEST_ASSERT_EQUAL_HEX8_MESSAGE(0x00, rtc_alarm.seconds, "Alarm seconds should be converted to BCD");
+    TEST_ASSERT_EQUAL_HEX8_MESSAGE(0x00, rtc_alarm.minutes, "Alarm minutes should be converted to BCD");
+    TEST_ASSERT_EQUAL_HEX8_MESSAGE(0x06, rtc_alarm.hours, "Alarm hours should be converted to BCD");
+    TEST_ASSERT_EQUAL_HEX8_MESSAGE(0x01, rtc_alarm.days, "Alarm days should be converted to BCD");
+    TEST_ASSERT_TRUE_MESSAGE(rtc_alarm.enabled, "Alarm should be enabled");
+    TEST_ASSERT_FALSE_MESSAGE(rtc_alarm.flag, "Alarm flag should be cleared");
+
+    uint16_t rtc_offset;
+    bool result_offset = utest_rtc_get_was_offset_set(&rtc_offset);
+    TEST_ASSERT_TRUE_MESSAGE(result_offset, "RTC offset should be updated");
+    TEST_ASSERT_EQUAL_HEX16_MESSAGE(0x1234, rtc_offset, "Offset should be copied to RTC");
+}
+
 // ============================================================================
 // Тесты обработки срабатывания будильника
 // ============================================================================
@@ -373,6 +442,19 @@ static void test_alarm_no_flag_no_irq(void)
 // ============================================================================
 // Тесты функции rtc_alarm_is_alarm_enabled
 // ============================================================================
+
+/**
+ * Сценарий: проверка значения rtc_alarm_is_alarm_enabled() без предшествующего вызова periodic_work
+ * Ожидается: возвращает false (static переменная alarm_enabled инициализируется как 0)
+ * Примечание: этот тест должен выполняться первым, до любых вызовов rtc_alarm_do_periodic_work()
+ */
+static void test_alarm_enabled_initial_state(void)
+{
+    LOG_INFO("Testing rtc_alarm_is_alarm_enabled in initial state");
+
+    TEST_ASSERT_FALSE_MESSAGE(rtc_alarm_is_alarm_enabled(),
+                             "rtc_alarm_is_alarm_enabled should return false before first periodic_work call");
+}
 
 /**
  * Сценарий: RTC содержит включенный будильник (enabled=true)
@@ -550,6 +632,9 @@ int main(void)
 {
     UNITY_BEGIN();
 
+    // Тест начального состояния (должен быть первым)
+    RUN_TEST(test_alarm_enabled_initial_state);
+
     // Тесты конвертации RTC -> regmap
     RUN_TEST(test_rtc_to_regmap_time_conversion);
     RUN_TEST(test_rtc_to_regmap_alarm_conversion);
@@ -561,6 +646,7 @@ int main(void)
     RUN_TEST(test_regmap_to_rtc_alarm_conversion);
     RUN_TEST(test_regmap_to_rtc_offset);
     RUN_TEST(test_regmap_not_changed);
+    RUN_TEST(test_all_regions_changed_simultaneously);
 
     // Тесты срабатывания будильника
     RUN_TEST(test_alarm_trigger_behavior);
