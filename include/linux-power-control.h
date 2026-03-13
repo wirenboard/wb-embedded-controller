@@ -10,5 +10,3 @@ void linux_cpu_pwr_seq_hard_reset(void);
 void linux_cpu_pwr_seq_reset_pmic(void);
 bool linux_cpu_pwr_seq_is_busy(void);
 void linux_cpu_pwr_seq_do_periodic_work(void);
-void linux_cpu_pwr_seq_enable_wbmz(void);
-bool linux_cpu_pwr_seq_is_powered_from_wbmz(void);
