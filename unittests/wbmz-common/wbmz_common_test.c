@@ -12,8 +12,10 @@ static const gpio_pin_t stepup_enable_gpio = { EC_GPIO_WBMZ_STEPUP_ENABLE };
 static const gpio_pin_t status_bat_gpio = { EC_GPIO_WBMZ_STATUS_BAT };
 
 #if defined WBEC_GPIO_WBMZ_CHARGE_ENABLE
-static const gpio_pin_t charge_enable_gpio = { WBEC_GPIO_WBMZ_CHARGE_ENABLE };
+    static const gpio_pin_t charge_enable_gpio = { WBEC_GPIO_WBMZ_CHARGE_ENABLE };
 #endif
+
+void utest_wbmz_common_reset_state(void);
 
 void setUp(void)
 {
@@ -21,6 +23,9 @@ void setUp(void)
     utest_gpio_reset_instances();
     utest_systick_set_time_ms(0);
     vmon_init();
+
+    // Reset wbmz-common state
+    utest_wbmz_common_reset_state();
 
     // Set default voltage monitor states (all channels OK)
     utest_vmon_set_ch_status(VMON_CHANNEL_V_IN, true);
@@ -480,6 +485,23 @@ static void test_charging_force_control_enable(void)
 }
 
 
+// Сценарий: заряд выключен, Vin NOT OK, вызов wbmz_do_periodic_work()
+// Ожидается: заряд остается выключенным
+static void test_charging_stays_disabled_when_vin_not_ok(void)
+{
+    LOG_INFO("Testing charging stays disabled when Vin not OK");
+
+    wbmz_init();
+
+    utest_vmon_set_ch_status(VMON_CHANNEL_V_IN, false);
+    utest_gpio_set_input_state(status_bat_gpio, 1);
+    wbmz_do_periodic_work();
+
+    bool enabled = wbmz_is_charging_enabled();
+    TEST_ASSERT_FALSE_MESSAGE(enabled, "Charging should stay disabled when Vin is not OK");
+}
+
+
 // Сценарий: включен force control с состоянием OFF, условия для авто-включения
 // Ожидается: заряд выключен несмотря на автоматику
 static void test_charging_force_control_disable(void)
@@ -496,6 +518,30 @@ static void test_charging_force_control_disable(void)
 
     bool enabled = wbmz_is_charging_enabled();
     TEST_ASSERT_FALSE_MESSAGE(enabled, "Charging should be disabled by force control, ignoring automatic logic");
+
+    uint32_t state = utest_gpio_get_output_state(charge_enable_gpio);
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, state, "Charge enable GPIO should be LOW when force disabled");
+}
+
+
+// Сценарий: заряд включен автоматикой, затем включен force control OFF
+// Ожидается: заряд выключается force control'ом
+static void test_charging_force_control_disable_when_enabled(void)
+{
+    LOG_INFO("Testing charging force control disable when already enabled");
+
+    wbmz_init();
+
+    utest_vmon_set_ch_status(VMON_CHANNEL_V_IN, true);
+    utest_gpio_set_input_state(status_bat_gpio, 1);
+    wbmz_do_periodic_work();
+    TEST_ASSERT_TRUE_MESSAGE(wbmz_is_charging_enabled(), "Charging should be enabled initially");
+
+    wbmz_set_charging_force_control(true, false);
+    wbmz_do_periodic_work();
+
+    bool enabled = wbmz_is_charging_enabled();
+    TEST_ASSERT_FALSE_MESSAGE(enabled, "Charging should be disabled by force control");
 
     uint32_t state = utest_gpio_get_output_state(charge_enable_gpio);
     TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, state, "Charge enable GPIO should be LOW when force disabled");
@@ -545,6 +591,107 @@ static void test_vbat_ok_status(void)
     TEST_ASSERT_FALSE_MESSAGE(vbat_ok, "VBAT should NOT be OK");
 }
 
+
+// ============================================================================
+// Тесты стабильности force control при множественных вызовах periodic_work
+// ============================================================================
+
+// Сценарий: stepup включен через force control ON, условия для авто-выключения, повторные вызовы periodic_work
+// Ожидается: stepup остается включенным, GPIO не меняется (автоматика игнорируется)
+static void test_stepup_force_control_stability_enabled(void)
+{
+    LOG_INFO("Testing stepup force control stability - enabled state");
+
+    wbmz_init();
+
+    wbmz_set_stepup_force_control(true, true);
+
+    // Создаем условия для авто-выключения (Vin NOT OK)
+    utest_vmon_set_ch_status(VMON_CHANNEL_V_IN_FOR_WBMZ, false);
+
+    // Множественные вызовы periodic_work - состояние не должно меняться
+    for (int i = 0; i < 10; i++) {
+        wbmz_do_periodic_work();
+        TEST_ASSERT_TRUE_MESSAGE(wbmz_is_stepup_enabled(), "Stepup should stay enabled by force control");
+        uint32_t state = utest_gpio_get_output_state(stepup_enable_gpio);
+        TEST_ASSERT_EQUAL_UINT32_MESSAGE(1, state, "Stepup GPIO should stay HIGH");
+    }
+}
+
+
+// Сценарий: stepup выключен через force control OFF, условия для авто-включения, повторные вызовы periodic_work
+// Ожидается: stepup остается выключенным, GPIO не меняется (автоматика игнорируется)
+static void test_stepup_force_control_stability_disabled(void)
+{
+    LOG_INFO("Testing stepup force control stability - disabled state");
+
+    wbmz_init();
+
+    wbmz_set_stepup_force_control(true, false);
+
+    // Создаем условия для авто-включения (Vin OK, USB нет)
+    utest_vmon_set_ch_status(VMON_CHANNEL_V_IN_FOR_WBMZ, true);
+    utest_vmon_set_ch_status(VMON_CHANNEL_VBUS_DEBUG, false);
+    #if !defined(EC_USB_HUB_DEBUG_NETWORK)
+        utest_vmon_set_ch_status(VMON_CHANNEL_VBUS_NETWORK, false);
+    #endif
+
+    // Множественные вызовы periodic_work - состояние не должно меняться
+    for (int i = 0; i < 10; i++) {
+        wbmz_do_periodic_work();
+        TEST_ASSERT_FALSE_MESSAGE(wbmz_is_stepup_enabled(), "Stepup should stay disabled by force control");
+        uint32_t state = utest_gpio_get_output_state(stepup_enable_gpio);
+        TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, state, "Stepup GPIO should stay LOW");
+    }
+}
+
+
+// Сценарий: заряд включен через force control ON, условия для авто-выключения, повторные вызовы periodic_work
+// Ожидается: заряд остается включенным, GPIO не меняется (автоматика игнорируется)
+static void test_charging_force_control_stability_enabled(void)
+{
+    LOG_INFO("Testing charging force control stability - enabled state");
+
+    wbmz_init();
+
+    wbmz_set_charging_force_control(true, true);
+
+    // Создаем условия для авто-выключения (Vin NOT OK)
+    utest_vmon_set_ch_status(VMON_CHANNEL_V_IN, false);
+
+    // Множественные вызовы periodic_work - состояние не должно меняться
+    for (int i = 0; i < 10; i++) {
+        wbmz_do_periodic_work();
+        TEST_ASSERT_TRUE_MESSAGE(wbmz_is_charging_enabled(), "Charging should stay enabled by force control");
+        uint32_t state = utest_gpio_get_output_state(charge_enable_gpio);
+        TEST_ASSERT_EQUAL_UINT32_MESSAGE(1, state, "Charge enable GPIO should stay HIGH");
+    }
+}
+
+
+// Сценарий: заряд выключен через force control OFF, условия для авто-включения, повторные вызовы periodic_work
+// Ожидается: заряд остается выключенным, GPIO не меняется (автоматика игнорируется)
+static void test_charging_force_control_stability_disabled(void)
+{
+    LOG_INFO("Testing charging force control stability - disabled state");
+
+    wbmz_init();
+
+    wbmz_set_charging_force_control(true, false);
+
+    // Создаем условия для авто-включения (Vin OK, не питаемся от WBMZ)
+    utest_vmon_set_ch_status(VMON_CHANNEL_V_IN, true);
+    utest_gpio_set_input_state(status_bat_gpio, 1);
+
+    // Множественные вызовы periodic_work - состояние не должно меняться
+    for (int i = 0; i < 10; i++) {
+        wbmz_do_periodic_work();
+        TEST_ASSERT_FALSE_MESSAGE(wbmz_is_charging_enabled(), "Charging should stay disabled by force control");
+        uint32_t state = utest_gpio_get_output_state(charge_enable_gpio);
+        TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, state, "Charge enable GPIO should stay LOW");
+    }
+}
+
 #else
 // Для WB74 - проверяем что функции возвращают заглушки
 
@@ -571,6 +718,22 @@ static void test_vbat_always_ok_without_monitoring(void)
 
     bool vbat_ok = wbmz_is_vbat_ok();
     TEST_ASSERT_TRUE_MESSAGE(vbat_ok, "VBAT should always return true when no monitoring");
+}
+
+
+// Сценарий: вызов wbmz_set_charging_force_control() на WB74 (заглушка)
+// Ожидается: функция ничего не делает, не падает
+static void test_charging_force_control_stub(void)
+{
+    LOG_INFO("Testing charging force control stub (WB74)");
+
+    wbmz_init();
+
+    wbmz_set_charging_force_control(true, true);
+    wbmz_set_charging_force_control(false, false);
+
+    bool enabled = wbmz_is_charging_enabled();
+    TEST_ASSERT_TRUE_MESSAGE(enabled, "Charging should always be enabled (stub behavior)");
 }
 
 #endif
@@ -614,13 +777,22 @@ int main(void)
         RUN_TEST(test_charging_auto_enable_when_vin_ok_and_not_powered_from_wbmz);
         RUN_TEST(test_charging_auto_disable_when_vin_not_ok);
         RUN_TEST(test_charging_auto_disable_when_powered_from_wbmz);
+        RUN_TEST(test_charging_stays_disabled_when_vin_not_ok);
         RUN_TEST(test_charging_force_control_enable);
         RUN_TEST(test_charging_force_control_disable);
+        RUN_TEST(test_charging_force_control_disable_when_enabled);
         RUN_TEST(test_charging_force_control_release);
         RUN_TEST(test_vbat_ok_status);
+
+        // Тесты стабильности force control
+        RUN_TEST(test_stepup_force_control_stability_enabled);
+        RUN_TEST(test_stepup_force_control_stability_disabled);
+        RUN_TEST(test_charging_force_control_stability_enabled);
+        RUN_TEST(test_charging_force_control_stability_disabled);
     #else
         RUN_TEST(test_charging_always_enabled_without_control);
         RUN_TEST(test_vbat_always_ok_without_monitoring);
+        RUN_TEST(test_charging_force_control_stub);
     #endif
 
     return UNITY_END();
