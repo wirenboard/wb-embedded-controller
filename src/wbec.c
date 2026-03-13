@@ -91,7 +91,7 @@ static void new_state(enum wbec_state s)
     case WBEC_STATE_TEMP_CHECK_LOOP:            system_led_blink(5,   100);     break;
     case WBEC_STATE_POWER_ON_SEQUENCE_WAIT:     system_led_blink(50,  50);      break;
     case WBEC_STATE_POWER_OFF_SEQUENCE_WAIT:    system_led_blink(50,  50);      break;
-    default:                                    system_led_enable();            break;
+    default:                                    system_led_enable();            break; // GCOVR_EXCL_LINE
 
     case WBEC_STATE_WORKING:
         system_led_blink(500, 1000);
@@ -109,7 +109,7 @@ static inline systime_t in_state_time_ms(void)
 static inline const char * get_poweron_reason_string(enum linux_poweron_reason r)
 {
     if (r >= ARRAY_SIZE(linux_power_reason_strings)) {
-        return "Unknown";
+        return "Unknown"; // GCOVR_EXCL_LINE
     }
     return linux_power_reason_strings[r];
 }

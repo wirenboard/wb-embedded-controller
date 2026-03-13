@@ -26,14 +26,24 @@ void utest_linux_pwr_reset(void)
     memset(&linux_pwr_state, 0, sizeof(linux_pwr_state));
 }
 
-void utest_linux_pwr_set_is_busy(bool busy)
-{
-    linux_pwr_state.is_busy = busy;
-}
-
 void utest_linux_pwr_set_standby_exit_jmp(jmp_buf *jmp)
 {
     linux_pwr_state.standby_exit_jmp = jmp;
+}
+
+bool utest_linux_pwr_get_standby_called(void)
+{
+    return linux_pwr_state.standby_called;
+}
+
+uint16_t utest_linux_pwr_get_standby_wakeup_s(void)
+{
+    return linux_pwr_state.standby_wakeup_s;
+}
+
+void utest_linux_pwr_set_busy(bool busy)
+{
+    linux_pwr_state.is_busy = busy;
 }
 
 bool utest_linux_pwr_get_init_called(void)
@@ -64,16 +74,6 @@ bool utest_linux_pwr_get_hard_reset_called(void)
 bool utest_linux_pwr_get_reset_pmic_called(void)
 {
     return linux_pwr_state.reset_pmic_called;
-}
-
-bool utest_linux_pwr_get_standby_called(void)
-{
-    return linux_pwr_state.standby_called;
-}
-
-uint16_t utest_linux_pwr_get_standby_wakeup_s(void)
-{
-    return linux_pwr_state.standby_wakeup_s;
 }
 
 void linux_cpu_pwr_seq_init(bool on)
@@ -147,17 +147,15 @@ void utest_pwrkey_set_pressed(bool pressed)
     pwrkey_state.pressed = pressed;
 }
 
-void utest_pwrkey_set_short_press(bool val)
+void utest_pwrkey_set_short_press(bool value)
 {
-    pwrkey_state.short_press = val;
+    pwrkey_state.short_press = value;
 }
 
-void utest_pwrkey_set_long_press(bool val)
+void utest_pwrkey_set_long_press(bool value)
 {
-    pwrkey_state.long_press = val;
+    pwrkey_state.long_press = value;
 }
-
-void pwrkey_init(void) {}
 
 bool pwrkey_ready(void)
 {
@@ -198,19 +196,19 @@ void utest_wdt_reset(void)
     memset(&wdt_state, 0, sizeof(wdt_state));
 }
 
-void utest_wdt_set_timed_out(bool val)
+void utest_wdt_set_timed_out(bool value)
 {
-    wdt_state.timed_out = val;
-}
-
-bool utest_wdt_get_started(void)
-{
-    return wdt_state.started;
+    wdt_state.timed_out = value;
 }
 
 uint16_t utest_wdt_get_timeout(void)
 {
     return wdt_state.timeout;
+}
+
+bool utest_wdt_get_started(void)
+{
+    return wdt_state.started;
 }
 
 void wdt_set_timeout(uint16_t secs)
@@ -235,8 +233,6 @@ bool wdt_handle_timed_out(void)
     return ret;
 }
 
-void wdt_do_periodic_work(void) {}
-
 // ======================== temperature-control ========================
 
 static struct {
@@ -246,24 +242,10 @@ static struct {
     .temperature_ready = true,
 };
 
-void utest_temp_ctrl_reset(void)
-{
-    temp_ctrl_state.temperature_ready = true;
-    temp_ctrl_state.temperature_c_x100 = 2500;
-}
-
-void utest_temp_ctrl_set_ready(bool ready)
+void utest_temp_set_ready(bool ready)
 {
     temp_ctrl_state.temperature_ready = ready;
 }
-
-void utest_temp_ctrl_set_temperature_c_x100(int16_t temp)
-{
-    temp_ctrl_state.temperature_c_x100 = temp;
-}
-
-void temperature_control_init(void) {}
-void temperature_control_do_periodic_work(void) {}
 
 bool temperature_control_is_temperature_ready(void)
 {
@@ -273,11 +255,6 @@ bool temperature_control_is_temperature_ready(void)
 int16_t temperature_control_get_temperature_c_x100(void)
 {
     return temp_ctrl_state.temperature_c_x100;
-}
-
-void temperature_control_heater_force_control(bool force_enable)
-{
-    (void)force_enable;
 }
 
 // ======================== rtc ========================
@@ -294,12 +271,11 @@ bool utest_rtc_get_periodic_wakeup_disabled(void)
     return periodic_wakeup_disabled;
 }
 
-void rtc_init(void) {}
-void rtc_reset(void) {}
-bool rtc_get_ready_read(void) { return true; }
-void rtc_get_datetime(struct rtc_time * tm) { memset(tm, 0, sizeof(*tm)); }
-void rtc_set_datetime(const struct rtc_time * tm) { (void)tm; }
-void rtc_get_alarm(struct rtc_alarm * alarm) { memset(alarm, 0, sizeof(*alarm)); }
+void rtc_get_alarm(struct rtc_alarm * alarm)
+{
+    memset(alarm, 0, sizeof(*alarm));
+}
+
 void rtc_set_alarm(const struct rtc_alarm * alarm) { (void)alarm; }
 uint16_t rtc_get_offset(void) { return 0; }
 void rtc_set_offset(uint16_t offset) { (void)offset; }

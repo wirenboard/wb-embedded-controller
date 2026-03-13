@@ -19,6 +19,11 @@ void utest_wbmz_set_powered_from_wbmz(bool powered)
     wbmz_state.powered_from_wbmz = powered;
 }
 
+void utest_wbmz_set_vbat_ok(bool ok)
+{
+    wbmz_state.vbat_ok = ok;
+}
+
 bool utest_wbmz_get_stepup_enabled(void)
 {
     return wbmz_state.stepup_enabled;
