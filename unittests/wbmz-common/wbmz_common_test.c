@@ -141,11 +141,11 @@ static void test_not_powered_from_wbmz_when_gpio_high(void)
 // Тесты прямого управления stepup
 // ============================================================================
 
-// Сценарий: вызов wbmz_enable_stepup()
-// Ожидается: GPIO установлен в HIGH, wbmz_is_stepup_enabled() возвращает true
-static void test_enable_stepup(void)
+// Сценарий: вызов wbmz_enable_stepup(), затем wbmz_disable_stepup()
+// Ожидается: GPIO и флаг состояния корректно переключаются между HIGH/LOW
+static void test_stepup_enable_disable(void)
 {
-    LOG_INFO("Testing stepup enable");
+    LOG_INFO("Testing stepup enable and disable");
 
     wbmz_init();
     wbmz_enable_stepup();
@@ -155,23 +155,13 @@ static void test_enable_stepup(void)
 
     bool enabled = wbmz_is_stepup_enabled();
     TEST_ASSERT_TRUE_MESSAGE(enabled, "is_stepup_enabled() should return true");
-}
 
-
-// Сценарий: включение stepup, затем вызов wbmz_disable_stepup()
-// Ожидается: GPIO установлен в LOW, wbmz_is_stepup_enabled() возвращает false
-static void test_disable_stepup(void)
-{
-    LOG_INFO("Testing stepup disable");
-
-    wbmz_init();
-    wbmz_enable_stepup();
     wbmz_disable_stepup();
 
-    uint32_t state = utest_gpio_get_output_state(stepup_enable_gpio);
+    state = utest_gpio_get_output_state(stepup_enable_gpio);
     TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, state, "Stepup GPIO should be LOW when disabled");
 
-    bool enabled = wbmz_is_stepup_enabled();
+    enabled = wbmz_is_stepup_enabled();
     TEST_ASSERT_FALSE_MESSAGE(enabled, "is_stepup_enabled() should return false");
 }
 
@@ -198,6 +188,9 @@ static void test_stepup_auto_enable_when_vin_ok_and_no_usb(void)
 
     bool enabled = wbmz_is_stepup_enabled();
     TEST_ASSERT_TRUE_MESSAGE(enabled, "Stepup should be enabled when Vin OK and no USB");
+
+    uint32_t state = utest_gpio_get_output_state(stepup_enable_gpio);
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(1, state, "Stepup GPIO should be HIGH when auto-enabled");
 }
 
 
@@ -287,6 +280,9 @@ static void test_stepup_auto_disable_when_battery_discharged(void)
         wbmz_is_stepup_enabled(),
         "Stepup should be disabled after exceeding 500ms filter threshold"
     );
+
+    uint32_t state = utest_gpio_get_output_state(stepup_enable_gpio);
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, state, "Stepup GPIO should be LOW when auto-disabled");
 }
 
 
@@ -334,6 +330,9 @@ static void test_stepup_force_control_enable(void)
         wbmz_is_stepup_enabled(),
         "Stepup should be enabled by force control, ignoring automatic logic"
     );
+
+    uint32_t state = utest_gpio_get_output_state(stepup_enable_gpio);
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(1, state, "Stepup GPIO should be HIGH when force enabled");
 }
 
 
@@ -356,6 +355,9 @@ static void test_stepup_force_control_disable(void)
         wbmz_is_stepup_enabled(),
         "Stepup should be disabled by force control, ignoring automatic logic"
     );
+
+    uint32_t state = utest_gpio_get_output_state(stepup_enable_gpio);
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, state, "Stepup GPIO should be LOW when force disabled");
 }
 
 
@@ -430,6 +432,9 @@ static void test_charging_auto_disable_when_vin_not_ok(void)
 
     bool enabled = wbmz_is_charging_enabled();
     TEST_ASSERT_FALSE_MESSAGE(enabled, "Charging should be disabled when Vin is not OK");
+
+    uint32_t state = utest_gpio_get_output_state(charge_enable_gpio);
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, state, "Charge enable GPIO should be LOW when disabled");
 }
 
 
@@ -469,6 +474,9 @@ static void test_charging_force_control_enable(void)
 
     bool enabled = wbmz_is_charging_enabled();
     TEST_ASSERT_TRUE_MESSAGE(enabled, "Charging should be enabled by force control, ignoring automatic logic");
+
+    uint32_t state = utest_gpio_get_output_state(charge_enable_gpio);
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(1, state, "Charge enable GPIO should be HIGH when force enabled");
 }
 
 
@@ -488,6 +496,9 @@ static void test_charging_force_control_disable(void)
 
     bool enabled = wbmz_is_charging_enabled();
     TEST_ASSERT_FALSE_MESSAGE(enabled, "Charging should be disabled by force control, ignoring automatic logic");
+
+    uint32_t state = utest_gpio_get_output_state(charge_enable_gpio);
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, state, "Charge enable GPIO should be LOW when force disabled");
 }
 
 
@@ -581,8 +592,7 @@ int main(void)
     RUN_TEST(test_not_powered_from_wbmz_when_gpio_high);
 
     // Тесты прямого управления stepup
-    RUN_TEST(test_enable_stepup);
-    RUN_TEST(test_disable_stepup);
+    RUN_TEST(test_stepup_enable_disable);
 
     // Тесты автоматического управления stepup
     RUN_TEST(test_stepup_auto_enable_when_vin_ok_and_no_usb);
