@@ -291,6 +291,59 @@ static void test_stepup_auto_disable_when_battery_discharged(void)
 }
 
 
+// Сценарий: stepup включен, затем батарея разрядилась, но условие разряда исчезло до истечения фильтра
+// Ожидается: фильтр сбрасывается, stepup остается включенным
+static void test_stepup_discharge_filter_reset(void)
+{
+    LOG_INFO("Testing stepup discharge filter reset");
+
+    wbmz_init();
+
+    // Включаем stepup
+    utest_vmon_set_ch_status(VMON_CHANNEL_V_IN_FOR_WBMZ, true);
+    utest_vmon_set_ch_status(VMON_CHANNEL_VBUS_DEBUG, false);
+    wbmz_do_periodic_work();
+    TEST_ASSERT_TRUE_MESSAGE(wbmz_is_stepup_enabled(), "Stepup should be enabled initially");
+
+    // Создаем условие разряда
+    utest_vmon_set_ch_status(VMON_CHANNEL_V_IN_FOR_WBMZ, false);
+    utest_gpio_set_input_state(status_bat_gpio, 1);
+
+    // Ждем 400ms (меньше порога 500ms)
+    utest_systick_advance_time_ms(400);
+    wbmz_do_periodic_work();
+    TEST_ASSERT_TRUE_MESSAGE(
+        wbmz_is_stepup_enabled(),
+        "Stepup should still be enabled at 400ms"
+    );
+
+    // Условие разряда исчезает (Vin восстанавливается)
+    utest_vmon_set_ch_status(VMON_CHANNEL_V_IN_FOR_WBMZ, true);
+    wbmz_do_periodic_work();
+    TEST_ASSERT_TRUE_MESSAGE(
+        wbmz_is_stepup_enabled(),
+        "Stepup should stay enabled when Vin recovers"
+    );
+
+    // Снова создаем условие разряда
+    utest_vmon_set_ch_status(VMON_CHANNEL_V_IN_FOR_WBMZ, false);
+    utest_systick_advance_time_ms(100);
+    wbmz_do_periodic_work();
+    TEST_ASSERT_TRUE_MESSAGE(
+        wbmz_is_stepup_enabled(),
+        "Stepup should still be enabled - filter should have been reset"
+    );
+
+    // Теперь ждем полные 500ms с момента последнего условия разряда
+    utest_systick_advance_time_ms(401);
+    wbmz_do_periodic_work();
+    TEST_ASSERT_FALSE_MESSAGE(
+        wbmz_is_stepup_enabled(),
+        "Stepup should be disabled after exceeding 500ms from filter reset"
+    );
+}
+
+
 // Сценарий: stepup включен, Vin упал, но STATUS_BAT=LOW (питаемся от WBMZ)
 // Ожидается: stepup ОСТАЕТСЯ включенным (работаем от батареи)
 static void test_stepup_stays_enabled_when_powered_from_wbmz(void)
@@ -311,6 +364,53 @@ static void test_stepup_stays_enabled_when_powered_from_wbmz(void)
 
     bool enabled = wbmz_is_stepup_enabled();
     TEST_ASSERT_TRUE_MESSAGE(enabled, "Stepup should stay enabled when powered from WBMZ");
+}
+
+
+// Сценарий: stepup включен автоматикой, затем подключается USB
+// Ожидается: stepup ОСТАЕТСЯ включенным (проверка логики из комментария:
+// "если хотим чтоб WBMZ работал при подключенном USB, надо сначала включить контроллер кнопкой, а потом подключать USB")
+static void test_stepup_stays_enabled_when_usb_connected(void)
+{
+    LOG_INFO("Testing stepup stays enabled when USB connected after stepup enabled");
+
+    wbmz_init();
+
+    // Включаем stepup автоматикой (Vin OK, no USB)
+    utest_vmon_set_ch_status(VMON_CHANNEL_V_IN_FOR_WBMZ, true);
+    utest_vmon_set_ch_status(VMON_CHANNEL_VBUS_DEBUG, false);
+    #if !defined(EC_USB_HUB_DEBUG_NETWORK)
+        utest_vmon_set_ch_status(VMON_CHANNEL_VBUS_NETWORK, false);
+    #endif
+    wbmz_do_periodic_work();
+    TEST_ASSERT_TRUE_MESSAGE(wbmz_is_stepup_enabled(), "Stepup should be enabled initially");
+
+    // Подключаем USB DEBUG
+    utest_vmon_set_ch_status(VMON_CHANNEL_VBUS_DEBUG, true);
+    wbmz_do_periodic_work();
+
+    // Stepup должен ОСТАТЬСЯ включенным (USB проверяется только при включении в блоке else)
+    bool enabled = wbmz_is_stepup_enabled();
+    TEST_ASSERT_TRUE_MESSAGE(
+        enabled,
+        "Stepup should stay enabled when USB connected after stepup was already enabled"
+    );
+
+    uint32_t state = utest_gpio_get_output_state(stepup_enable_gpio);
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(1, state, "Stepup GPIO should stay HIGH");
+
+    #if !defined(EC_USB_HUB_DEBUG_NETWORK)
+        // Проверяем также с USB NETWORK
+        utest_vmon_set_ch_status(VMON_CHANNEL_VBUS_DEBUG, false);
+        utest_vmon_set_ch_status(VMON_CHANNEL_VBUS_NETWORK, true);
+        wbmz_do_periodic_work();
+
+        enabled = wbmz_is_stepup_enabled();
+        TEST_ASSERT_TRUE_MESSAGE(
+            enabled,
+            "Stepup should stay enabled when USB NETWORK connected after stepup was already enabled"
+        );
+    #endif
 }
 
 
@@ -389,6 +489,58 @@ static void test_stepup_force_control_release(void)
 
     enabled = wbmz_is_stepup_enabled();
     TEST_ASSERT_TRUE_MESSAGE(enabled, "Stepup should be auto-enabled after force control released");
+}
+
+
+// Сценарий: прямое переключение force control из ON в OFF без release
+// Ожидается: stepup корректно выключается
+static void test_stepup_force_control_switch_on_to_off(void)
+{
+    LOG_INFO("Testing stepup force control switch from ON to OFF");
+
+    wbmz_init();
+
+    // Включаем force control с состоянием ON
+    wbmz_set_stepup_force_control(true, true);
+    wbmz_do_periodic_work();
+    TEST_ASSERT_TRUE_MESSAGE(wbmz_is_stepup_enabled(), "Stepup should be enabled by force control ON");
+
+    uint32_t state = utest_gpio_get_output_state(stepup_enable_gpio);
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(1, state, "Stepup GPIO should be HIGH");
+
+    // Переключаем force control на OFF (без вызова release)
+    wbmz_set_stepup_force_control(true, false);
+    wbmz_do_periodic_work();
+
+    bool enabled = wbmz_is_stepup_enabled();
+    TEST_ASSERT_FALSE_MESSAGE(
+        enabled,
+        "Stepup should be disabled when force control switched to OFF"
+    );
+
+    state = utest_gpio_get_output_state(stepup_enable_gpio);
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, state, "Stepup GPIO should be LOW");
+
+    // Проверяем что force control все еще активен (автоматика не работает)
+    utest_vmon_set_ch_status(VMON_CHANNEL_V_IN_FOR_WBMZ, true);
+    utest_vmon_set_ch_status(VMON_CHANNEL_VBUS_DEBUG, false);
+    wbmz_do_periodic_work();
+
+    enabled = wbmz_is_stepup_enabled();
+    TEST_ASSERT_FALSE_MESSAGE(
+        enabled,
+        "Stepup should stay disabled - force control is still active"
+    );
+
+    // Переключаем обратно на ON
+    wbmz_set_stepup_force_control(true, true);
+    wbmz_do_periodic_work();
+
+    enabled = wbmz_is_stepup_enabled();
+    TEST_ASSERT_TRUE_MESSAGE(
+        enabled,
+        "Stepup should be enabled when force control switched back to ON"
+    );
 }
 
 
@@ -765,12 +917,15 @@ int main(void)
     #endif
     RUN_TEST(test_stepup_not_enabled_when_vin_not_ok);
     RUN_TEST(test_stepup_auto_disable_when_battery_discharged);
+    RUN_TEST(test_stepup_discharge_filter_reset);
     RUN_TEST(test_stepup_stays_enabled_when_powered_from_wbmz);
+    RUN_TEST(test_stepup_stays_enabled_when_usb_connected);
 
     // Тесты force control для stepup
     RUN_TEST(test_stepup_force_control_enable);
     RUN_TEST(test_stepup_force_control_disable);
     RUN_TEST(test_stepup_force_control_release);
+    RUN_TEST(test_stepup_force_control_switch_on_to_off);
 
     // Тесты управления зарядом
     #if defined WBEC_GPIO_WBMZ_CHARGE_ENABLE
