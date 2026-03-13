@@ -68,12 +68,14 @@ void console_print_time_now(void)
     console_print_dec_pad(BCD_TO_BIN(rtc_time.seconds), 2, '0');
 }
 
-void console_print_prefix(void) {
+void console_print_prefix(void)
+{
     console_print(WBEC_DEBUG_MSG_PREFIX);
 }
 
 
-void console_print_w_prefix(const char str[]) {
+void console_print_w_prefix(const char str[])
+{
     console_print_prefix();
     console_print(str);
 }

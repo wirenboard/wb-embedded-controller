@@ -1,0 +1,42 @@
+#include "utest_pwrkey.h"
+
+static bool pwrkey_long_press = false;
+static bool pwrkey_is_pressed = false;
+static uint32_t pwrkey_periodic_work_call_count = 0;
+
+void utest_pwrkey_reset(void)
+{
+    pwrkey_long_press = false;
+    pwrkey_is_pressed = false;
+    pwrkey_periodic_work_call_count = 0;
+}
+
+void utest_linux_power_control_set_pwrkey_long_press(bool value)
+{
+    pwrkey_long_press = value;
+}
+
+void utest_linux_power_control_set_pwrkey_pressed(bool value)
+{
+    pwrkey_is_pressed = value;
+}
+
+uint32_t utest_linux_power_control_get_pwrkey_periodic_work_call_count(void)
+{
+    return pwrkey_periodic_work_call_count;
+}
+
+bool pwrkey_handle_long_press(void)
+{
+    return pwrkey_long_press;
+}
+
+bool pwrkey_pressed(void)
+{
+    return pwrkey_is_pressed;
+}
+
+void pwrkey_do_periodic_work(void)
+{
+    pwrkey_periodic_work_call_count++;
+}
