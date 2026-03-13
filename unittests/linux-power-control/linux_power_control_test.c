@@ -6,19 +6,14 @@
 #include "voltage-monitor.h"
 #include "utest_gpio.h"
 #include "utest_mcu_pwr.h"
+#include "utest_pwrkey.h"
 #include "utest_systick.h"
 #include "utest_voltage_monitor.h"
 #include "utest_wdt_stm32.h"
 #include "utest_wbmcu_system.h"
+#include "utest_wbmz_common.h"
 
 void utest_linux_power_control_reset_state(void);
-void utest_linux_power_control_stubs_reset(void);
-void utest_linux_power_control_set_pwrkey_long_press(bool value);
-void utest_linux_power_control_set_pwrkey_pressed(bool value);
-void utest_linux_power_control_set_wbmz_stepup_enabled(bool value);
-uint32_t utest_linux_power_control_get_pwrkey_periodic_work_call_count(void);
-uint32_t utest_linux_power_control_get_wbmz_periodic_work_call_count(void);
-uint32_t utest_linux_power_control_get_wbmz_disable_stepup_call_count(void);
 
 static const gpio_pin_t linux_power_gpio = { EC_GPIO_LINUX_POWER };
 static const gpio_pin_t pmic_pwron_gpio = { EC_GPIO_LINUX_PMIC_PWRON };
@@ -48,8 +43,8 @@ void setUp(void)
     utest_pwr_reset();
     utest_watchdog_reset();
     utest_linux_power_control_reset_state();
-    utest_linux_power_control_stubs_reset();
-    release_pwrkey_from_watchdog = false;
+    utest_wbmz_common_reset();
+    utest_pwrkey_reset();
     utest_watchdog_set_reload_callback(watchdog_reload_callback);
 }
 
@@ -101,6 +96,8 @@ static void test_periodic_returns_early_when_module_not_initialized(void)
                                      "Linux power GPIO must be low before periodic work without init");
     TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, utest_gpio_get_output_state(pmic_pwron_gpio),
                                      "PMIC PWRON GPIO must be low before periodic work without init");
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, utest_gpio_get_output_state(pmic_reset_gpio),
+                                     "PMIC RESET GPIO must be low before periodic work without init");
 
     linux_cpu_pwr_seq_do_periodic_work();
 
@@ -108,6 +105,10 @@ static void test_periodic_returns_early_when_module_not_initialized(void)
                                      "Standby must not be requested before init");
     TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, utest_gpio_get_output_state(linux_power_gpio),
                                      "Linux power GPIO must not change before init");
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, utest_gpio_get_output_state(pmic_pwron_gpio),
+                                     "PMIC PWRON GPIO must not change before init");
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, utest_gpio_get_output_state(pmic_reset_gpio),
+                                     "PMIC RESET GPIO must not change before init");
 }
 
 // Сценарий: vmon не готов после init.
@@ -121,6 +122,10 @@ static void test_periodic_returns_early_when_vmon_is_not_ready(void)
 
     TEST_ASSERT_EQUAL_UINT32_MESSAGE(1, utest_gpio_get_output_state(linux_power_gpio),
                                      "Linux power GPIO must be high after init(true)");
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, utest_gpio_get_output_state(pmic_pwron_gpio),
+                                     "PMIC PWRON GPIO must be low before periodic work when vmon is not ready");
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, utest_gpio_get_output_state(pmic_reset_gpio),
+                                     "PMIC RESET GPIO must be low before periodic work when vmon is not ready");
     TEST_ASSERT_EQUAL_UINT16_MESSAGE(0, utest_mcu_get_standby_wakeup_time(),
                                      "Standby must not be requested before periodic work");
 
@@ -130,6 +135,56 @@ static void test_periodic_returns_early_when_vmon_is_not_ready(void)
                                      "Standby must not be requested when vmon is not ready");
     TEST_ASSERT_EQUAL_UINT32_MESSAGE(1, utest_gpio_get_output_state(linux_power_gpio),
                                      "Linux power GPIO must keep init state when vmon is not ready");
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, utest_gpio_get_output_state(pmic_pwron_gpio),
+                                     "PMIC PWRON GPIO must not change when vmon is not ready");
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, utest_gpio_get_output_state(pmic_reset_gpio),
+                                     "PMIC RESET GPIO must not change when vmon is not ready");
+}
+
+// Сценарий: граничное условие таймаута шага PS_ON_STEP1_WAIT_3V3.
+// До действия: 3.3V отсутствует, алгоритм ждёт в step1.
+// После действия: в 1000мс перехода нет, в 1001мс активируется fallback с PMIC PWRON.
+static void test_periodic_step1_timeout_changes_state_only_after_1000ms(void)
+{
+    linux_cpu_pwr_seq_init(true);
+    prepare_periodic_runtime(true, false);
+
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, utest_gpio_get_output_state(pmic_pwron_gpio),
+                                     "PMIC PWRON GPIO must be low at step1 start");
+
+    utest_systick_advance_time_ms(1000);
+    linux_cpu_pwr_seq_do_periodic_work();
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, utest_gpio_get_output_state(pmic_pwron_gpio),
+                                     "PMIC PWRON GPIO must stay low at exact 1000ms in step1");
+
+    utest_systick_advance_time_ms(1);
+    linux_cpu_pwr_seq_do_periodic_work();
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(1, utest_gpio_get_output_state(pmic_pwron_gpio),
+                                     "PMIC PWRON GPIO must go high only after 1000ms timeout is exceeded");
+}
+
+// Сценарий: граничное условие таймаута шага PS_ON_STEP2_PMIC_PWRON.
+// До действия: fallback уже включил PMIC PWRON и алгоритм находится в step2.
+// После действия: в 1500мс PMIC PWRON остаётся активным, в 1501мс происходит выход из step2 и PWRON сбрасывается.
+static void test_periodic_step2_timeout_changes_state_only_after_1500ms(void)
+{
+    linux_cpu_pwr_seq_init(true);
+    prepare_periodic_runtime(true, false);
+
+    utest_systick_advance_time_ms(1001);
+    linux_cpu_pwr_seq_do_periodic_work();
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(1, utest_gpio_get_output_state(pmic_pwron_gpio),
+                                     "PMIC PWRON GPIO must be high at step2 start");
+
+    utest_systick_advance_time_ms(1500);
+    linux_cpu_pwr_seq_do_periodic_work();
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(1, utest_gpio_get_output_state(pmic_pwron_gpio),
+                                     "PMIC PWRON GPIO must stay high at exact 1500ms in step2");
+
+    utest_systick_advance_time_ms(1);
+    linux_cpu_pwr_seq_do_periodic_work();
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, utest_gpio_get_output_state(pmic_pwron_gpio),
+                                     "PMIC PWRON GPIO must go low only after 1500ms timeout is exceeded");
 }
 
 // Сценарий: успешное включение при появлении 3.3V до таймаута.
@@ -482,6 +537,27 @@ static void test_periodic_hard_off_timeout_goes_to_standby_with_v50_on(void)
                                      "Saved 5V state must be ON when V50 is present");
 }
 
+// Сценарий: граничное условие таймаута в PS_OFF_COMPLETE.
+// До действия: система в OFF_COMPLETE после hard_off.
+// После действия: в 200мс standby не запрашивается, в 201мс запрашивается.
+static void test_periodic_off_complete_timeout_switches_to_standby_only_after_200ms(void)
+{
+    linux_cpu_pwr_seq_init(true);
+    linux_cpu_pwr_seq_hard_off();
+    prepare_periodic_runtime(true, false);
+
+    utest_systick_advance_time_ms(200);
+    linux_cpu_pwr_seq_do_periodic_work();
+    TEST_ASSERT_EQUAL_UINT16_MESSAGE(0, utest_mcu_get_standby_wakeup_time(),
+                                     "Standby must not be requested at exact 200ms in OFF_COMPLETE");
+
+    utest_systick_advance_time_ms(1);
+    linux_cpu_pwr_seq_do_periodic_work();
+    TEST_ASSERT_EQUAL_UINT16_MESSAGE(WBEC_PERIODIC_WAKEUP_FIRST_TIMEOUT_S,
+                                     utest_mcu_get_standby_wakeup_time(),
+                                     "Standby must be requested only after OFF_COMPLETE timeout is exceeded");
+}
+
 // Сценарий: в состоянии OFF_COMPLETE включен stepup.
 // До действия: stepup включен, счетчик disable еще нулевой.
 // После действия: periodic_work выключает stepup до перехода в standby.
@@ -571,6 +647,31 @@ static void test_periodic_reset_pmic_completes_by_timeout(void)
     linux_cpu_pwr_seq_do_periodic_work();
     TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, utest_gpio_get_output_state(pmic_reset_gpio),
                                      "PMIC RESET GPIO must be low after timeout completion");
+}
+
+// Сценарий: граничное условие таймаута в PS_RESET_PMIC_WAIT.
+// До действия: reset PMIC активирован, 3.3V не пропадает.
+// После действия: в 2000мс RESET не отпускается, в 2001мс reset завершается.
+static void test_periodic_reset_pmic_timeout_switches_state_only_after_2000ms(void)
+{
+    linux_cpu_pwr_seq_init(true);
+    prepare_periodic_runtime(true, true);
+
+    linux_cpu_pwr_seq_reset_pmic();
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(1, utest_gpio_get_output_state(pmic_reset_gpio),
+                                     "PMIC RESET GPIO must be high while waiting for reset timeout");
+
+    utest_systick_advance_time_ms(2000);
+    linux_cpu_pwr_seq_do_periodic_work();
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(1, utest_gpio_get_output_state(pmic_reset_gpio),
+                                     "PMIC RESET GPIO must stay high at exact 2000ms timeout");
+
+    utest_systick_advance_time_ms(1);
+    linux_cpu_pwr_seq_do_periodic_work();
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, utest_gpio_get_output_state(pmic_reset_gpio),
+                                     "PMIC RESET GPIO must go low only after 2000ms timeout is exceeded");
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, utest_gpio_get_output_state(pmic_pwron_gpio),
+                                     "PMIC PWRON GPIO must be low after reset timeout completion");
 }
 
 // Сценарий: питание уже включено (ON_COMPLETE).
@@ -689,6 +790,31 @@ static void test_reset_pmic_sets_reset_line_high(void)
                                      "PMIC RESET GPIO must be high right after reset_pmic");
 }
 
+// Сценарий: прямой вызов linux_cpu_pwr_seq_off_and_goto_standby.
+// До действия: регистры PWR и параметр wakeup не установлены.
+// После действия: выставляется pull-down для Linux power GPIO, включается APC и передается timeout в standby.
+static void test_off_and_goto_standby_sets_pwr_registers_and_wakeup_timeout(void)
+{
+    const uint16_t wakeup_timeout_s = 123;
+    const uint32_t linux_power_pd_mask = (1UL << linux_power_gpio.pin);
+
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, PWR->PDCRD,
+                                     "PWR->PDCRD must be zero before off_and_goto_standby");
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, PWR->CR3,
+                                     "PWR->CR3 must be zero before off_and_goto_standby");
+    TEST_ASSERT_EQUAL_UINT16_MESSAGE(0, utest_mcu_get_standby_wakeup_time(),
+                                     "Standby wakeup time must be zero before off_and_goto_standby");
+
+    linux_cpu_pwr_seq_off_and_goto_standby(wakeup_timeout_s);
+
+    TEST_ASSERT_NOT_EQUAL_MESSAGE(0, (PWR->PDCRD & linux_power_pd_mask),
+                                  "PDCRD bit for Linux power GPIO must be set");
+    TEST_ASSERT_NOT_EQUAL_MESSAGE(0, (PWR->CR3 & PWR_CR3_APC),
+                                  "PWR_CR3_APC bit must be set in CR3");
+    TEST_ASSERT_EQUAL_UINT16_MESSAGE(wakeup_timeout_s, utest_mcu_get_standby_wakeup_time(),
+                                     "Standby wakeup timeout must be forwarded to mcu_goto_standby");
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -696,6 +822,8 @@ int main(void)
     RUN_TEST(test_periodic_init_off_state_does_not_change_outputs);
     RUN_TEST(test_periodic_returns_early_when_module_not_initialized);
     RUN_TEST(test_periodic_returns_early_when_vmon_is_not_ready);
+    RUN_TEST(test_periodic_step1_timeout_changes_state_only_after_1000ms);
+    RUN_TEST(test_periodic_step2_timeout_changes_state_only_after_1500ms);
     RUN_TEST(test_periodic_power_on_success_when_v33_is_present);
     RUN_TEST(test_periodic_power_on_fallback_enables_pmic_pwron);
     RUN_TEST(test_periodic_power_on_fallback_completes_when_v33_appears);
@@ -711,15 +839,18 @@ int main(void)
     RUN_TEST(test_periodic_step3_retry_happens_only_after_timeout_is_strictly_exceeded);
     RUN_TEST(test_periodic_hard_reset_recovery_reenables_5v_after_timeout);
     RUN_TEST(test_periodic_hard_off_timeout_goes_to_standby_with_v50_on);
+    RUN_TEST(test_periodic_off_complete_timeout_switches_to_standby_only_after_200ms);
     RUN_TEST(test_periodic_off_complete_disables_stepup_when_enabled);
     RUN_TEST(test_periodic_v50_loss_goes_to_standby_with_saved_off_state);
 
     RUN_TEST(test_periodic_reset_pmic_completes_when_v33_is_lost);
     RUN_TEST(test_periodic_reset_pmic_completes_by_timeout);
+    RUN_TEST(test_periodic_reset_pmic_timeout_switches_state_only_after_2000ms);
     RUN_TEST(test_periodic_on_complete_calls_wbmz_periodic_work);
     RUN_TEST(test_periodic_long_press_turns_power_off_and_goes_to_standby);
     RUN_TEST(test_periodic_long_press_waits_until_button_release);
     RUN_TEST(test_reset_pmic_sets_reset_line_high);
+    RUN_TEST(test_off_and_goto_standby_sets_pwr_registers_and_wakeup_timeout);
 
     return UNITY_END();
 }
