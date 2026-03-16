@@ -37,3 +37,6 @@ typedef struct {
 extern PWR_TypeDef _PWR_instance;
 
 #define PWR (&_PWR_instance)
+
+// Бит применения конфигурации pull-up/pull-down.
+#define PWR_CR3_APC (1UL << 10)
