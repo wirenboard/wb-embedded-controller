@@ -208,3 +208,17 @@ bool wbmz_is_stepup_enabled(void)
 {
     return stepup_enabled;
 }
+
+#ifdef __unittest_env__
+    void utest_wbmz_common_reset_state(void)
+    {
+        #ifdef WBEC_GPIO_WBMZ_CHARGE_ENABLE
+            charge_enabled = false;
+            charge_force_ctrl_enabled = false;
+            charge_force_ctrl_state = false;
+        #endif
+        stepup_enabled = false;
+        stepup_force_ctrl_enabled = false;
+        stepup_force_ctrl_state = false;
+    }
+#endif
