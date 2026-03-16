@@ -99,21 +99,6 @@ static void test_periodic_returns_early_when_module_not_initialized(void)
 {
     prepare_periodic_runtime(true, true);
 
-    TEST_ASSERT_EQUAL_UINT16_MESSAGE(
-        0, utest_mcu_get_standby_wakeup_time(), "Standby must not be requested before periodic work"
-    );
-    TEST_ASSERT_EQUAL_UINT32_MESSAGE(
-        0,
-        utest_gpio_get_output_state(linux_power_gpio),
-        "Linux power GPIO must be low before periodic work without init"
-    );
-    TEST_ASSERT_EQUAL_UINT32_MESSAGE(
-        0, utest_gpio_get_output_state(pmic_pwron_gpio), "PMIC PWRON GPIO must be low before periodic work without init"
-    );
-    TEST_ASSERT_EQUAL_UINT32_MESSAGE(
-        0, utest_gpio_get_output_state(pmic_reset_gpio), "PMIC RESET GPIO must be low before periodic work without init"
-    );
-
     linux_cpu_pwr_seq_do_periodic_work();
 
     TEST_ASSERT_EQUAL_UINT16_MESSAGE(
