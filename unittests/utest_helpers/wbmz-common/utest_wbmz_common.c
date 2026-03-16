@@ -1,70 +1,62 @@
 #include "wbmz-common.h"
+
+#include <stdint.h>
+
 #include "utest_wbmz_common.h"
 
-static struct {
-    bool powered_from_wbmz;
-    bool stepup_enabled;
-    bool vbat_ok;
-} wbmz_state = {0};
+static bool powered_from_wbmz = false;
+static bool wbmz_stepup_enabled = false;
+static uint32_t wbmz_periodic_work_call_count = 0;
+static uint32_t wbmz_disable_stepup_call_count = 0;
 
-void utest_wbmz_reset(void)
+void utest_wbmz_common_reset(void)
 {
-    wbmz_state.powered_from_wbmz = false;
-    wbmz_state.stepup_enabled = false;
-    wbmz_state.vbat_ok = true;
+    powered_from_wbmz = false;
+    wbmz_stepup_enabled = false;
+    wbmz_periodic_work_call_count = 0;
+    wbmz_disable_stepup_call_count = 0;
 }
 
 void utest_wbmz_set_powered_from_wbmz(bool powered)
 {
-    wbmz_state.powered_from_wbmz = powered;
+    powered_from_wbmz = powered;
 }
 
-void utest_wbmz_set_vbat_ok(bool ok)
+void utest_set_wbmz_stepup_enabled(bool value)
 {
-    wbmz_state.vbat_ok = ok;
+    wbmz_stepup_enabled = value;
 }
 
-bool utest_wbmz_get_stepup_enabled(void)
+uint32_t utest_get_wbmz_periodic_work_call_count(void)
 {
-    return wbmz_state.stepup_enabled;
+    return wbmz_periodic_work_call_count;
+}
+
+uint32_t utest_get_wbmz_disable_stepup_call_count(void)
+{
+    return wbmz_disable_stepup_call_count;
 }
 
 bool wbmz_is_powered_from_wbmz(void)
 {
-    return wbmz_state.powered_from_wbmz;
-}
-
-void wbmz_enable_stepup(void)
-{
-    wbmz_state.stepup_enabled = true;
+    return powered_from_wbmz;
 }
 
 void wbmz_disable_stepup(void)
 {
-    wbmz_state.stepup_enabled = false;
+    wbmz_stepup_enabled = false;
+    wbmz_disable_stepup_call_count++;
 }
 
 bool wbmz_is_stepup_enabled(void)
 {
-    return wbmz_state.stepup_enabled;
+    return wbmz_stepup_enabled;
 }
 
-bool wbmz_is_vbat_ok(void)
+void wbmz_do_periodic_work(void)
 {
-    return wbmz_state.vbat_ok;
+    wbmz_periodic_work_call_count++;
 }
 
-void wbmz_init(void) {}
-void wbmz_do_periodic_work(void) {}
-void wbmz_set_stepup_force_control(bool force_control, bool en)
-{
-    (void)force_control;
-    (void)en;
-}
-
-bool wbmz_is_charging_enabled(void) { return false; }
-void wbmz_set_charging_force_control(bool force_control, bool en)
-{
-    (void)force_control;
-    (void)en;
-}
+void wbmz_common_init(void) {}
+void wbmz_common_do_periodic_work(void) {}

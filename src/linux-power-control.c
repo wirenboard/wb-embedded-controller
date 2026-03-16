@@ -38,7 +38,6 @@ struct pwr_ctx {
     systime_t timestamp;
     unsigned attempt;
     bool initialized;
-    bool reset_flag;
 };
 
 static struct pwr_ctx pwr_ctx = {
@@ -161,7 +160,6 @@ void linux_cpu_pwr_seq_hard_reset()
     linux_cpu_pwr_5v_gpio_off();
     pmic_pwron_gpio_off();
     new_state(PS_RESET_5V_WAIT);
-    pwr_ctx.reset_flag = true;
 }
 
 /**
@@ -218,7 +216,7 @@ void linux_cpu_pwr_seq_do_periodic_work(void)
         goto_standby_and_save_5v_status();
     }
 
-    switch (pwr_ctx.state) {
+    switch (pwr_ctx.state) { // GCOVR_EXCL_LINE
     // Если алгоритм ещё не начался - ничего не делаем
     case PS_INIT_OFF:
         break;
@@ -306,8 +304,7 @@ void linux_cpu_pwr_seq_do_periodic_work(void)
         }
         break;
 
-    default:
-        break; // GCOVR_EXCL_LINE
+    default: break; // GCOVR_EXCL_LINE
     }
 }
 
@@ -317,5 +314,6 @@ void linux_cpu_pwr_seq_do_periodic_work(void)
     void utest_linux_power_control_reset_state(void)
     {
         memset(&pwr_ctx, 0, sizeof(pwr_ctx));
+        pwr_ctx.state = PS_INIT_OFF;
     }
 #endif

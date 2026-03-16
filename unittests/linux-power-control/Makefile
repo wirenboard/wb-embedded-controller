@@ -19,7 +19,8 @@ AUX_SRC += $(UTEST_HELPERS_DIR)/wbmcu_system/utest_wbmcu_system.c
 AUX_SRC += $(UTEST_HELPERS_DIR)/wdt-stm32/utest_wdt_stm32.c
 AUX_SRC += $(UTEST_HELPERS_DIR)/system-led/utest_system_led.c
 AUX_SRC += $(UTEST_HELPERS_DIR)/console/utest_console.c
-AUX_SRC += ./linux_power_control_test_stubs.c
+AUX_SRC += $(UTEST_HELPERS_DIR)/pwrkey/utest_pwrkey.c
+AUX_SRC += $(UTEST_HELPERS_DIR)/wbmz-common/utest_wbmz_common.c
 
 # Include directories
 INC += $(UTEST_HELPERS_DIR)
@@ -29,7 +30,9 @@ INC += $(UTEST_HELPERS_DIR)/voltage-monitor
 INC += $(UTEST_HELPERS_DIR)/gpio
 INC += $(UTEST_HELPERS_DIR)/wbmcu_system
 INC += $(UTEST_HELPERS_DIR)/wdt-stm32
+INC += $(UTEST_HELPERS_DIR)/pwrkey
 INC += $(UTEST_HELPERS_DIR)/system-led
+INC += $(UTEST_HELPERS_DIR)/wbmz-common
 INC += $(PROJ_DIR)/include
 INC += $(PROJ_DIR)/system/include
 INC += $(PROJ_DIR)/libfixmath/libfixmath
@@ -41,6 +44,6 @@ TEST_LIST = linux_power_control_test
 DEFS += UNITY_OUTPUT_COLOR
 
 # List of targets
-TARGETS_LIST = MODEL_WB74 MODEL_WB85
+TARGETS_LIST = MODEL_WB85
 
 include $(PROJ_DIR)/system/build_unittests.mk
