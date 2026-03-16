@@ -1,6 +1,7 @@
 #pragma once
 
 #include <stdbool.h>
+#include <stdint.h>
 
 void utest_wbmz_set_powered_from_wbmz(bool powered);
 void utest_wbmz_set_vbat_ok(bool value);

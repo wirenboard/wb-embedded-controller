@@ -1,3 +1,7 @@
+#include "wbec.h"
+
+#include <string.h>
+
 #include "config.h"
 #include "regmap-int.h"
 #include "pwrkey.h"
@@ -16,7 +20,6 @@
 #include "mcu-pwr.h"
 #include "rcc.h"
 #include "console.h"
-#include <string.h>
 #include "hwrev.h"
 #include "buzzer.h"
 #include "temperature-control.h"
@@ -619,8 +622,6 @@ void wbec_do_periodic_work(void)
 }
 
 #ifdef __unittest_env__
-    #include <string.h>
-
     void utest_wbec_reset_state(void)
     {
         memset(&wbec_ctx, 0, sizeof(wbec_ctx));

@@ -1,7 +1,4 @@
 #include "wbmz-common.h"
-
-#include <stdint.h>
-
 #include "utest_wbmz_common.h"
 
 static bool powered_from_wbmz = false;

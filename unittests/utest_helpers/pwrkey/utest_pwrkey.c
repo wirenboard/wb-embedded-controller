@@ -52,7 +52,9 @@ uint32_t utest_get_pwrkey_periodic_work_call_count(void)
 
 bool pwrkey_handle_long_press(void)
 {
-    return pwrkey_long_press;
+    bool ret = pwrkey_long_press;
+    pwrkey_long_press = false;
+    return ret;
 }
 
 bool pwrkey_handle_short_press(void)

@@ -292,8 +292,8 @@ static void test_init_periodic_wakeup_no_5v_was_off_goes_to_standby(void)
 }
 
 // Сценарий: периодическое пробуждение, +5В пропало, но при этом не было включено.
-// Ожидание: МК не сохраняет состояние заново (и так OFF) и уходит в standby.
-// Отличие от предыдущего теста: проверяем что не происходит лишнего save.
+// Ожидание: МК уходит в standby, а сохранённое состояние VCC 5В остаётся OFF
+// Отличие от предыдущего теста: здесь дополнительно проверяется сохранённое состояние VCC 5В
 static void test_init_periodic_wakeup_no_5v_was_off_no_extra_save(void)
 {
     utest_mcu_set_poweron_reason(MCU_POWERON_REASON_RTC_PERIODIC_WAKEUP);
