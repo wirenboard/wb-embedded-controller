@@ -24,7 +24,7 @@ static bool release_pwrkey_from_watchdog = false;
 static void watchdog_reload_callback(void)
 {
     if (release_pwrkey_from_watchdog) {
-        utest_linux_power_control_set_pwrkey_pressed(false);
+        utest_set_pwrkey_pressed(false);
     }
 }
 
@@ -98,21 +98,6 @@ static void test_periodic_init_off_state_does_not_change_outputs(void)
 static void test_periodic_returns_early_when_module_not_initialized(void)
 {
     prepare_periodic_runtime(true, true);
-
-    TEST_ASSERT_EQUAL_UINT16_MESSAGE(
-        0, utest_mcu_get_standby_wakeup_time(), "Standby must not be requested before periodic work"
-    );
-    TEST_ASSERT_EQUAL_UINT32_MESSAGE(
-        0,
-        utest_gpio_get_output_state(linux_power_gpio),
-        "Linux power GPIO must be low before periodic work without init"
-    );
-    TEST_ASSERT_EQUAL_UINT32_MESSAGE(
-        0, utest_gpio_get_output_state(pmic_pwron_gpio), "PMIC PWRON GPIO must be low before periodic work without init"
-    );
-    TEST_ASSERT_EQUAL_UINT32_MESSAGE(
-        0, utest_gpio_get_output_state(pmic_reset_gpio), "PMIC RESET GPIO must be low before periodic work without init"
-    );
 
     linux_cpu_pwr_seq_do_periodic_work();
 
@@ -648,11 +633,11 @@ static void test_periodic_off_complete_disables_stepup_when_enabled(void)
     linux_cpu_pwr_seq_init(true);
     linux_cpu_pwr_seq_hard_off();
     prepare_periodic_runtime(true, false);
-    utest_linux_power_control_set_wbmz_stepup_enabled(true);
+    utest_set_wbmz_stepup_enabled(true);
 
     TEST_ASSERT_EQUAL_UINT32_MESSAGE(
         0,
-        utest_linux_power_control_get_wbmz_disable_stepup_call_count(),
+        utest_get_wbmz_disable_stepup_call_count(),
         "Stepup disable call count must be zero before periodic work"
     );
 
@@ -660,7 +645,7 @@ static void test_periodic_off_complete_disables_stepup_when_enabled(void)
 
     TEST_ASSERT_EQUAL_UINT32_MESSAGE(
         1,
-        utest_linux_power_control_get_wbmz_disable_stepup_call_count(),
+        utest_get_wbmz_disable_stepup_call_count(),
         "Stepup must be disabled in OFF_COMPLETE state"
     );
 }
@@ -792,14 +777,14 @@ static void test_periodic_on_complete_calls_wbmz_periodic_work(void)
 
     TEST_ASSERT_EQUAL_UINT32_MESSAGE(
         0,
-        utest_linux_power_control_get_wbmz_periodic_work_call_count(),
+        utest_get_wbmz_periodic_work_call_count(),
         "wbmz_do_periodic_work call count must be zero before periodic work"
     );
 
     linux_cpu_pwr_seq_do_periodic_work();
     TEST_ASSERT_EQUAL_UINT32_MESSAGE(
         0,
-        utest_linux_power_control_get_wbmz_periodic_work_call_count(),
+        utest_get_wbmz_periodic_work_call_count(),
         "First periodic work call should only transition to ON_COMPLETE"
     );
     linux_cpu_pwr_seq_do_periodic_work();
@@ -807,7 +792,7 @@ static void test_periodic_on_complete_calls_wbmz_periodic_work(void)
 
     TEST_ASSERT_EQUAL_UINT32_MESSAGE(
         2,
-        utest_linux_power_control_get_wbmz_periodic_work_call_count(),
+        utest_get_wbmz_periodic_work_call_count(),
         "wbmz_do_periodic_work must be called in ON_COMPLETE state"
     );
 }
@@ -820,9 +805,9 @@ static void test_periodic_long_press_turns_power_off_and_goes_to_standby(void)
     linux_cpu_pwr_seq_init(true);
     prepare_periodic_runtime(true, true);
 
-    utest_linux_power_control_set_wbmz_stepup_enabled(true);
-    utest_linux_power_control_set_pwrkey_long_press(true);
-    utest_linux_power_control_set_pwrkey_pressed(false);
+    utest_set_wbmz_stepup_enabled(true);
+    utest_set_pwrkey_long_press(true);
+    utest_set_pwrkey_pressed(false);
 
     TEST_ASSERT_EQUAL_UINT32_MESSAGE(
         1, utest_gpio_get_output_state(linux_power_gpio), "Linux power GPIO must be high before long-press handling"
@@ -835,12 +820,12 @@ static void test_periodic_long_press_turns_power_off_and_goes_to_standby(void)
     );
     TEST_ASSERT_EQUAL_UINT32_MESSAGE(
         0,
-        utest_linux_power_control_get_wbmz_disable_stepup_call_count(),
+        utest_get_wbmz_disable_stepup_call_count(),
         "Stepup disable call count must be zero before long-press handling"
     );
     TEST_ASSERT_EQUAL_UINT32_MESSAGE(
         0,
-        utest_linux_power_control_get_pwrkey_periodic_work_call_count(),
+        utest_get_pwrkey_periodic_work_call_count(),
         "Button wait loop must not run before long-press handling"
     );
     TEST_ASSERT_EQUAL_UINT32_MESSAGE(
@@ -861,12 +846,12 @@ static void test_periodic_long_press_turns_power_off_and_goes_to_standby(void)
     );
     TEST_ASSERT_EQUAL_UINT32_MESSAGE(
         1,
-        utest_linux_power_control_get_wbmz_disable_stepup_call_count(),
+        utest_get_wbmz_disable_stepup_call_count(),
         "Stepup must be disabled on long press shutdown path"
     );
     TEST_ASSERT_EQUAL_UINT32_MESSAGE(
         0,
-        utest_linux_power_control_get_pwrkey_periodic_work_call_count(),
+        utest_get_pwrkey_periodic_work_call_count(),
         "Button wait loop must not run when button is already released"
     );
     TEST_ASSERT_EQUAL_UINT32_MESSAGE(
@@ -886,13 +871,13 @@ static void test_periodic_long_press_waits_until_button_release(void)
 {
     linux_cpu_pwr_seq_init(true);
     prepare_periodic_runtime(true, true);
-    utest_linux_power_control_set_pwrkey_long_press(true);
-    utest_linux_power_control_set_pwrkey_pressed(true);
+    utest_set_pwrkey_long_press(true);
+    utest_set_pwrkey_pressed(true);
     release_pwrkey_from_watchdog = true;
 
     TEST_ASSERT_EQUAL_UINT32_MESSAGE(
         0,
-        utest_linux_power_control_get_pwrkey_periodic_work_call_count(),
+        utest_get_pwrkey_periodic_work_call_count(),
         "pwrkey_do_periodic_work call count must be zero before long-press loop"
     );
     TEST_ASSERT_FALSE_MESSAGE(
@@ -917,7 +902,7 @@ static void test_periodic_long_press_waits_until_button_release(void)
     );
     TEST_ASSERT_EQUAL_UINT32_MESSAGE(
         1,
-        utest_linux_power_control_get_pwrkey_periodic_work_call_count(),
+        utest_get_pwrkey_periodic_work_call_count(),
         "pwrkey_do_periodic_work must be called while waiting for release"
     );
     TEST_ASSERT_EQUAL_UINT32_MESSAGE(

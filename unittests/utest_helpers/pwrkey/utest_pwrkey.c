@@ -11,17 +11,17 @@ void utest_pwrkey_reset(void)
     pwrkey_periodic_work_call_count = 0;
 }
 
-void utest_linux_power_control_set_pwrkey_long_press(bool value)
+void utest_set_pwrkey_long_press(bool value)
 {
     pwrkey_long_press = value;
 }
 
-void utest_linux_power_control_set_pwrkey_pressed(bool value)
+void utest_set_pwrkey_pressed(bool value)
 {
     pwrkey_is_pressed = value;
 }
 
-uint32_t utest_linux_power_control_get_pwrkey_periodic_work_call_count(void)
+uint32_t utest_get_pwrkey_periodic_work_call_count(void)
 {
     return pwrkey_periodic_work_call_count;
 }

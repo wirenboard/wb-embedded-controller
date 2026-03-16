@@ -304,8 +304,7 @@ void linux_cpu_pwr_seq_do_periodic_work(void)
         }
         break;
 
-    default:
-        break; // GCOVR_EXCL_LINE
+    default: break; // GCOVR_EXCL_LINE
     }
 }
 
