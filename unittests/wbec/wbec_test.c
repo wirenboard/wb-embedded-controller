@@ -1,17 +1,22 @@
 #include "unity.h"
 #include "wbec.h"
+#include "adc.h"
 #include "config.h"
 #include "mcu-pwr.h"
 #include "voltage-monitor.h"
 #include "wbec_test_stubs.h"
+#include "utest_adc.h"
 #include "utest_mcu_pwr.h"
 #include "utest_systick.h"
 #include "utest_voltage_monitor.h"
+#include "utest_irq.h"
 #include "utest_regmap.h"
+#include "utest_rtc.h"
 #include "utest_system_led.h"
 #include "utest_wbmz_common.h"
 #include "utest_wbmcu_system.h"
 #include "utest_wdt_stm32.h"
+#include "utest_pwrkey.h"
 #include "regmap-int.h"
 
 void utest_wbec_reset_state(void);
@@ -54,6 +59,16 @@ static uint16_t get_poweron_reason_from_regmap(void)
     struct REGMAP_POWERON_REASON pr;
     TEST_ASSERT_TRUE(utest_regmap_get_region_data(REGMAP_REGION_POWERON_REASON, &pr, sizeof(pr)));
     return pr.poweron_reason;
+}
+
+// Вспомогательная функция: прочитать ADC_DATA из regmap-а.
+// При каждом вызове periodic_work данные АЦП обновляются вне зависимости от состояния автомата.
+static struct REGMAP_ADC_DATA get_adc_data_from_regmap(void)
+{
+    wbec_do_periodic_work();
+    struct REGMAP_ADC_DATA adc_data;
+    TEST_ASSERT_TRUE(utest_regmap_get_region_data(REGMAP_REGION_ADC_DATA, &adc_data, sizeof(adc_data)));
+    return adc_data;
 }
 
 // ======================== wbec_init: POWER_ON ========================
@@ -476,6 +491,63 @@ static void test_periodic_wait_startup_non_power_on_with_v33(void)
 
 // ======================== wbec_do_periodic_work: VOLTAGE_CHECK ========================
 
+// Сценарий: поле v_in в ADC_DATA зависит от статуса VMON_CHANNEL_V_IN.
+// Ожидание: при валидном канале v_in берётся из ADC_CHANNEL_ADC_V_IN,
+// иначе принудительно устанавливается в 0.
+static void test_periodic_adc_vin_depends_on_vmon_status(void)
+{
+    const uint16_t expected_vin_mv = 15678;
+
+    utest_mcu_set_poweron_reason(MCU_POWERON_REASON_POWER_ON);
+    utest_vmon_set_ch_status(VMON_CHANNEL_V50, true);
+    utest_adc_set_ch_mv(ADC_CHANNEL_ADC_V_IN, expected_vin_mv);
+
+    wbec_init();
+
+    utest_vmon_set_ch_status(VMON_CHANNEL_V_IN, true);
+    struct REGMAP_ADC_DATA adc_data = get_adc_data_from_regmap();
+    TEST_ASSERT_EQUAL_UINT16_MESSAGE(expected_vin_mv, adc_data.v_in,
+                                     "v_in must be read from ADC_CHANNEL_ADC_V_IN when VMON_CHANNEL_V_IN is valid");
+
+    utest_vmon_set_ch_status(VMON_CHANNEL_V_IN, false);
+    adc_data = get_adc_data_from_regmap();
+    TEST_ASSERT_EQUAL_UINT16_MESSAGE(0, adc_data.v_in,
+                                     "v_in must be 0 when VMON_CHANNEL_V_IN is invalid");
+}
+
+// Сценарий: заполнение ADC_DATA для vbus_network зависит от EC_USB_HUB_DEBUG_NETWORK.
+// Ожидание: при включённом флаге vbus_network всегда 0; иначе читается из ADC_CHANNEL_ADC_VBUS_NETWORK.
+static void test_periodic_adc_vbus_network_depends_on_debug_network_flag(void)
+{
+    const uint16_t expected_vbus_console_mv = 4321;
+#if !defined(EC_USB_HUB_DEBUG_NETWORK)
+    const uint16_t expected_vbus_network_mv = 1234;
+#endif
+
+    utest_mcu_set_poweron_reason(MCU_POWERON_REASON_POWER_ON);
+    utest_vmon_set_ch_status(VMON_CHANNEL_V50, true);
+    utest_adc_set_ch_mv(ADC_CHANNEL_ADC_VBUS_DEBUG, expected_vbus_console_mv);
+
+#if !defined(EC_USB_HUB_DEBUG_NETWORK)
+    utest_adc_set_ch_mv(ADC_CHANNEL_ADC_VBUS_NETWORK, expected_vbus_network_mv);
+#endif
+
+    wbec_init();
+
+    struct REGMAP_ADC_DATA adc_data = get_adc_data_from_regmap();
+
+    TEST_ASSERT_EQUAL_UINT16_MESSAGE(expected_vbus_console_mv, adc_data.vbus_console,
+                                     "vbus_console must be taken from ADC_CHANNEL_ADC_VBUS_DEBUG");
+
+#if defined(EC_USB_HUB_DEBUG_NETWORK)
+    TEST_ASSERT_EQUAL_UINT16_MESSAGE(0, adc_data.vbus_network,
+                                     "vbus_network must be 0 when EC_USB_HUB_DEBUG_NETWORK is defined");
+#else
+    TEST_ASSERT_EQUAL_UINT16_MESSAGE(expected_vbus_network_mv, adc_data.vbus_network,
+                                     "vbus_network must be taken from ADC_CHANNEL_ADC_VBUS_NETWORK");
+#endif
+}
+
 // Сценарий: USB-задержка при включении по POWER_ON с VBUS_DEBUG.
 // Ожидание: остаёмся в VOLTAGE_CHECK пока не пройдёт 5000мс.
 static void test_periodic_voltage_check_usb_delay(void)
@@ -685,7 +757,7 @@ static void test_periodic_power_on_seq_initial_powered_on_sets_booted(void)
     utest_pwrkey_set_pressed(true);
     wbec_do_periodic_work();
 
-    TEST_ASSERT_EQUAL_UINT16_MESSAGE((1u << IRQ_PWR_OFF_REQ), utest_irq_get_set_flags(),
+    TEST_ASSERT_EQUAL_UINT16_MESSAGE((1u << IRQ_PWR_OFF_REQ), utest_irq_get_all_flags(),
                                      "IRQ_PWR_OFF_REQ must be set when linux_booted=true and button pressed");
     TEST_ASSERT_FALSE_MESSAGE(utest_linux_pwr_get_hard_off_called(),
                               "hard_off must not be called when linux is already booted");
@@ -705,7 +777,7 @@ static void test_periodic_working_booted_pwrkey_sends_irq(void)
     utest_pwrkey_set_pressed(true);
     wbec_do_periodic_work();
 
-    TEST_ASSERT_EQUAL_UINT16_MESSAGE((1u << IRQ_PWR_OFF_REQ), utest_irq_get_set_flags(),
+    TEST_ASSERT_EQUAL_UINT16_MESSAGE((1u << IRQ_PWR_OFF_REQ), utest_irq_get_all_flags(),
                                      "IRQ_PWR_OFF_REQ must be set when booted and button pressed");
 }
 
@@ -733,7 +805,7 @@ static void test_periodic_working_linux_boots_after_timeout(void)
     wbec_do_periodic_work();
 
     // До 20с IRQ не выставляется
-    TEST_ASSERT_EQUAL_UINT16_MESSAGE(0, utest_irq_get_set_flags(),
+    TEST_ASSERT_EQUAL_UINT16_MESSAGE(0, utest_irq_get_all_flags(),
                                      "IRQ must not be set before linux boot timeout");
 
     utest_pwrkey_set_pressed(false);
@@ -745,7 +817,7 @@ static void test_periodic_working_linux_boots_after_timeout(void)
     utest_pwrkey_set_pressed(true);
     wbec_do_periodic_work();
 
-    TEST_ASSERT_EQUAL_UINT16_MESSAGE((1u << IRQ_PWR_OFF_REQ), utest_irq_get_set_flags(),
+    TEST_ASSERT_EQUAL_UINT16_MESSAGE((1u << IRQ_PWR_OFF_REQ), utest_irq_get_all_flags(),
                                      "IRQ_PWR_OFF_REQ must be set after linux boot timeout");
 }
 
@@ -1056,6 +1128,8 @@ int main(void)
     RUN_TEST(test_periodic_wait_startup_non_power_on_with_v33);
 
     // VOLTAGE_CHECK
+    RUN_TEST(test_periodic_adc_vin_depends_on_vmon_status);
+    RUN_TEST(test_periodic_adc_vbus_network_depends_on_debug_network_flag);
     RUN_TEST(test_periodic_voltage_check_usb_delay);
     RUN_TEST(test_periodic_voltage_check_temp_ready);
     RUN_TEST(test_periodic_voltage_check_temp_not_ready);
