@@ -92,3 +92,9 @@ void rtc_alarm_do_periodic_work(void)
     }
 }
 
+#ifdef __unittest_env__
+    void utest_rtc_alarm_subsystem_reset_state(void)
+    {
+        alarm_enabled = false;
+    }
+#endif
