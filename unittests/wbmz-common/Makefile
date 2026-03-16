@@ -17,7 +17,6 @@ AUX_SRC += $(UTEST_HELPERS_DIR)/systick/utest_systick.c
 AUX_SRC += $(PROJ_DIR)/libfixmath/libfixmath/fix16.c
 
 # Include directories
-INC += .
 INC += $(UTEST_HELPERS_DIR)
 INC += $(UTEST_HELPERS_DIR)/gpio
 INC += $(UTEST_HELPERS_DIR)/voltage-monitor
