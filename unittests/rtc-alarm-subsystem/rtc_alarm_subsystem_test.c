@@ -13,12 +13,17 @@
 #define LOG_LEVEL LOG_LEVEL_INFO
 #include "console_log.h"
 
+void utest_rtc_alarm_subsystem_reset_state(void);
+
 void setUp(void)
 {
     // Сброс всех моков перед каждым тестом
     utest_regmap_reset();
     utest_rtc_reset();
     utest_irq_reset();
+
+    // Сброс состояния модуля rtc-alarm-subsystem
+    utest_rtc_alarm_subsystem_reset_state();
 
     // Инициализация regmap
     regmap_init();
@@ -446,7 +451,6 @@ static void test_alarm_no_flag_no_irq(void)
 /**
  * Сценарий: проверка значения rtc_alarm_is_alarm_enabled() без предшествующего вызова periodic_work
  * Ожидается: возвращает false (static переменная alarm_enabled инициализируется как 0)
- * Примечание: этот тест должен выполняться первым, до любых вызовов rtc_alarm_do_periodic_work()
  */
 static void test_alarm_enabled_initial_state(void)
 {
@@ -632,9 +636,6 @@ int main(void)
 {
     UNITY_BEGIN();
 
-    // Тест начального состояния (должен быть первым)
-    RUN_TEST(test_alarm_enabled_initial_state);
-
     // Тесты конвертации RTC -> regmap
     RUN_TEST(test_rtc_to_regmap_time_conversion);
     RUN_TEST(test_rtc_to_regmap_alarm_conversion);
@@ -653,6 +654,7 @@ int main(void)
     RUN_TEST(test_alarm_no_flag_no_irq);
 
     // Тесты статуса будильника
+    RUN_TEST(test_alarm_enabled_initial_state);
     RUN_TEST(test_alarm_enabled_status_true);
     RUN_TEST(test_alarm_enabled_status_false);
     RUN_TEST(test_alarm_enabled_status_after_trigger);

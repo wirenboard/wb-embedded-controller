@@ -16,7 +16,6 @@ AUX_SRC += $(UTEST_HELPERS_DIR)/rtc/utest_rtc.c
 AUX_SRC += $(UTEST_HELPERS_DIR)/irq/utest_irq.c
 
 # Include directories
-INC += .
 INC += $(UTEST_HELPERS_DIR)
 INC += $(UTEST_HELPERS_DIR)/regmap
 INC += $(UTEST_HELPERS_DIR)/rtc
