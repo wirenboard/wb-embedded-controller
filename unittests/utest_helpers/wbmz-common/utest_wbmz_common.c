@@ -5,7 +5,6 @@ static bool powered_from_wbmz = false;
 static bool wbmz_stepup_enabled = false;
 static bool wbmz_vbat_ok = true;
 static uint32_t wbmz_periodic_work_call_count = 0;
-static uint32_t wbmz_disable_stepup_call_count = 0;
 
 void utest_wbmz_common_reset(void)
 {
@@ -13,7 +12,6 @@ void utest_wbmz_common_reset(void)
     wbmz_stepup_enabled = false;
     wbmz_vbat_ok = true;
     wbmz_periodic_work_call_count = 0;
-    wbmz_disable_stepup_call_count = 0;
 }
 
 void utest_wbmz_set_powered_from_wbmz(bool powered)
@@ -49,7 +47,6 @@ bool wbmz_is_powered_from_wbmz(void)
 void wbmz_disable_stepup(void)
 {
     wbmz_stepup_enabled = false;
-    wbmz_disable_stepup_call_count++;
 }
 
 void wbmz_enable_stepup(void)

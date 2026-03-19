@@ -18,7 +18,7 @@ void utest_adc_set_ch_raw(enum adc_channel channel, fix16_t raw_value)
 
 int32_t adc_get_ch_mv(enum adc_channel channel)
 {
-    return adc_values_mv[channel];
+    return adc_values_mv[channel] + adc_offsets_mv[channel];
 }
 
 fix16_t adc_get_ch_adc_raw(enum adc_channel channel)

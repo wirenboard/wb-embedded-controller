@@ -514,6 +514,7 @@ static void test_periodic_adc_vin_depends_on_vmon_status(void)
     utest_mcu_set_poweron_reason(MCU_POWERON_REASON_POWER_ON);
     utest_vmon_set_ch_status(VMON_CHANNEL_V50, true);
     utest_adc_set_ch_mv(ADC_CHANNEL_ADC_V_IN, expected_vin_mv);
+    utest_wbmz_set_powered_from_wbmz(true);
 
     wbec_init();
 
@@ -529,23 +530,28 @@ static void test_periodic_adc_vin_depends_on_vmon_status(void)
 }
 
 // Сценарий: смещение канала ADC_V_IN зависит от источника питания (WBMZ/не WBMZ).
-// Ожидание: при питании от WBMZ смещение 0 мВ, иначе ADC_V_IN_DIODE_DROP_MV.
+// Ожидание: итоговое значение v_in меняется в зависимости от смещения:
+// при питании от WBMZ смещение 0 мВ, иначе добавляется ADC_V_IN_DIODE_DROP_MV.
 static void test_periodic_adc_vin_offset_depends_on_wbmz_power_source(void)
 {
+    const uint16_t vin_base_mv = 10000;
+
     utest_mcu_set_poweron_reason(MCU_POWERON_REASON_POWER_ON);
     utest_vmon_set_ch_status(VMON_CHANNEL_V50, true);
+    utest_vmon_set_ch_status(VMON_CHANNEL_V_IN, true);
+    utest_adc_set_ch_mv(ADC_CHANNEL_ADC_V_IN, vin_base_mv);
 
     wbec_init();
 
     utest_wbmz_set_powered_from_wbmz(true);
-    get_adc_data_from_regmap();
-    TEST_ASSERT_EQUAL_INT16_MESSAGE(0, utest_adc_get_offset_mv(ADC_CHANNEL_ADC_V_IN),
-                                    "ADC_V_IN offset must be 0 when powered from WBMZ");
+    struct REGMAP_ADC_DATA adc_data = get_adc_data_from_regmap();
+    TEST_ASSERT_EQUAL_UINT16_MESSAGE(vin_base_mv, adc_data.v_in,
+                                     "v_in must match ADC_CHANNEL_ADC_V_IN when powered from WBMZ");
 
     utest_wbmz_set_powered_from_wbmz(false);
-    get_adc_data_from_regmap();
-    TEST_ASSERT_EQUAL_INT16_MESSAGE(ADC_V_IN_DIODE_DROP_MV, utest_adc_get_offset_mv(ADC_CHANNEL_ADC_V_IN),
-                                    "ADC_V_IN offset must equal ADC_V_IN_DIODE_DROP_MV when not powered from WBMZ");
+    adc_data = get_adc_data_from_regmap();
+    TEST_ASSERT_EQUAL_UINT16_MESSAGE(vin_base_mv + ADC_V_IN_DIODE_DROP_MV, adc_data.v_in,
+                                     "v_in must include ADC_V_IN_DIODE_DROP_MV when not powered from WBMZ");
 }
 
 // Сценарий: заполнение ADC_DATA для vbus_network зависит от EC_USB_HUB_DEBUG_NETWORK.
