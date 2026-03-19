@@ -1,8 +1,5 @@
 #include "utest_wbmcu_system.h"
-#include <stdint.h>
-#include <stdbool.h>
 #include <stddef.h>
-#include <setjmp.h>
 #include <string.h>
 
 // UID_BASE mock

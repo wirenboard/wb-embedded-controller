@@ -1,8 +1,8 @@
 #include "utest_wdt_stm32.h"
+
 #include <stdint.h>
 #include <stdbool.h>
 #include <stddef.h>
-#include <string.h>
 
 // Внутреннее состояние мока
 static struct {

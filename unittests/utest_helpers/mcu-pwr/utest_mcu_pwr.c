@@ -1,7 +1,4 @@
 #include "utest_mcu_pwr.h"
-#include <stdint.h>
-#include <stdbool.h>
-#include <stddef.h>
 
 // Внутреннее состояние мока
 static struct {
