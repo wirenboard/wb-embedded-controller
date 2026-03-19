@@ -19,8 +19,3 @@ void utest_watchdog_set_reload_callback(watchdog_reload_callback_t callback);
 
 // Сбросить состояние мока
 void utest_watchdog_reset(void);
-
-void utest_wdt_reset(void);
-void utest_wdt_set_timed_out(bool value);
-uint16_t utest_wdt_get_timeout(void);
-bool utest_wdt_get_started(void);

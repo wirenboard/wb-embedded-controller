@@ -16,10 +16,23 @@
 #include "utest_wbmz_common.h"
 #include "utest_wbmcu_system.h"
 #include "utest_wdt_stm32.h"
+#include "utest_wdt.h"
 #include "utest_pwrkey.h"
 #include "regmap-int.h"
 
 void utest_wbec_reset_state(void);
+
+// Причины включения из wbec.c
+enum utest_wbec_poweron_reason {
+    UTEST_REASON_POWER_ON,
+    UTEST_REASON_POWER_KEY,
+    UTEST_REASON_RTC_ALARM,
+    UTEST_REASON_REBOOT,
+    UTEST_REASON_REBOOT_NO_ALARM,
+    UTEST_REASON_WATCHDOG,
+    UTEST_REASON_PMIC_OFF,
+    UTEST_REASON_UNKNOWN,
+};
 
 static void reset_all(void)
 {
@@ -29,7 +42,7 @@ static void reset_all(void)
     utest_vmon_reset();
     utest_regmap_reset();
     utest_system_led_reset();
-    utest_wbmz_reset();
+    utest_wbmz_common_reset();
     utest_pwr_reset();
     utest_watchdog_reset();
     utest_linux_pwr_reset();
@@ -83,8 +96,8 @@ static void test_init_power_on_with_5v(void)
 
     wbec_init();
 
-    TEST_ASSERT_EQUAL_UINT16_MESSAGE(0, get_poweron_reason_from_regmap(),
-                                     "poweron_reason must be REASON_POWER_ON (0)");
+    TEST_ASSERT_EQUAL_UINT16_MESSAGE(UTEST_REASON_POWER_ON, get_poweron_reason_from_regmap(),
+                                     "poweron_reason must be REASON_POWER_ON");
     TEST_ASSERT_TRUE_MESSAGE(utest_rtc_get_periodic_wakeup_disabled(),
                              "RTC periodic wakeup must be disabled after init");
     TEST_ASSERT_EQUAL_MESSAGE(UTEST_LED_MODE_BLINK, utest_system_led_get_mode(),
@@ -119,8 +132,8 @@ static void test_init_unknown_reason_defaults_to_power_on(void)
 
     wbec_init();
 
-    TEST_ASSERT_EQUAL_UINT16_MESSAGE(0, get_poweron_reason_from_regmap(),
-                                     "poweron_reason must be REASON_POWER_ON (0) for unknown MCU reason");
+    TEST_ASSERT_EQUAL_UINT16_MESSAGE(UTEST_REASON_POWER_ON, get_poweron_reason_from_regmap(),
+                                     "poweron_reason must be REASON_POWER_ON for unknown MCU reason");
     TEST_ASSERT_TRUE_MESSAGE(utest_rtc_get_periodic_wakeup_disabled(),
                              "RTC periodic wakeup must be disabled after init");
 }
@@ -132,13 +145,13 @@ static void test_init_unknown_reason_defaults_to_power_on(void)
 static void test_init_power_key_pressed(void)
 {
     utest_mcu_set_poweron_reason(MCU_POWERON_REASON_POWER_KEY);
-    utest_pwrkey_set_pressed(true);
+    utest_set_pwrkey_pressed(true);
     utest_vmon_set_ch_status(VMON_CHANNEL_V50, true);
 
     wbec_init();
 
-    TEST_ASSERT_EQUAL_UINT16_MESSAGE(1, get_poweron_reason_from_regmap(),
-                                     "poweron_reason must be REASON_POWER_KEY (1)");
+    TEST_ASSERT_EQUAL_UINT16_MESSAGE(UTEST_REASON_POWER_KEY, get_poweron_reason_from_regmap(),
+                                     "poweron_reason must be REASON_POWER_KEY");
     TEST_ASSERT_TRUE_MESSAGE(utest_rtc_get_periodic_wakeup_disabled(),
                              "RTC periodic wakeup must be disabled after init");
     TEST_ASSERT_FALSE_MESSAGE(utest_linux_pwr_get_standby_called(),
@@ -151,7 +164,7 @@ static void test_init_power_key_pressed(void)
 static void test_init_power_key_not_pressed_goes_to_standby(void)
 {
     utest_mcu_set_poweron_reason(MCU_POWERON_REASON_POWER_KEY);
-    utest_pwrkey_set_pressed(false);
+    utest_set_pwrkey_pressed(false);
 
     jmp_buf standby_jmp;
     utest_linux_pwr_set_standby_exit_jmp(&standby_jmp);
@@ -181,8 +194,8 @@ static void test_init_rtc_alarm(void)
 
     wbec_init();
 
-    TEST_ASSERT_EQUAL_UINT16_MESSAGE(2, get_poweron_reason_from_regmap(),
-                                     "poweron_reason must be REASON_RTC_ALARM (2)");
+    TEST_ASSERT_EQUAL_UINT16_MESSAGE(UTEST_REASON_RTC_ALARM, get_poweron_reason_from_regmap(),
+                                     "poweron_reason must be REASON_RTC_ALARM");
     TEST_ASSERT_TRUE_MESSAGE(utest_rtc_get_periodic_wakeup_disabled(),
                              "RTC periodic wakeup must be disabled after init");
 }
@@ -200,8 +213,8 @@ static void test_init_periodic_wakeup_5v_appeared(void)
 
     wbec_init();
 
-    TEST_ASSERT_EQUAL_UINT16_MESSAGE(0, get_poweron_reason_from_regmap(),
-                                     "poweron_reason must be REASON_POWER_ON (0) when 5V appeared");
+    TEST_ASSERT_EQUAL_UINT16_MESSAGE(UTEST_REASON_POWER_ON, get_poweron_reason_from_regmap(),
+                                     "poweron_reason must be REASON_POWER_ON when 5V appeared");
     TEST_ASSERT_TRUE_MESSAGE(utest_rtc_get_periodic_wakeup_disabled(),
                              "RTC periodic wakeup must be disabled after init");
     TEST_ASSERT_FALSE_MESSAGE(utest_linux_pwr_get_standby_called(),
@@ -220,7 +233,7 @@ static void test_init_periodic_wakeup_3v3_present_powers_on(void)
 
     wbec_init();
 
-    TEST_ASSERT_EQUAL_UINT16_MESSAGE(0, get_poweron_reason_from_regmap(),
+    TEST_ASSERT_EQUAL_UINT16_MESSAGE(UTEST_REASON_POWER_ON, get_poweron_reason_from_regmap(),
                                      "poweron_reason must be REASON_POWER_ON when 3.3V is present");
     TEST_ASSERT_FALSE_MESSAGE(utest_linux_pwr_get_standby_called(),
                               "Standby must NOT be called when 3.3V is present");
@@ -332,7 +345,7 @@ static void test_init_enables_stepup_when_no_5v(void)
     // Проверяем для POWER_KEY
     reset_all();
     utest_mcu_set_poweron_reason(MCU_POWERON_REASON_POWER_KEY);
-    utest_pwrkey_set_pressed(true);
+    utest_set_pwrkey_pressed(true);
     utest_vmon_set_ch_status(VMON_CHANNEL_V50, false);
 
     wbec_init();
@@ -367,7 +380,7 @@ static void test_init_power_key_waits_for_pwrkey_ready(void)
 {
     utest_mcu_set_poweron_reason(MCU_POWERON_REASON_POWER_KEY);
     utest_pwrkey_set_ready(false);
-    utest_pwrkey_set_pressed(true);
+    utest_set_pwrkey_pressed(true);
     utest_vmon_set_ch_status(VMON_CHANNEL_V50, true);
     utest_watchdog_set_reload_callback(pwrkey_ready_callback);
 
@@ -375,8 +388,8 @@ static void test_init_power_key_waits_for_pwrkey_ready(void)
 
     TEST_ASSERT_TRUE_MESSAGE(utest_watchdog_is_reloaded(),
                              "Watchdog must be reloaded while waiting for pwrkey ready");
-    TEST_ASSERT_EQUAL_UINT16_MESSAGE(1, get_poweron_reason_from_regmap(),
-                                     "poweron_reason must be REASON_POWER_KEY (1) after debounce wait");
+    TEST_ASSERT_EQUAL_UINT16_MESSAGE(UTEST_REASON_POWER_KEY, get_poweron_reason_from_regmap(),
+                                     "poweron_reason must be REASON_POWER_KEY after debounce wait");
 }
 
 // ======================== wbec_do_periodic_work: вспомогательные функции ========================
@@ -515,6 +528,26 @@ static void test_periodic_adc_vin_depends_on_vmon_status(void)
                                      "v_in must be 0 when VMON_CHANNEL_V_IN is invalid");
 }
 
+// Сценарий: смещение канала ADC_V_IN зависит от источника питания (WBMZ/не WBMZ).
+// Ожидание: при питании от WBMZ смещение 0 мВ, иначе ADC_V_IN_DIODE_DROP_MV.
+static void test_periodic_adc_vin_offset_depends_on_wbmz_power_source(void)
+{
+    utest_mcu_set_poweron_reason(MCU_POWERON_REASON_POWER_ON);
+    utest_vmon_set_ch_status(VMON_CHANNEL_V50, true);
+
+    wbec_init();
+
+    utest_wbmz_set_powered_from_wbmz(true);
+    get_adc_data_from_regmap();
+    TEST_ASSERT_EQUAL_INT16_MESSAGE(0, utest_adc_get_offset_mv(ADC_CHANNEL_ADC_V_IN),
+                                    "ADC_V_IN offset must be 0 when powered from WBMZ");
+
+    utest_wbmz_set_powered_from_wbmz(false);
+    get_adc_data_from_regmap();
+    TEST_ASSERT_EQUAL_INT16_MESSAGE(ADC_V_IN_DIODE_DROP_MV, utest_adc_get_offset_mv(ADC_CHANNEL_ADC_V_IN),
+                                    "ADC_V_IN offset must equal ADC_V_IN_DIODE_DROP_MV when not powered from WBMZ");
+}
+
 // Сценарий: заполнение ADC_DATA для vbus_network зависит от EC_USB_HUB_DEBUG_NETWORK.
 // Ожидание: при включённом флаге vbus_network всегда 0; иначе читается из ADC_CHANNEL_ADC_VBUS_NETWORK.
 static void test_periodic_adc_vbus_network_depends_on_debug_network_flag(void)
@@ -569,8 +602,15 @@ static void test_periodic_voltage_check_usb_delay(void)
     TEST_ASSERT_FALSE_MESSAGE(utest_linux_pwr_get_pwr_on_called(),
                               "linux_cpu_pwr_seq_on must not be called during USB delay");
 
+    // Через 4999мс → всё ещё остаёмся в VOLTAGE_CHECK
+    utest_systick_advance_time_ms(4999);
+    wbec_do_periodic_work();
+
+    TEST_ASSERT_FALSE_MESSAGE(utest_linux_pwr_get_pwr_on_called(),
+                              "linux_cpu_pwr_seq_on must not be called at 4999ms of USB delay");
+
     // Через 5001мс → переход дальше
-    utest_systick_advance_time_ms(5001);
+    utest_systick_advance_time_ms(2);
     wbec_do_periodic_work();
 
     TEST_ASSERT_TRUE_MESSAGE(utest_linux_pwr_get_pwr_on_called(),
@@ -754,7 +794,7 @@ static void test_periodic_power_on_seq_initial_powered_on_sets_booted(void)
     wbec_do_periodic_work();
 
     // Проверяем, что linux_booted=true: нажатие кнопки → IRQ, а не hard_off
-    utest_pwrkey_set_pressed(true);
+    utest_set_pwrkey_pressed(true);
     wbec_do_periodic_work();
 
     TEST_ASSERT_EQUAL_UINT16_MESSAGE((1u << IRQ_PWR_OFF_REQ), utest_irq_get_all_flags(),
@@ -774,7 +814,7 @@ static void test_periodic_working_booted_pwrkey_sends_irq(void)
     utest_systick_advance_time_ms(WBEC_LINUX_BOOT_TIME_MS + 1);
     wbec_do_periodic_work();
 
-    utest_pwrkey_set_pressed(true);
+    utest_set_pwrkey_pressed(true);
     wbec_do_periodic_work();
 
     TEST_ASSERT_EQUAL_UINT16_MESSAGE((1u << IRQ_PWR_OFF_REQ), utest_irq_get_all_flags(),
@@ -799,22 +839,33 @@ static void test_periodic_working_linux_boots_after_timeout(void)
 {
     drive_to_working_state();
 
-    // До 20с: не загружен, short_press → hard_off
-    // Проверяем, что до 20с linux не считается загруженным
-    utest_pwrkey_set_pressed(true);
+    // До таймаута загрузки: linux не считается загруженным
+    utest_set_pwrkey_pressed(true);
     wbec_do_periodic_work();
 
-    // До 20с IRQ не выставляется
+    // До таймаута IRQ не выставляется
     TEST_ASSERT_EQUAL_UINT16_MESSAGE(0, utest_irq_get_all_flags(),
                                      "IRQ must not be set before linux boot timeout");
 
-    utest_pwrkey_set_pressed(false);
+    utest_set_pwrkey_pressed(false);
 
-    // Через 20001мс: загружен
-    utest_systick_advance_time_ms(WBEC_LINUX_BOOT_TIME_MS + 1);
+    // В момент WBEC_LINUX_BOOT_TIME_MS - 1 linux ещё не должен считаться загруженным
+    utest_systick_advance_time_ms(WBEC_LINUX_BOOT_TIME_MS - 1);
     wbec_do_periodic_work();
 
-    utest_pwrkey_set_pressed(true);
+    utest_set_pwrkey_pressed(true);
+    wbec_do_periodic_work();
+
+    TEST_ASSERT_EQUAL_UINT16_MESSAGE(0, utest_irq_get_all_flags(),
+                                     "IRQ must not be set at WBEC_LINUX_BOOT_TIME_MS - 1");
+
+    utest_set_pwrkey_pressed(false);
+
+    // Через 20001мс: загружен
+    utest_systick_advance_time_ms(2);
+    wbec_do_periodic_work();
+
+    utest_set_pwrkey_pressed(true);
     wbec_do_periodic_work();
 
     TEST_ASSERT_EQUAL_UINT16_MESSAGE((1u << IRQ_PWR_OFF_REQ), utest_irq_get_all_flags(),
@@ -832,9 +883,9 @@ static void test_periodic_working_pwrkey_flag_timeout(void)
     wbec_do_periodic_work();
 
     // Нажимаем кнопку
-    utest_pwrkey_set_pressed(true);
+    utest_set_pwrkey_pressed(true);
     wbec_do_periodic_work();
-    utest_pwrkey_set_pressed(false);
+    utest_set_pwrkey_pressed(false);
 
     // Через 90с флаг должен сброситься
     utest_systick_advance_time_ms(WBEC_LINUX_POWER_OFF_DELAY_MS + 1);
@@ -885,9 +936,9 @@ static void test_periodic_working_poweroff_with_button(void)
     utest_systick_advance_time_ms(WBEC_LINUX_BOOT_TIME_MS + 1);
     wbec_do_periodic_work();
 
-    utest_pwrkey_set_pressed(true);
+    utest_set_pwrkey_pressed(true);
     wbec_do_periodic_work();
-    utest_pwrkey_set_pressed(false);
+    utest_set_pwrkey_pressed(false);
 
     set_power_ctrl_request(true, false, false);
     wbec_do_periodic_work();
@@ -910,8 +961,8 @@ static void test_periodic_working_poweroff_without_conditions_reboots(void)
     TEST_ASSERT_FALSE_MESSAGE(utest_linux_pwr_get_hard_off_called(),
                               "hard_off must not be called on poweroff without conditions");
 
-    TEST_ASSERT_EQUAL_UINT16_MESSAGE(4, get_poweron_reason_from_regmap(),
-                                     "poweron_reason must be REASON_REBOOT_NO_ALARM (4)");
+    TEST_ASSERT_EQUAL_UINT16_MESSAGE(UTEST_REASON_REBOOT_NO_ALARM, get_poweron_reason_from_regmap(),
+                                     "poweron_reason must be REASON_REBOOT_NO_ALARM");
 }
 
 // Сценарий: запрос reboot из Linux → hard_reset.
@@ -925,8 +976,8 @@ static void test_periodic_working_reboot_request(void)
     TEST_ASSERT_TRUE_MESSAGE(utest_linux_pwr_get_hard_reset_called(),
                              "hard_reset must be called on reboot request");
 
-    TEST_ASSERT_EQUAL_UINT16_MESSAGE(3, get_poweron_reason_from_regmap(),
-                                     "poweron_reason must be REASON_REBOOT (3)");
+    TEST_ASSERT_EQUAL_UINT16_MESSAGE(UTEST_REASON_REBOOT, get_poweron_reason_from_regmap(),
+                                     "poweron_reason must be REASON_REBOOT");
 }
 
 // Сценарий: запрос pmic_reset из Linux → reset_pmic.
@@ -940,8 +991,8 @@ static void test_periodic_working_pmic_reset_request(void)
     TEST_ASSERT_TRUE_MESSAGE(utest_linux_pwr_get_reset_pmic_called(),
                              "reset_pmic must be called on pmic_reset request");
 
-    TEST_ASSERT_EQUAL_UINT16_MESSAGE(3, get_poweron_reason_from_regmap(),
-                                     "poweron_reason must be REASON_REBOOT (3)");
+    TEST_ASSERT_EQUAL_UINT16_MESSAGE(UTEST_REASON_REBOOT, get_poweron_reason_from_regmap(),
+                                     "poweron_reason must be REASON_REBOOT");
 }
 
 // Сценарий: WDT тайм-аут → hard_reset, reason=WATCHDOG.
@@ -955,8 +1006,8 @@ static void test_periodic_working_wdt_timeout(void)
     TEST_ASSERT_TRUE_MESSAGE(utest_linux_pwr_get_hard_reset_called(),
                              "hard_reset must be called on WDT timeout");
 
-    TEST_ASSERT_EQUAL_UINT16_MESSAGE(5, get_poweron_reason_from_regmap(),
-                                     "poweron_reason must be REASON_WATCHDOG (5)");
+    TEST_ASSERT_EQUAL_UINT16_MESSAGE(UTEST_REASON_WATCHDOG, get_poweron_reason_from_regmap(),
+                                     "poweron_reason must be REASON_WATCHDOG");
 }
 
 // Сценарий: пропало 3.3В и 5В одновременно → hard_off (питание выдернуто).
@@ -1001,8 +1052,29 @@ static void test_periodic_working_v33_lost_first_attempt(void)
     TEST_ASSERT_TRUE_MESSAGE(utest_linux_pwr_get_hard_reset_called(),
                              "hard_reset must be called on first V33 loss");
 
-    TEST_ASSERT_EQUAL_UINT16_MESSAGE(6, get_poweron_reason_from_regmap(),
-                                     "poweron_reason must be REASON_PMIC_OFF (6)");
+    TEST_ASSERT_EQUAL_UINT16_MESSAGE(UTEST_REASON_PMIC_OFF, get_poweron_reason_from_regmap(),
+                                     "poweron_reason must be REASON_PMIC_OFF");
+}
+
+// Сценарий: пропало 3.3В, питание от WBMZ, но батарея в норме.
+// Ожидание: специальная ветка разряда АКБ не срабатывает,
+// используется общий путь: enable stepup + hard_reset, reason=PMIC_OFF.
+static void test_periodic_working_v33_lost_wbmz_vbat_ok_uses_generic_path(void)
+{
+    drive_to_working_state();
+
+    utest_vmon_set_ch_status(VMON_CHANNEL_V33, false);
+    utest_wbmz_set_powered_from_wbmz(true);
+    utest_wbmz_set_vbat_ok(true);
+    wbec_do_periodic_work();
+
+    TEST_ASSERT_TRUE_MESSAGE(utest_wbmz_get_stepup_enabled(),
+                             "WBMZ stepup must be enabled when V33 is lost and WBMZ battery is OK");
+    TEST_ASSERT_TRUE_MESSAGE(utest_linux_pwr_get_hard_reset_called(),
+                             "hard_reset must be called when V33 is lost and WBMZ battery is OK");
+
+    TEST_ASSERT_EQUAL_UINT16_MESSAGE(UTEST_REASON_PMIC_OFF, get_poweron_reason_from_regmap(),
+                                     "poweron_reason must be REASON_PMIC_OFF when WBMZ battery is OK");
 }
 
 // Сценарий: пропало 3.3В больше WBEC_POWER_LOSS_ATTEMPTS раз за WBEC_POWER_LOSS_TIMEOUT_MIN минут → hard_off.
@@ -1129,6 +1201,7 @@ int main(void)
 
     // VOLTAGE_CHECK
     RUN_TEST(test_periodic_adc_vin_depends_on_vmon_status);
+    RUN_TEST(test_periodic_adc_vin_offset_depends_on_wbmz_power_source);
     RUN_TEST(test_periodic_adc_vbus_network_depends_on_debug_network_flag);
     RUN_TEST(test_periodic_voltage_check_usb_delay);
     RUN_TEST(test_periodic_voltage_check_temp_ready);
@@ -1158,6 +1231,7 @@ int main(void)
     RUN_TEST(test_periodic_working_wdt_timeout);
     RUN_TEST(test_periodic_working_v33_and_v50_lost);
     RUN_TEST(test_periodic_working_v33_lost_wbmz_vbat_low);
+    RUN_TEST(test_periodic_working_v33_lost_wbmz_vbat_ok_uses_generic_path);
     RUN_TEST(test_periodic_working_v33_lost_first_attempt);
     RUN_TEST(test_periodic_working_v33_loss_exceeds_limit);
     RUN_TEST(test_periodic_working_v33_loss_counter_resets_after_timeout);

@@ -20,19 +20,9 @@ void utest_set_pwrkey_long_press(bool value)
     pwrkey_long_press = value;
 }
 
-void utest_pwrkey_set_long_press(bool value)
-{
-    utest_set_pwrkey_long_press(value);
-}
-
 void utest_set_pwrkey_pressed(bool value)
 {
     pwrkey_is_pressed = value;
-}
-
-void utest_pwrkey_set_pressed(bool value)
-{
-    utest_set_pwrkey_pressed(value);
 }
 
 void utest_pwrkey_set_ready(bool ready)
@@ -45,7 +35,7 @@ void utest_pwrkey_set_short_press(bool value)
     pwrkey_short_press = value;
 }
 
-uint32_t utest_get_pwrkey_periodic_work_call_count(void)
+uint32_t utest_pwrkey_get_periodic_work_call_count(void)
 {
     return pwrkey_periodic_work_call_count;
 }
