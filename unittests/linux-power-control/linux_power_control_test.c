@@ -626,7 +626,6 @@ static void test_periodic_off_complete_timeout_switches_to_standby_only_after_20
 }
 
 // Сценарий: в состоянии OFF_COMPLETE включен stepup.
-// До действия: stepup включен, счетчик disable еще нулевой.
 // После действия: periodic_work выключает stepup до перехода в standby.
 static void test_periodic_off_complete_disables_stepup_when_enabled(void)
 {
@@ -635,17 +634,10 @@ static void test_periodic_off_complete_disables_stepup_when_enabled(void)
     prepare_periodic_runtime(true, false);
     utest_set_wbmz_stepup_enabled(true);
 
-    TEST_ASSERT_EQUAL_UINT32_MESSAGE(
-        0,
-        utest_get_wbmz_disable_stepup_call_count(),
-        "Stepup disable call count must be zero before periodic work"
-    );
-
     linux_cpu_pwr_seq_do_periodic_work();
 
-    TEST_ASSERT_EQUAL_UINT32_MESSAGE(
-        1,
-        utest_get_wbmz_disable_stepup_call_count(),
+    TEST_ASSERT_FALSE_MESSAGE(
+        utest_wbmz_get_stepup_enabled(),
         "Stepup must be disabled in OFF_COMPLETE state"
     );
 }
@@ -818,14 +810,10 @@ static void test_periodic_long_press_turns_power_off_and_goes_to_standby(void)
     TEST_ASSERT_EQUAL_UINT16_MESSAGE(
         0, utest_mcu_get_standby_wakeup_time(), "Standby must not be requested before long-press handling"
     );
+
     TEST_ASSERT_EQUAL_UINT32_MESSAGE(
         0,
-        utest_get_wbmz_disable_stepup_call_count(),
-        "Stepup disable call count must be zero before long-press handling"
-    );
-    TEST_ASSERT_EQUAL_UINT32_MESSAGE(
-        0,
-        utest_get_pwrkey_periodic_work_call_count(),
+        utest_pwrkey_get_periodic_work_call_count(),
         "Button wait loop must not run before long-press handling"
     );
     TEST_ASSERT_EQUAL_UINT32_MESSAGE(
@@ -844,14 +832,13 @@ static void test_periodic_long_press_turns_power_off_and_goes_to_standby(void)
         utest_mcu_get_standby_wakeup_time(),
         "Standby wakeup timeout must be requested on long press"
     );
-    TEST_ASSERT_EQUAL_UINT32_MESSAGE(
-        1,
-        utest_get_wbmz_disable_stepup_call_count(),
+    TEST_ASSERT_FALSE_MESSAGE(
+        utest_wbmz_get_stepup_enabled(),
         "Stepup must be disabled on long press shutdown path"
     );
     TEST_ASSERT_EQUAL_UINT32_MESSAGE(
         0,
-        utest_get_pwrkey_periodic_work_call_count(),
+        utest_pwrkey_get_periodic_work_call_count(),
         "Button wait loop must not run when button is already released"
     );
     TEST_ASSERT_EQUAL_UINT32_MESSAGE(
@@ -877,7 +864,7 @@ static void test_periodic_long_press_waits_until_button_release(void)
 
     TEST_ASSERT_EQUAL_UINT32_MESSAGE(
         0,
-        utest_get_pwrkey_periodic_work_call_count(),
+        utest_pwrkey_get_periodic_work_call_count(),
         "pwrkey_do_periodic_work call count must be zero before long-press loop"
     );
     TEST_ASSERT_FALSE_MESSAGE(
@@ -902,7 +889,7 @@ static void test_periodic_long_press_waits_until_button_release(void)
     );
     TEST_ASSERT_EQUAL_UINT32_MESSAGE(
         1,
-        utest_get_pwrkey_periodic_work_call_count(),
+        utest_pwrkey_get_periodic_work_call_count(),
         "pwrkey_do_periodic_work must be called while waiting for release"
     );
     TEST_ASSERT_EQUAL_UINT32_MESSAGE(

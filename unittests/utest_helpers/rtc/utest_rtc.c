@@ -8,6 +8,7 @@ static struct {
     uint16_t offset;
     bool ready_read;
     bool alarm_flag_cleared;
+    bool periodic_wakeup_disabled;
 
     // Track what was set
     bool datetime_was_set;
@@ -83,6 +84,11 @@ bool utest_rtc_was_alarm_flag_cleared(void)
     return rtc_state.alarm_flag_cleared;
 }
 
+bool utest_rtc_get_periodic_wakeup_disabled(void)
+{
+    return rtc_state.periodic_wakeup_disabled;
+}
+
 // Mock implementation of RTC API
 void rtc_init(void)
 {
@@ -146,12 +152,15 @@ void rtc_clear_alarm_flag(void)
     rtc_state.alarm.flag = false;
 }
 
-// Stub implementations for other RTC functions
+void rtc_disable_periodic_wakeup(void)
+{
+    rtc_state.periodic_wakeup_disabled = true;
+}
+
 void rtc_enable_pc13_1hz_clkout(void) {}
 void rtc_disable_pc13_1hz_clkout(void) {}
 void rtc_enable_pa4_1hz_clkout(void) {}
 void rtc_disable_pa4_1hz_clkout(void) {}
 void rtc_set_periodic_wakeup(uint16_t period_s) { (void)period_s; }
-void rtc_disable_periodic_wakeup(void) {}
 void rtc_save_to_tamper_reg(uint8_t index, uint32_t data) { (void)index; (void)data; }
 uint32_t rtc_get_tamper_reg(uint8_t index) { (void)index; return 0; }

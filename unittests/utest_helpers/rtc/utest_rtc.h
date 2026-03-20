@@ -16,3 +16,4 @@ bool utest_rtc_get_was_datetime_set(struct rtc_time * tm);
 bool utest_rtc_get_was_alarm_set(struct rtc_alarm * alarm);
 bool utest_rtc_get_was_offset_set(uint16_t * offset);
 bool utest_rtc_was_alarm_flag_cleared(void);
+bool utest_rtc_get_periodic_wakeup_disabled(void);
