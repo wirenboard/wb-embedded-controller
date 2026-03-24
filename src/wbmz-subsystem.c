@@ -128,3 +128,16 @@ void wbmz_subsystem_do_periodic_work(void)
     regmap_set_region_data(REGMAP_REGION_PWR_STATUS, &p, sizeof(p));
 }
 
+#ifdef __unittest_env__
+#include <string.h>
+
+void utest_wbmz_subsystem_reset_state(void)
+{
+    #ifdef WBEC_WBMZ6_SUPPORT
+        wbmz6_device = WBMZ6_DEVICE_NONE;
+        memset(&wbmz6_params, 0, sizeof(wbmz6_params));
+        memset(&wbmz6_status, 0, sizeof(wbmz6_status));
+        wbmz6_last_poll_time = 0;
+    #endif
+}
+#endif

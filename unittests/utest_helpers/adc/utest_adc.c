@@ -21,6 +21,11 @@ int32_t adc_get_ch_mv(enum adc_channel channel)
     return adc_values_mv[channel] + adc_offsets_mv[channel];
 }
 
+fix16_t adc_get_ch_mv_f16(enum adc_channel channel)
+{
+    return fix16_from_int(adc_values_mv[channel] + adc_offsets_mv[channel]);
+}
+
 fix16_t adc_get_ch_adc_raw(enum adc_channel channel)
 {
     return adc_values_raw[channel];
@@ -38,6 +43,5 @@ void adc_set_offset_mv(enum adc_channel channel, int16_t offset_mv)
 
 void adc_init(enum adc_clock clock_divider, enum adc_vref vref) {}
 void adc_set_lowpass_rc(enum adc_channel channel, uint16_t rc_ms) {}
-fix16_t adc_get_ch_mv_f16(enum adc_channel channel) { return 0; }
 bool adc_get_ready(void) { return true; }
 void adc_do_periodic_work(void) {}
