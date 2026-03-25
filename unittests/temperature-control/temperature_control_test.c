@@ -31,7 +31,8 @@ void tearDown(void)
 
 }
 
-
+// Scenario: Initialize temperature control subsystem
+// Expected: Initialization completes successfully without errors
 static void test_temperature_control_init(void)
 {
     LOG_INFO("Testing initialization");
@@ -42,6 +43,8 @@ static void test_temperature_control_init(void)
 }
 
 #if defined(EC_GPIO_HEATER)
+// Scenario: Initialize temperature control with heater support
+// Expected: Heater GPIO configured as output push-pull, initially set LOW (off)
 static void test_heater_gpio_init(void)
 {
     LOG_INFO("Testing heater GPIO initialization");
@@ -62,7 +65,8 @@ static void test_heater_gpio_init(void)
 }
 #endif
 
-
+// Scenario: Check temperature readiness when above minimum working temperature
+// Expected: temperature_control_is_temperature_ready() returns true
 static void test_temperature_is_ready_above_minimum(void)
 {
     LOG_INFO("Testing temperature ready when above minimum");
@@ -74,7 +78,8 @@ static void test_temperature_is_ready_above_minimum(void)
     TEST_ASSERT_TRUE_MESSAGE(ready, "Temperature should be ready when above minimum working temperature");
 }
 
-
+// Scenario: Check temperature readiness when below minimum working temperature
+// Expected: temperature_control_is_temperature_ready() returns false
 static void test_temperature_is_not_ready_below_minimum(void)
 {
     LOG_INFO("Testing temperature not ready when below minimum");
@@ -86,7 +91,8 @@ static void test_temperature_is_not_ready_below_minimum(void)
     TEST_ASSERT_FALSE_MESSAGE(ready, "Temperature should not be ready when below minimum working temperature");
 }
 
-
+// Scenario: Check temperature readiness at exact minimum threshold
+// Expected: False at threshold, true when 1°C above
 static void test_temperature_is_ready_at_minimum_threshold(void)
 {
     LOG_INFO("Testing temperature ready at threshold");
@@ -104,7 +110,8 @@ static void test_temperature_is_ready_at_minimum_threshold(void)
     TEST_ASSERT_TRUE_MESSAGE(ready, "Temperature should be ready above minimum threshold");
 }
 
-
+// Scenario: Get temperature value in 0.01°C units for positive temperature
+// Expected: Returns temperature scaled by 100 (e.g., 25.5°C returns 2550)
 static void test_get_temperature_positive(void)
 {
     LOG_INFO("Testing get temperature - positive values");
@@ -115,7 +122,8 @@ static void test_get_temperature_positive(void)
     TEST_ASSERT_EQUAL_INT16_MESSAGE(2550, temp_x100, "Temperature x100 should be 2550 for 25.5°C");
 }
 
-
+// Scenario: Get temperature value in 0.01°C units for negative temperature
+// Expected: Returns temperature scaled by 100 (e.g., -15.5°C returns -1550)
 static void test_get_temperature_negative(void)
 {
     LOG_INFO("Testing get temperature - negative values");
@@ -126,7 +134,8 @@ static void test_get_temperature_negative(void)
     TEST_ASSERT_EQUAL_INT16_MESSAGE(-1550, temp_x100, "Temperature x100 should be -1550 for -15.5°C");
 }
 
-
+// Scenario: Get temperature value at exactly 0°C
+// Expected: Returns 0
 static void test_get_temperature_zero(void)
 {
     LOG_INFO("Testing get temperature - zero");
@@ -139,6 +148,8 @@ static void test_get_temperature_zero(void)
 
 
 #if defined(EC_GPIO_HEATER)
+// Scenario: Temperature below heater ON threshold with Vin power present
+// Expected: Heater GPIO turns HIGH (heater enabled)
 static void test_heater_turns_on_at_low_temperature(void)
 {
     LOG_INFO("Testing heater turns on at low temperature");
@@ -159,7 +170,8 @@ static void test_heater_turns_on_at_low_temperature(void)
     TEST_ASSERT_EQUAL_UINT32_MESSAGE(1, state, "Heater GPIO should be HIGH (on) at low temperature");
 }
 
-
+// Scenario: Temperature rises above heater OFF threshold while heater is on
+// Expected: Heater GPIO turns LOW (heater disabled)
 static void test_heater_turns_off_at_high_temperature(void)
 {
     LOG_INFO("Testing heater turns off at high temperature");
@@ -185,7 +197,8 @@ static void test_heater_turns_off_at_high_temperature(void)
     TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, state, "Heater GPIO should be LOW (off) at high temperature");
 }
 
-
+// Scenario: Low temperature but system powered from WBMZ (no Vin)
+// Expected: Heater stays LOW (off) to avoid drawing power from WBMZ
 static void test_heater_stays_off_when_powered_from_wbmz(void)
 {
     LOG_INFO("Testing heater stays off when powered from WBMZ");
@@ -206,7 +219,8 @@ static void test_heater_stays_off_when_powered_from_wbmz(void)
     TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, state, "Heater GPIO should stay LOW (off) when powered from WBMZ");
 }
 
-
+// Scenario: Low temperature but Vin is not present
+// Expected: Heater stays LOW (off) due to lack of input power
 static void test_heater_stays_off_when_vin_not_present(void)
 {
     LOG_INFO("Testing heater stays off when Vin not present");
@@ -227,7 +241,9 @@ static void test_heater_stays_off_when_vin_not_present(void)
     TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, state, "Heater GPIO should stay LOW (off) when Vin not present");
 }
 
-
+// Scenario: Temperature cycles around ON/OFF thresholds
+// Expected: Hysteresis prevents rapid on/off cycling; heater turns on below
+// ON threshold and turns off above OFF threshold
 static void test_heater_hysteresis(void)
 {
     LOG_INFO("Testing heater hysteresis");
@@ -265,7 +281,8 @@ static void test_heater_hysteresis(void)
     TEST_PASS();
 }
 
-
+// Scenario: Heater running on Vin, then system switches to WBMZ power
+// Expected: Heater automatically turns off when power source changes
 static void test_heater_turns_off_when_wbmz_power_enabled_during_heating(void)
 {
     LOG_INFO("Testing heater turns off when switched to WBMZ power during heating");
@@ -292,7 +309,8 @@ static void test_heater_turns_off_when_wbmz_power_enabled_during_heating(void)
     TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, state, "Heater should turn OFF when switched to WBMZ power");
 }
 
-
+// Scenario: Heater running on Vin, then Vin is lost
+// Expected: Heater automatically turns off when Vin is lost
 static void test_heater_turns_off_when_vin_lost_during_heating(void)
 {
     LOG_INFO("Testing heater turns off when Vin is lost during heating");
@@ -319,7 +337,8 @@ static void test_heater_turns_off_when_vin_lost_during_heating(void)
     TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, state, "Heater should turn OFF when Vin is lost");
 }
 
-
+// Scenario: Force heater enable at high temperature (override normal control)
+// Expected: Heater turns on despite temperature being above threshold
 static void test_heater_force_control_enable(void)
 {
     LOG_INFO("Testing heater force control enable");
@@ -340,7 +359,8 @@ static void test_heater_force_control_enable(void)
     TEST_PASS();
 }
 
-
+// Scenario: Disable forced heater control, then set low temperature
+// Expected: Heater returns to normal temperature-based control
 static void test_heater_force_control_disable(void)
 {
     LOG_INFO("Testing heater force control disable");

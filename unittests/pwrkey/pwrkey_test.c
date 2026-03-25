@@ -72,6 +72,9 @@ static void simulate_button_release_with_debounce(void)
     pwrkey_do_periodic_work();
 }
 
+// Scenario: Initialize power key subsystem
+// Expected: PWRKEY GPIO configured as input with appropriate pull-up/down and
+// wakeup source enabled in PWR registers
 static void test_pwrkey_init(void)
 {
     LOG_INFO("Testing pwrkey initialization");
@@ -102,6 +105,8 @@ static void test_pwrkey_init(void)
     TEST_ASSERT_EQUAL_UINT32_MESSAGE(cr3_expected, PWR->CR3, "PWR->CR3 should have wakeup source set for PWRKEY");
 }
 
+// Scenario: Wait for power key debounce period after initialization
+// Expected: pwrkey_ready() returns false before debounce, true after debounce
 static void test_pwrkey_ready_after_debounce(void)
 {
     LOG_INFO("Testing pwrkey ready state after debounce");
@@ -128,6 +133,8 @@ static void test_pwrkey_ready_after_debounce(void)
     TEST_ASSERT_TRUE_MESSAGE(pwrkey_ready(), "pwrkey should be ready after debounce time elapsed");
 }
 
+// Scenario: Press and release power key button
+// Expected: pwrkey_pressed() returns false when released, true when pressed
 static void test_pwrkey_pressed_state(void)
 {
     LOG_INFO("Testing pwrkey pressed state detection");
@@ -145,6 +152,8 @@ static void test_pwrkey_pressed_state(void)
     TEST_ASSERT_TRUE_MESSAGE(pwrkey_pressed(), "pwrkey_pressed() should return true when button is pressed");
 }
 
+// Scenario: Press button and measure debounce delay
+// Expected: Button not registered as pressed until debounce time elapses
 static void test_pwrkey_debounce_on_press(void)
 {
     LOG_INFO("Testing debounce on button press");
@@ -173,6 +182,8 @@ static void test_pwrkey_debounce_on_press(void)
     TEST_ASSERT_TRUE_MESSAGE(pwrkey_pressed(), "Button should register as pressed after debounce time");
 }
 
+// Scenario: Simulate brief button glitch (press then quickly release)
+// Expected: Glitch rejected, button state remains released
 static void test_pwrkey_debounce_glitch_rejection(void)
 {
     LOG_INFO("Testing debounce glitch rejection");
@@ -196,7 +207,8 @@ static void test_pwrkey_debounce_glitch_rejection(void)
     TEST_ASSERT_FALSE_MESSAGE(pwrkey_pressed(), "Button should still be released after glitch rejection");
 }
 
-
+// Scenario: Simulate long series of glitches during press attempt
+// Expected: All glitches rejected, button only registered after stable press
 static void test_pwkrey_debounce_long_glith_rejection_press(void)
 {
     LOG_INFO("Testing long time glitch rejection during press");
@@ -246,6 +258,9 @@ static void test_pwkrey_debounce_long_glith_rejection_press(void)
     TEST_ASSERT_TRUE_MESSAGE(pwrkey_pressed(), "Button should be pressed after debounce time elapsed");
 }
 
+// Scenario: Simulate long series of glitches during release attempt
+// Expected: All glitches rejected, button only registered as released after
+// stable release
 static void test_pwkrey_debounce_long_glith_rejection_release(void)
 {
     LOG_INFO("Testing long time glitch rejection during release");
@@ -295,6 +310,8 @@ static void test_pwkrey_debounce_long_glith_rejection_release(void)
     TEST_ASSERT_FALSE_MESSAGE(pwrkey_pressed(), "Button should be released after debounce time elapsed");
 }
 
+// Scenario: Press and release button quickly (less than long press threshold)
+// Expected: pwrkey_handle_short_press() returns true, flag cleared after read
 static void test_pwrkey_short_press_detection(void)
 {
     LOG_INFO("Testing short press detection");
@@ -326,6 +343,9 @@ static void test_pwrkey_short_press_detection(void)
     TEST_ASSERT_FALSE_MESSAGE(pwrkey_handle_short_press(), "Short press flag should be cleared after handling");
 }
 
+// Scenario: Hold button pressed for duration exceeding long press threshold
+// Expected: pwrkey_handle_long_press() returns true after threshold,
+// flag cleared after read
 static void test_pwrkey_long_press_detection(void)
 {
     LOG_INFO("Testing long press detection");
@@ -366,6 +386,8 @@ static void test_pwrkey_long_press_detection(void)
     TEST_ASSERT_FALSE_MESSAGE(pwrkey_handle_long_press(), "Long press flag should be cleared after handling");
 }
 
+// Scenario: Hold button for long press duration then release
+// Expected: Only long press detected, no short press generated
 static void test_pwrkey_long_press_no_short_press(void)
 {
     LOG_INFO("Testing that long press does not trigger short press");
@@ -392,6 +414,8 @@ static void test_pwrkey_long_press_no_short_press(void)
     TEST_ASSERT_FALSE_MESSAGE(pwrkey_handle_short_press(), "Short press should NOT be detected after long press");
 }
 
+// Scenario: Perform multiple short button presses in sequence
+// Expected: Each short press detected independently
 static void test_pwrkey_multiple_short_presses(void)
 {
     LOG_INFO("Testing multiple short presses");
@@ -415,6 +439,9 @@ static void test_pwrkey_multiple_short_presses(void)
     TEST_ASSERT_FALSE_MESSAGE(pwrkey_handle_short_press(), "No more short presses should be pending");
 }
 
+// Scenario: Perform multiple long button presses in sequence
+// Expected: Each long press detected once (not repeated while held),
+// no short press generated after release
 static void test_pwrkey_multiple_long_presses(void)
 {
     LOG_INFO("Testing multiple long presses");
@@ -456,6 +483,9 @@ static void test_pwrkey_multiple_long_presses(void)
     TEST_ASSERT_FALSE_MESSAGE(pwrkey_handle_long_press(), "No more long presses should be pending");
 }
 
+// Scenario: Button already pressed during boot (e.g., power-on by button)
+// Expected: No press events generated while button held from boot; events
+// generated normally after first release and re-press
 static void test_pwrkey_pressed_on_boot(void)
 {
     LOG_INFO("Testing button held pressed during boot (no events should be generated)");

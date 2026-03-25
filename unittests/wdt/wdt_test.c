@@ -23,6 +23,8 @@ void tearDown(void)
 {
 }
 
+// Scenario: Set watchdog timeout with normal values (10s, 120s)
+// Expected: Timeout values stored in regmap correctly
 static void test_wdt_set_timeout_normal(void)
 {
     LOG_INFO("Testing wdt_set_timeout with normal values");
@@ -44,6 +46,8 @@ static void test_wdt_set_timeout_normal(void)
     TEST_ASSERT_EQUAL_UINT16_MESSAGE(120, w.timeout, "Timeout should be set to 120 seconds");
 }
 
+// Scenario: Set watchdog timeout to 0
+// Expected: Timeout clamped to minimum value of 1 second
 static void test_wdt_set_timeout_zero(void)
 {
     LOG_INFO("Testing wdt_set_timeout with zero");
@@ -58,6 +62,8 @@ static void test_wdt_set_timeout_zero(void)
                                      "Timeout 0 should be clamped to 1 second");
 }
 
+// Scenario: Set watchdog timeout to maximum allowed value
+// Expected: Timeout set to WBEC_WATCHDOG_MAX_TIMEOUT_S without clamping
 static void test_wdt_set_timeout_max(void)
 {
     LOG_INFO("Testing wdt_set_timeout with max value");
@@ -72,6 +78,8 @@ static void test_wdt_set_timeout_max(void)
                                      "Timeout should be set to max value");
 }
 
+// Scenario: Set watchdog timeout above maximum allowed value
+// Expected: Timeout clamped to WBEC_WATCHDOG_MAX_TIMEOUT_S
 static void test_wdt_set_timeout_over_max(void)
 {
     LOG_INFO("Testing wdt_set_timeout with value over max");
@@ -86,6 +94,9 @@ static void test_wdt_set_timeout_over_max(void)
                                      "Timeout over max should be clamped to max value");
 }
 
+// Scenario: Start watchdog, wait less than timeout, reset it, then wait again
+// Expected: Watchdog does not timeout after first period due to reset;
+// times out after second period from reset point
 static void test_wdt_start_reset(void)
 {
     LOG_INFO("Testing wdt_start_reset");
@@ -121,6 +132,8 @@ static void test_wdt_start_reset(void)
                              "Watchdog should timeout after period from reset point");
 }
 
+// Scenario: Start watchdog with timeout, stop it, then wait past timeout
+// Expected: Stopped watchdog does not trigger timeout
 static void test_wdt_stop(void)
 {
     LOG_INFO("Testing wdt_stop");
@@ -142,6 +155,8 @@ static void test_wdt_stop(void)
                               "Stopped watchdog should not timeout");
 }
 
+// Scenario: Start watchdog and wait for timeout to be reached
+// Expected: No timeout just before period, timeout triggered after period
 static void test_wdt_timeout_triggers(void)
 {
     LOG_INFO("Testing watchdog timeout triggers");
@@ -168,6 +183,8 @@ static void test_wdt_timeout_triggers(void)
                              "Watchdog should timeout after timeout period");
 }
 
+// Scenario: Trigger watchdog timeout and call handler twice
+// Expected: First call returns true and clears flag, second call returns false
 static void test_wdt_handle_timed_out_clears_flag(void)
 {
     LOG_INFO("Testing wdt_handle_timed_out clears flag");
@@ -190,6 +207,9 @@ static void test_wdt_handle_timed_out_clears_flag(void)
                               "Second call should return false - flag must be cleared");
 }
 
+// Scenario: Trigger watchdog timeout twice in sequence
+// Expected: Watchdog auto-resets after first timeout and triggers timeout again
+// after another period
 static void test_wdt_timeout_auto_resets(void)
 {
     LOG_INFO("Testing watchdog auto-resets after timeout");
@@ -215,6 +235,9 @@ static void test_wdt_timeout_auto_resets(void)
                              "Second timeout should be triggered after auto-reset");
 }
 
+// Scenario: Change watchdog timeout via regmap from 10s to 5s
+// Expected: Timeout updated in regmap, watchdog reset, new timeout period
+// applies
 static void test_wdt_regmap_timeout_change(void)
 {
     LOG_INFO("Testing watchdog timeout change via regmap");
@@ -260,6 +283,9 @@ static void test_wdt_regmap_timeout_change(void)
                              "Watchdog should timeout after new timeout period");
 }
 
+// Scenario: After 8s elapsed with 10s timeout, reduce timeout to 5s via regmap
+// Expected: Watchdog auto-resets to prevent false trigger (8s > 5s but should
+// not trigger); new 5s timeout applies from reset point
 static void test_wdt_regmap_timeout_decrease_prevents_false_trigger(void)
 {
     LOG_INFO("Testing watchdog auto-reset when timeout decreased via regmap");
@@ -313,6 +339,9 @@ static void test_wdt_regmap_timeout_decrease_prevents_false_trigger(void)
                              "Watchdog should timeout after new timeout period from reset point");
 }
 
+// Scenario: Send watchdog reset command via regmap after 4s of 5s timeout
+// Expected: Reset flag cleared, watchdog timer resets, waits another 5s before
+// timeout
 static void test_wdt_regmap_reset_command(void)
 {
     LOG_INFO("Testing watchdog reset command via regmap");
@@ -358,6 +387,9 @@ static void test_wdt_regmap_reset_command(void)
                              "Watchdog should timeout after period from reset");
 }
 
+// Scenario: Change timeout from 10s to 3s AND set reset flag simultaneously
+// Expected: Both operations applied, timeout updated to 3s, reset flag cleared,
+// watchdog reset; new timeout period applies
 static void test_wdt_regmap_timeout_and_reset_simultaneous(void)
 {
     LOG_INFO("Testing simultaneous timeout change and reset flag via regmap");
@@ -409,6 +441,9 @@ static void test_wdt_regmap_timeout_and_reset_simultaneous(void)
                              "Watchdog should timeout after new timeout period");
 }
 
+// Scenario: Set timeout to 0 and over-max value via regmap
+// Expected: Zero timeout clamped to 1s, over-max timeout clamped to
+// WBEC_WATCHDOG_MAX_TIMEOUT_S
 static void test_wdt_regmap_timeout_bounds_via_regmap(void)
 {
     LOG_INFO("Testing watchdog timeout bounds via regmap");
@@ -444,6 +479,8 @@ static void test_wdt_regmap_timeout_bounds_via_regmap(void)
                                      "Over-max timeout from regmap should be clamped to max");
 }
 
+// Scenario: Call periodic work without marking regmap region as changed
+// Expected: Regmap values remain unchanged, reset flag stays 0
 static void test_wdt_regmap_no_change(void)
 {
     LOG_INFO("Testing watchdog when regmap has no changes");
@@ -472,6 +509,9 @@ static void test_wdt_regmap_no_change(void)
                                      "Reset flag should be 0");
 }
 
+// Scenario: Reset watchdog 5 times before timeout period elapses
+// Expected: Watchdog does not timeout when reset repeatedly; times out only
+// when not reset
 static void test_wdt_multiple_resets(void)
 {
     LOG_INFO("Testing multiple watchdog resets");
@@ -496,6 +536,9 @@ static void test_wdt_multiple_resets(void)
                              "Watchdog should timeout when not reset");
 }
 
+// Scenario: Set watchdog to maximum timeout and wait for it to trigger
+// Expected: Watchdog does not timeout just before max timeout period;
+// times out after max timeout period elapses
 static void test_wdt_long_timeout(void)
 {
     LOG_INFO("Testing watchdog with long timeout period");

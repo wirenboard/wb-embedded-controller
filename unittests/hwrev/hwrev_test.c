@@ -93,7 +93,8 @@ void tearDown(void)
 
 }
 
-
+// Scenario: Get hardware revision before initialization
+// Expected: hwrev_get() returns HWREV_UNKNOWN
 static void test_hwrev_get_default(void)
 {
     LOG_INFO("Testing hwrev_get default value");
@@ -103,7 +104,8 @@ static void test_hwrev_get_default(void)
     TEST_ASSERT_EQUAL_MESSAGE(HWREV_UNKNOWN, rev, "Before initialization, hwrev should be HWREV_UNKNOWN");
 }
 
-
+// Scenario: Initialize hwrev with ADC value matching current model on POWER_ON
+// Expected: hwrev_get() returns WBEC_HWREV (correct hardware detected)
 static void test_hwrev_init(void)
 {
     LOG_INFO("Testing hwrev init for current model");
@@ -117,7 +119,8 @@ static void test_hwrev_init(void)
     TEST_ASSERT_EQUAL_MESSAGE(WBEC_HWREV, rev, "After initialization, hwrev should match WBEC_HWREV");
 }
 
-
+// Scenario: Initialize hwrev with non-POWER_ON reason (e.g., RTC_ALARM)
+// Expected: hwrev check skipped, hwrev set to WBEC_HWREV, no error flag
 static void test_hwrev_init_non_poweron(void)
 {
     LOG_INFO("Testing hwrev init with non-POWER_ON reason (skip hwrev check)");
@@ -162,7 +165,9 @@ static void test_hwrev_init_non_poweron(void)
     TEST_ASSERT_EQUAL_UINT16_MESSAGE(WBEC_ID, hw_info_2.hwrev_ok, "hwrev_ok should be WBEC_ID when hwrev check is skipped");
 }
 
-
+// Scenario: Put hardware info to regmap when detected hwrev is correct
+// Expected: Regmap filled with correct WBEC_ID, hwrev code, fwrev, UID;
+// hwrev_error_flag=0, hwrev_ok=WBEC_ID
 static void test_hwrev_put_hw_info_to_regmap_correct(void)
 {
     LOG_INFO("Testing hwrev_put_hw_info_to_regmap for correct revision");
@@ -205,7 +210,9 @@ static void test_hwrev_put_hw_info_to_regmap_correct(void)
     TEST_ASSERT_EQUAL_UINT16_MESSAGE(WBEC_ID, hw_info_2.hwrev_ok, "hwrev_ok should be WBEC_ID for correct revision");
 }
 
-
+// Scenario: Put hardware info to regmap when detected hwrev mismatches firmware
+// Expected: Regmap filled with detected hwrev code, hwrev_error_flag=0b1010,
+// hwrev_ok=0; enters infinite loop with LED blinking; NVIC_SystemReset called
 static void test_hwrev_put_hw_info_to_regmap_incorrect(void)
 {
     LOG_INFO("Testing hwrev_put_hw_info_to_regmap for incorrect revision");
@@ -299,7 +306,9 @@ static void test_hwrev_put_hw_info_to_regmap_incorrect(void)
     TEST_ASSERT_EQUAL_UINT16_MESSAGE(0, hw_info_2.hwrev_ok, "hwrev_ok should be 0 for incorrect revision");
 }
 
-
+// Scenario: Initialize hwrev with ADC value not matching any known revision
+// Expected: hwrev remains HWREV_UNKNOWN, hwrev_error_flag=0b1010, hwrev_ok=0;
+// enters infinite loop with LED blinking; NVIC_SystemReset called
 static void test_hwrev_unknown_adc_value(void)
 {
     LOG_INFO("Testing hwrev with unknown ADC value");
@@ -391,7 +400,9 @@ static void test_hwrev_unknown_adc_value(void)
     TEST_ASSERT_EQUAL_UINT16_MESSAGE(0, hw_info_2.hwrev_ok, "hwrev_ok should be 0 for unknown revision");
 }
 
-// Test that NVIC_SystemReset is called when hwrev mismatch is detected
+// Scenario: Detect hwrev mismatch and verify NVIC_SystemReset is called
+// Expected: Initialization functions called, infinite loop entered,
+// NVIC_SystemReset invoked after 10 seconds
 static void test_hwrev_nvic_reset_on_mismatch(void)
 {
     LOG_INFO("Testing NVIC_SystemReset call on hwrev mismatch");
@@ -456,8 +467,8 @@ static void test_hwrev_nvic_reset_on_mismatch(void)
     }
 }
 
-
-// Test hwrev detection at ADC range boundaries
+// Scenario: Detect hwrev with ADC value at minimum boundary of valid range
+// Expected: hwrev correctly detected as WBEC_HWREV at adc_min boundary
 static void test_hwrev_adc_range_min_boundary(void)
 {
     LOG_INFO("Testing hwrev detection at adc_min boundary");
@@ -472,7 +483,8 @@ static void test_hwrev_adc_range_min_boundary(void)
     TEST_ASSERT_EQUAL_MESSAGE(WBEC_HWREV, rev, "hwrev should be detected at adc_min boundary");
 }
 
-
+// Scenario: Detect hwrev with ADC value at maximum boundary of valid range
+// Expected: hwrev correctly detected as WBEC_HWREV at adc_max boundary
 static void test_hwrev_adc_range_max_boundary(void)
 {
     LOG_INFO("Testing hwrev detection at adc_max boundary");
@@ -487,7 +499,8 @@ static void test_hwrev_adc_range_max_boundary(void)
     TEST_ASSERT_EQUAL_MESSAGE(WBEC_HWREV, rev, "hwrev should be detected at adc_max boundary");
 }
 
-
+// Scenario: Detect hwrev with ADC value below minimum valid range
+// Expected: hwrev remains HWREV_UNKNOWN, enters error loop
 static void test_hwrev_adc_range_below_min(void)
 {
     LOG_INFO("Testing hwrev detection below adc_min boundary");
@@ -526,7 +539,8 @@ static void test_hwrev_adc_range_below_min(void)
     TEST_ASSERT_EQUAL_MESSAGE(HWREV_UNKNOWN, rev, "hwrev should remain HWREV_UNKNOWN when ADC value is below adc_min");
 }
 
-
+// Scenario: Detect hwrev with ADC value above maximum valid range
+// Expected: hwrev remains HWREV_UNKNOWN, enters error loop
 static void test_hwrev_adc_range_above_max(void)
 {
     LOG_INFO("Testing hwrev detection above adc_max boundary");

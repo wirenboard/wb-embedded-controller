@@ -40,7 +40,8 @@ static const char* get_ntc_table_monotonicity_test_message(fix16_t temp, fix16_t
     return msg;
 }
 
-
+// Scenario: Verify NTC table has monotonic relationship (R decreases, T increases)
+// Expected: As resistance values decrease, temperature values increase monotonically
 static void test_ntc_table_monotonicity(void)
 {
     LOG_INFO("Testing NTC table monotonicity (resistance decreases with temperature)");
@@ -79,7 +80,9 @@ static void test_ntc_table_monotonicity(void)
     }
 }
 
-
+// Scenario: Convert resistance to temperature at boundary conditions
+// Expected: Very high R returns -55°C (min), very low/zero R returns 150°C (max),
+// first/last table entries match expected temperatures
 static void test_ntc_kohm_to_temp_boundary_conditions(void)
 {
     LOG_INFO("Testing ntc_kohm_to_temp boundary conditions");
@@ -114,7 +117,8 @@ static void test_ntc_kohm_to_temp_boundary_conditions(void)
                                      "At last table entry 0.312kΩ, temperature should be 150°C");
 }
 
-
+// Scenario: Convert 10kΩ resistance (nominal NTC value) to temperature
+// Expected: Temperature is approximately 25°C
 static void test_ntc_kohm_to_temp_25_degrees(void)
 {
     LOG_INFO("Testing ntc_kohm_to_temp at ~25°C (nominal resistance)");
@@ -131,7 +135,8 @@ static void test_ntc_kohm_to_temp_25_degrees(void)
                                      "At 10kΩ, temperature should be approximately 25°C");
 }
 
-
+// Scenario: Convert resistance between two table entries to temperature
+// Expected: Temperature interpolated between 25°C and 30°C
 static void test_ntc_kohm_to_temp_interpolation(void)
 {
     LOG_INFO("Testing ntc_kohm_to_temp interpolation between table values");
@@ -151,7 +156,8 @@ static void test_ntc_kohm_to_temp_interpolation(void)
                             "Interpolated temperature should be between 25°C and 30°C");
 }
 
-
+// Scenario: Convert resistance between two table entries at negative temperatures
+// Expected: Temperature interpolated between -10°C and -5°C
 static void test_ntc_kohm_to_temp_interpolation_negative(void)
 {
     LOG_INFO("Testing ntc_kohm_to_temp interpolation at negative temperatures");
@@ -171,7 +177,8 @@ static void test_ntc_kohm_to_temp_interpolation_negative(void)
                             "Interpolated temperature should be between -10°C and -5°C");
 }
 
-
+// Scenario: Convert resistance at cold temperature (0°C)
+// Expected: Temperature is approximately 0°C
 static void test_ntc_kohm_to_temp_cold(void)
 {
     LOG_INFO("Testing ntc_kohm_to_temp at cold temperatures");
@@ -186,7 +193,8 @@ static void test_ntc_kohm_to_temp_cold(void)
                                      "At 29.283kΩ, temperature should be approximately 0°C");
 }
 
-
+// Scenario: Convert resistance at high temperature (100°C)
+// Expected: Temperature is approximately 100°C
 static void test_ntc_kohm_to_temp_hot(void)
 {
     LOG_INFO("Testing ntc_kohm_to_temp at high temperatures");
@@ -201,7 +209,8 @@ static void test_ntc_kohm_to_temp_hot(void)
                                      "At 0.945kΩ, temperature should be approximately 100°C");
 }
 
-
+// Scenario: Convert mid-range ADC value to temperature (voltage divider with 33k)
+// Expected: ADC value 952 corresponds to approximately 25°C
 static void test_ntc_convert_adc_raw_to_temp_mid_range(void)
 {
     LOG_INFO("Testing ntc_convert_adc_raw_to_temp with mid-range ADC value");
@@ -221,7 +230,8 @@ static void test_ntc_convert_adc_raw_to_temp_mid_range(void)
                                      "ADC value 952 should correspond to approximately 25°C");
 }
 
-
+// Scenario: Convert ADC value corresponding to high NTC resistance (cold)
+// Expected: ADC value 1926 corresponds to approximately 0°C
 static void test_ntc_convert_adc_raw_to_temp_cold(void)
 {
     LOG_INFO("Testing ntc_convert_adc_raw_to_temp at cold temperature (high resistance)");
@@ -237,7 +247,8 @@ static void test_ntc_convert_adc_raw_to_temp_cold(void)
                                      "ADC value 1926 should correspond to approximately 0°C");
 }
 
-
+// Scenario: Convert ADC value corresponding to low NTC resistance (hot)
+// Expected: ADC value 114 corresponds to approximately 100°C
 static void test_ntc_convert_adc_raw_to_temp_hot(void)
 {
     LOG_INFO("Testing ntc_convert_adc_raw_to_temp at high temperature (low resistance)");
@@ -253,7 +264,8 @@ static void test_ntc_convert_adc_raw_to_temp_hot(void)
                                      "ADC value 114 should correspond to approximately 100°C");
 }
 
-
+// Scenario: Convert ADC value of 0 (short circuit)
+// Expected: Returns maximum temperature 150°C
 static void test_ntc_convert_adc_raw_to_temp_adc_zero(void)
 {
     LOG_INFO("Testing ntc_convert_adc_raw_to_temp with ADC = 0 (short circuit)");
@@ -267,7 +279,8 @@ static void test_ntc_convert_adc_raw_to_temp_adc_zero(void)
                                     "ADC = 0 should return maximum temperature 150°C");
 }
 
-
+// Scenario: Convert ADC value at maximum (open circuit)
+// Expected: Returns maximum temperature 150°C (handled as zero resistance)
 static void test_ntc_convert_adc_raw_to_temp_adc_max(void)
 {
     LOG_INFO("Testing ntc_convert_adc_raw_to_temp with ADC = MAX (open circuit)");
@@ -309,6 +322,8 @@ static const char* get_ntc_convert_adc_raw_to_temp_various_values_test_msg(
     return msg;
 }
 
+// Scenario: Convert various ADC values across the full range
+// Expected: All temperatures fall within expected ranges for their ADC values
 static void test_ntc_convert_adc_raw_to_temp_various_values(void)
 {
     LOG_INFO("Testing ntc_convert_adc_raw_to_temp with various ADC values");

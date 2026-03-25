@@ -79,7 +79,9 @@ void tearDown(void)
 
 }
 
-
+// Scenario: Initialize GPIO subsystem
+// Expected: V_OUT pin configured as output push-pull and set LOW,
+// all shared GPIOs in INPUT mode
 static void test_gpio_init(void)
 {
     LOG_INFO("Testing GPIO initialization");
@@ -109,7 +111,8 @@ static void test_gpio_init(void)
 #endif
 }
 
-
+// Scenario: Reset GPIO subsystem after initialization
+// Expected: All regmap regions initialized, MOD GPIOs set to INPUT mode
 static void test_gpio_reset(void)
 {
     LOG_INFO("Testing GPIO reset");
@@ -143,6 +146,8 @@ static void test_gpio_reset(void)
 
 
 #ifdef EC_MOD1_MOD2_GPIO_CONTROL
+// Scenario: Change MOD GPIO direction from INPUT to OUTPUT via regmap
+// Expected: GPIO mode changes to OUTPUT in shared GPIO
 static void test_gpio_direction_change_input_to_output(void)
 {
     LOG_INFO("Testing GPIO direction change from INPUT to OUTPUT");
@@ -163,7 +168,8 @@ static void test_gpio_direction_change_input_to_output(void)
     TEST_ASSERT_EQUAL_MESSAGE(MOD_GPIO_MODE_OUTPUT, mode, "MOD2_RX should be in OUTPUT mode");
 }
 
-
+// Scenario: Change MOD GPIO direction from OUTPUT back to INPUT via regmap
+// Expected: GPIO mode changes back to INPUT in shared GPIO
 static void test_gpio_direction_change_output_to_input(void)
 {
     LOG_INFO("Testing GPIO direction change from OUTPUT to INPUT");
@@ -189,7 +195,8 @@ static void test_gpio_direction_change_output_to_input(void)
     TEST_ASSERT_EQUAL_MESSAGE(MOD_GPIO_MODE_INPUT, mode, "MOD1_RTS should be in INPUT mode");
 }
 
-
+// Scenario: Set MOD GPIO as output and change its value via regmap
+// Expected: Output value changes from HIGH to LOW correctly
 static void test_gpio_set_output_value(void)
 {
     LOG_INFO("Testing GPIO output value setting");
@@ -226,7 +233,8 @@ static void test_gpio_set_output_value(void)
     TEST_ASSERT_FALSE_MESSAGE(value, "MOD2_TX output should be LOW");
 }
 
-
+// Scenario: Read MOD GPIO input value and reflect it in regmap
+// Expected: Input state (HIGH/LOW) correctly reported in GPIO_CTRL register
 static void test_gpio_read_input_value(void)
 {
     LOG_INFO("Testing GPIO input value reading");
@@ -255,7 +263,8 @@ static void test_gpio_read_input_value(void)
     TEST_ASSERT_FALSE_MESSAGE(gpio_ctrl.gpio_ctrl & BIT(EC_EXT_GPIO_MOD1_RX), "MOD1_RX input should be LOW");
 }
 
-
+// Scenario: Set MOD GPIO to UART alternate function via regmap
+// Expected: GPIO mode changes to AF_UART in shared GPIO
 static void test_gpio_af_mode_uart(void)
 {
     LOG_INFO("Testing GPIO AF mode - UART");
@@ -275,7 +284,8 @@ static void test_gpio_af_mode_uart(void)
     TEST_ASSERT_EQUAL_MESSAGE(MOD_GPIO_MODE_AF_UART, mode, "MOD1_TX should be in UART AF mode");
 }
 
-
+// Scenario: Try to change direction of GPIO that is in UART AF mode
+// Expected: GPIO remains in AF_UART mode, direction change is ignored
 static void test_gpio_af_mode_prevents_direction_change(void)
 {
     LOG_INFO("Testing that AF mode prevents direction change");
@@ -302,7 +312,8 @@ static void test_gpio_af_mode_prevents_direction_change(void)
     TEST_ASSERT_EQUAL_MESSAGE(MOD_GPIO_MODE_AF_UART, mode, "MOD2_RX should remain in UART AF mode");
 }
 
-
+// Scenario: Set GPIO output value in regmap, then change pin direction to output
+// Expected: Output value applied when pin becomes output
 static void test_gpio_output_value_preserved_on_direction_change(void)
 {
     LOG_INFO("Testing that output value is preserved when changing direction");
@@ -329,7 +340,8 @@ static void test_gpio_output_value_preserved_on_direction_change(void)
     TEST_ASSERT_TRUE_MESSAGE(value, "MOD2_RTS output should be HIGH after direction change");
 }
 
-
+// Scenario: Change GPIO from input to output without setting gpio_ctrl
+// Expected: Current input value preserved as initial output value
 static void test_gpio_output_value_preserved_without_request(void)
 {
     LOG_INFO("Testing that output value is preserved without prior request");
@@ -354,7 +366,8 @@ static void test_gpio_output_value_preserved_without_request(void)
     TEST_ASSERT_TRUE_MESSAGE(value, "MOD1_TX output should preserve input HIGH value");
 }
 
-
+// Scenario: Set GPIO to UART AF mode and try to change direction
+// Expected: gpio_ctrl bit cleared for AF mode pin
 static void test_gpio_af_mode_clears_ctrl_bit(void)
 {
     LOG_INFO("Testing that AF mode clears gpio_ctrl bit when direction changes");
@@ -392,7 +405,8 @@ static void test_gpio_af_mode_clears_ctrl_bit(void)
     TEST_ASSERT_FALSE_MESSAGE(gpio_ctrl.gpio_ctrl & BIT(EC_EXT_GPIO_MOD1_RX), "MOD1_RX bit should be cleared in AF mode");
 }
 
-
+// Scenario: Attempt to change V_OUT pin direction to input via regmap
+// Expected: V_OUT always remains as output in regmap
 static void test_gpio_dir_preserves_v_out_as_output(void)
 {
     LOG_INFO("Testing that V_OUT always remains as output");
@@ -413,7 +427,8 @@ static void test_gpio_dir_preserves_v_out_as_output(void)
     TEST_ASSERT_TRUE_MESSAGE(gpio_dir.gpio_dir & BIT(EC_EXT_GPIO_V_OUT), "V_OUT should always be output");
 }
 
-
+// Scenario: Set GPIO to GPIO mode (not AF) and toggle direction
+// Expected: GPIO mode switches between OUTPUT and INPUT
 static void test_gpio_af_switches_mode_based_on_direction(void)
 {
     LOG_INFO("Testing AF mode switches between INPUT/OUTPUT based on direction");
@@ -448,7 +463,8 @@ static void test_gpio_af_switches_mode_based_on_direction(void)
     TEST_ASSERT_EQUAL_MESSAGE(MOD_GPIO_MODE_INPUT, mode, "MOD2_TX should be INPUT");
 }
 
-
+// Scenario: Change output value of one GPIO while leaving another unchanged
+// Expected: Only the modified GPIO value changes, others remain as set
 static void test_gpio_values_only_set_for_changed_pins(void)
 {
     LOG_INFO("Testing that GPIO values are only set for changed pins");
@@ -485,7 +501,8 @@ static void test_gpio_values_only_set_for_changed_pins(void)
     TEST_ASSERT_FALSE_MESSAGE(value, "MOD2_RX should be LOW");
 }
 
-
+// Scenario: Read GPIO states when some pins are outputs and some are inputs
+// Expected: Only INPUT pins are read, OUTPUT pins report their set value
 static void test_gpio_collect_only_reads_inputs(void)
 {
     LOG_INFO("Testing that collect_gpio_states only reads INPUT pins");
@@ -525,7 +542,8 @@ static void test_gpio_collect_only_reads_inputs(void)
     TEST_ASSERT_TRUE_MESSAGE(gpio_ctrl.gpio_ctrl & BIT(EC_EXT_GPIO_MOD1_TX), "MOD1_TX should keep output value HIGH");
 }
 
-
+// Scenario: Read GPIO states when one pin is in AF mode
+// Expected: AF mode pin's gpio_ctrl bit is cleared, not read from input
 static void test_gpio_collect_ignores_af_pins(void)
 {
     LOG_INFO("Testing that collect_gpio_states ignores AF mode pins");
@@ -560,7 +578,8 @@ static void test_gpio_collect_ignores_af_pins(void)
     TEST_ASSERT_FALSE_MESSAGE(gpio_ctrl.gpio_ctrl & BIT(EC_EXT_GPIO_MOD1_RX), "MOD1_RX should be cleared in AF mode");
 }
 
-
+// Scenario: Set AF register to reserved values (2 or 3)
+// Expected: Reserved AF values are ignored, GPIO mode remains unchanged
 static void test_gpio_af_ignores_reserved_values(void)
 {
     LOG_INFO("Testing that undefined AF values (2, 3) are ignored");
@@ -602,7 +621,8 @@ static void test_gpio_af_ignores_reserved_values(void)
 }
 #endif
 
-
+// Scenario: Set V_OUT ON in regmap with V_OUT voltage monitor OK
+// Expected: V_OUT GPIO is HIGH (enabled)
 static void test_v_out_control_enabled_when_power_ok(void)
 {
     LOG_INFO("Testing V_OUT control - enabled when power OK");
@@ -626,7 +646,8 @@ static void test_v_out_control_enabled_when_power_ok(void)
     TEST_ASSERT_EQUAL_UINT32_MESSAGE(1, state, "V_OUT GPIO should be HIGH when power is OK");
 }
 
-
+// Scenario: Set V_OUT ON in regmap but V_OUT voltage monitor is NOT OK
+// Expected: V_OUT GPIO is LOW (disabled for safety)
 static void test_v_out_control_disabled_when_power_not_ok(void)
 {
     LOG_INFO("Testing V_OUT control - disabled when power not OK");
@@ -650,7 +671,8 @@ static void test_v_out_control_disabled_when_power_not_ok(void)
     TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, state, "V_OUT GPIO should be LOW when power is not OK");
 }
 
-
+// Scenario: Set V_OUT OFF in regmap even though voltage monitor is OK
+// Expected: V_OUT GPIO is LOW (respects user control)
 static void test_v_out_control_disabled_when_ctrl_off(void)
 {
     LOG_INFO("Testing V_OUT control - disabled when CTRL is OFF");
@@ -674,7 +696,8 @@ static void test_v_out_control_disabled_when_ctrl_off(void)
     TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, state, "V_OUT GPIO should be LOW when CTRL is OFF");
 }
 
-
+// Scenario: Test all combinations of V_OUT control and power status
+// Expected: V_OUT ON only when both ctrl_on=true AND power_ok=true
 static void test_v_out_control_requires_both_conditions(void)
 {
     LOG_INFO("Testing V_OUT control - requires both power OK and CTRL ON");
@@ -712,6 +735,8 @@ static void test_v_out_control_requires_both_conditions(void)
 
 
 #ifdef EC_MOD1_MOD2_GPIO_CONTROL
+// Scenario: Configure multiple GPIOs with different modes and values
+// Expected: Each GPIO operates independently with correct mode and value
 static void test_multiple_gpios_independent(void)
 {
     LOG_INFO("Testing multiple GPIOs independence");

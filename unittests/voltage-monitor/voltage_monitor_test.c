@@ -20,7 +20,9 @@ void tearDown(void)
 
 }
 
-
+// Scenario: Initialize voltage monitor subsystem
+// Expected: Not ready before init, not ready until start delay elapses,
+// ready after delay
 static void test_vmon_init(void)
 {
     LOG_INFO("Testing initialization");
@@ -39,7 +41,8 @@ static void test_vmon_init(void)
     TEST_ASSERT_TRUE_MESSAGE(vmon_ready(), "voltage-monitor should be ready when VOLTAGE_MONITOR_START_DELAY_MS elapsed after vmon_init() call");
 }
 
-
+// Scenario: Check voltage with values at normal, low, and high ranges
+// Expected: Returns true for normal voltage, false for out-of-bounds voltages
 static void test_vmon_check_voltage_bounds(void)
 {
     LOG_INFO("Testing voltage bounds checker");
@@ -73,7 +76,9 @@ static void test_vmon_check_voltage_bounds(void)
     TEST_ASSERT_FALSE_MESSAGE(status, "vmon_get_ch_status() should return false when voltage is above than FAIL max");
 }
 
-
+// Scenario: Voltage rises from OK through hysteresis area to above FAIL max
+// Expected: Status remains OK in hysteresis area (between OK max and FAIL max),
+// changes to FAIL when above FAIL max
 static void test_vmon_hysteresis_ok_to_fail_max(void)
 {
     LOG_INFO("Testing hysteresis: OK -> FAIL max");
@@ -100,6 +105,9 @@ static void test_vmon_hysteresis_ok_to_fail_max(void)
     TEST_ASSERT_FALSE_MESSAGE(status, "vmon_get_ch_status() should return false when voltage is above than FAIL max");
 }
 
+// Scenario: Voltage drops from OK through hysteresis area to below FAIL min
+// Expected: Status remains OK in hysteresis area (between FAIL min and OK min),
+// changes to FAIL when below FAIL min
 static void test_vmon_hysteresis_ok_to_fail_min(void)
 {
     LOG_INFO("Testing hysteresis: OK -> FAIL min");
@@ -126,6 +134,9 @@ static void test_vmon_hysteresis_ok_to_fail_min(void)
     TEST_ASSERT_FALSE_MESSAGE(status, "vmon_get_ch_status() should return false when voltage is below than FAIL min");
 }
 
+// Scenario: Voltage rises from below FAIL min through hysteresis area to OK
+// Expected: Status remains FAIL in hysteresis area, changes to OK when above
+// OK min
 static void test_vmon_hysteresis_fail_min_to_ok(void)
 {
     LOG_INFO("Testing hysteresis: FAIL min -> OK");
@@ -152,6 +163,9 @@ static void test_vmon_hysteresis_fail_min_to_ok(void)
     TEST_ASSERT_TRUE_MESSAGE(status, "vmon_get_ch_status() should return true when voltage is OK");
 }
 
+// Scenario: Voltage drops from above FAIL max through hysteresis area to OK
+// Expected: Status remains FAIL in hysteresis area, changes to OK when below
+// OK max
 static void test_vmon_hysteresis_fail_max_to_ok(void)
 {
     LOG_INFO("Testing hysteresis: FAIL max -> OK");
@@ -178,7 +192,8 @@ static void test_vmon_hysteresis_fail_max_to_ok(void)
     TEST_ASSERT_TRUE_MESSAGE(status, "vmon_get_ch_status() should return true when voltage is OK");
 }
 
-
+// Scenario: Run periodic work after start delay with all voltages correct
+// Expected: Module becomes ready, all channels report OK status
 static void test_vmon_do_periodic_work_after_delay(void)
 {
     LOG_INFO("Testing periodic work after start delay");
@@ -206,7 +221,9 @@ static void test_vmon_do_periodic_work_after_delay(void)
     TEST_ASSERT_TRUE_MESSAGE(status, "V50 should be OK");
 }
 
-
+// Scenario: Run periodic work with one channel out of limits
+// Expected: Failed channel reports FAIL, other channels report independent
+// status (OK)
 static void test_vmon_do_periodic_work_checks_all_channels(void)
 {
     LOG_INFO("Testing periodic work checks all channels");
@@ -231,7 +248,9 @@ static void test_vmon_do_periodic_work_checks_all_channels(void)
     TEST_ASSERT_TRUE_MESSAGE(status, "V50 should be OK");
 }
 
-
+// Scenario: Set different voltage levels on different channels
+// Expected: Each channel reports independent status (OK/FAIL) based on its
+// voltage level
 static void test_vmon_multiple_channels_independent(void)
 {
     LOG_INFO("Testing multiple channels independence");
