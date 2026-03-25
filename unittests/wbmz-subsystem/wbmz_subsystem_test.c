@@ -22,6 +22,13 @@
 #define TEST_NOMINAL_VOLTAGE_MV \
     ((WBEC_WBMZ6_SUPERCAP_VOLTAGE_MIN_MV + WBEC_WBMZ6_SUPERCAP_VOLTAGE_MAX_MV) / 2)
 
+// Вычисление полной проектной емкости суперконденсатора в mAh
+// Формула: Energy (uWh) = Capacity_mF * Voltage_mV^2 / 1000 / 2 / 3600
+// Результат в mAh = Energy_uWh / 1000
+#define TEST_SUPERCAP_FULL_DESIGN_CAPACITY_MAH \
+    ((WBEC_WBMZ6_SUPERCAP_CAPACITY_MF * \
+      (WBEC_WBMZ6_SUPERCAP_VOLTAGE_MAX_MV * WBEC_WBMZ6_SUPERCAP_VOLTAGE_MAX_MV / 1000) / 2 / 3600) / 1000)
+
 // Функция для сброса внутреннего состояния wbmz-subsystem
 void utest_wbmz_subsystem_reset_state(void);
 #endif
@@ -53,57 +60,11 @@ void tearDown(void)
 #if defined(WBEC_WBMZ6_SUPPORT)
 
 // ============================================================================
-// Тесты wbmz6-supercap: Определение наличия
-// ============================================================================
-
-// Сценарий: ADC возвращает напряжение выше порога обнаружения
-// Ожидается: Subsystem обнаруживает supercap через regmap
-static void test_supercap_is_present_when_voltage_above_threshold(void)
-{
-    LOG_INFO("Testing supercap detection: voltage above threshold");
-
-    utest_systick_set_time_ms(WBEC_WBMZ6_POLL_PERIOD_MS);
-    utest_wbmz6_battery_set_present(false);
-    utest_adc_set_ch_mv(ADC_CHANNEL_ADC_VBAT, WBEC_WBMZ6_SUPERCAP_DETECT_VOLTAGE_MV + 1);
-
-    wbmz_subsystem_do_periodic_work();
-
-    struct REGMAP_PWR_STATUS pwr_status = {};
-    utest_regmap_get_region_data(REGMAP_REGION_PWR_STATUS, &pwr_status, sizeof(pwr_status));
-
-    TEST_ASSERT_EQUAL_UINT8_MESSAGE(
-        1, pwr_status.wbmz_supercap_present,
-        "Supercap should be detected when voltage is above threshold"
-    );
-}
-
-// Сценарий: ADC возвращает напряжение ниже порога обнаружения
-// Ожидается: Subsystem не обнаруживает supercap через regmap
-static void test_supercap_not_present_when_voltage_below_threshold(void)
-{
-    LOG_INFO("Testing supercap detection: voltage below threshold");
-
-    utest_systick_set_time_ms(WBEC_WBMZ6_POLL_PERIOD_MS);
-    utest_wbmz6_battery_set_present(false);
-    utest_adc_set_ch_mv(ADC_CHANNEL_ADC_VBAT, WBEC_WBMZ6_SUPERCAP_DETECT_VOLTAGE_MV - 1);
-
-    wbmz_subsystem_do_periodic_work();
-
-    struct REGMAP_PWR_STATUS pwr_status = {};
-    utest_regmap_get_region_data(REGMAP_REGION_PWR_STATUS, &pwr_status, sizeof(pwr_status));
-
-    TEST_ASSERT_EQUAL_UINT8_MESSAGE(
-        0, pwr_status.wbmz_supercap_present,
-        "Supercap should NOT be detected when voltage is below threshold"
-    );
-}
-
-// ============================================================================
 // Тесты wbmz6-supercap: Инициализация
 // ============================================================================
 
 // Сценарий: Subsystem инициализирует supercap
-// Ожидается: Параметры корректно записаны в regmap
+// Ожидается: Параметры и текущий статус корректно записаны в regmap
 static void test_supercap_init_sets_correct_params(void)
 {
     LOG_INFO("Testing supercap initialization");
@@ -115,11 +76,20 @@ static void test_supercap_init_sets_correct_params(void)
     wbmz_subsystem_do_periodic_work();
 
     struct REGMAP_PWR_STATUS pwr_status = {};
-    utest_regmap_get_region_data(REGMAP_REGION_PWR_STATUS, &pwr_status, sizeof(pwr_status));
+    bool result = utest_regmap_get_region_data(
+        REGMAP_REGION_PWR_STATUS,
+        &pwr_status,
+        sizeof(pwr_status)
+    );
 
-    TEST_ASSERT_GREATER_THAN_UINT16_MESSAGE(
-        0, pwr_status.wbmz_full_design_capacity,
-        "Design capacity should be set"
+    TEST_ASSERT_TRUE_MESSAGE(result, "Should read regmap data");
+    TEST_ASSERT_EQUAL_UINT16_MESSAGE(
+        TEST_NOMINAL_VOLTAGE_MV, pwr_status.wbmz_battery_voltage,
+        "Current voltage should be written to regmap"
+    );
+    TEST_ASSERT_EQUAL_UINT16_MESSAGE(
+        TEST_SUPERCAP_FULL_DESIGN_CAPACITY_MAH, pwr_status.wbmz_full_design_capacity,
+        "Supercap design capacity should match calculated value"
     );
     TEST_ASSERT_EQUAL_UINT16_MESSAGE(
         WBEC_WBMZ6_SUPERCAP_VOLTAGE_MIN_MV, pwr_status.wbmz_voltage_min_design,
@@ -129,9 +99,9 @@ static void test_supercap_init_sets_correct_params(void)
         WBEC_WBMZ6_SUPERCAP_VOLTAGE_MAX_MV, pwr_status.wbmz_voltage_max_design,
         "Max voltage should match config"
     );
-    TEST_ASSERT_GREATER_THAN_UINT16_MESSAGE(
-        0, pwr_status.wbmz_constant_charge_current,
-        "Charge current should be set"
+    TEST_ASSERT_EQUAL_UINT16_MESSAGE(
+        WBEC_WBMZ6_SUPERCAP_CHARGE_CURRENT_MA, pwr_status.wbmz_constant_charge_current,
+        "Supercap charge current should match config"
     );
 }
 
@@ -170,6 +140,10 @@ static void test_supercap_status_at_max_voltage(void)
         1, pwr_status.wbmz_is_inserted,
         "Supercap should always report as inserted"
     );
+    TEST_ASSERT_EQUAL_INT16_MESSAGE(
+        0, pwr_status.wbmz_temperature,
+        "Supercap has no temperature sensor, should be 0"
+    );
 }
 
 // Сценарий: Напряжение на минимуме
@@ -201,7 +175,7 @@ static void test_supercap_dead_when_voltage_below_min(void)
 
     utest_systick_set_time_ms(WBEC_WBMZ6_POLL_PERIOD_MS);
     utest_wbmz6_battery_set_present(false);
-    utest_adc_set_ch_mv(ADC_CHANNEL_ADC_VBAT, WBEC_WBMZ6_SUPERCAP_VOLTAGE_MIN_MV - 100);
+    utest_adc_set_ch_mv(ADC_CHANNEL_ADC_VBAT, WBEC_WBMZ6_SUPERCAP_VOLTAGE_MIN_MV - 1);
 
     wbmz_subsystem_do_periodic_work();
 
@@ -222,7 +196,7 @@ static void test_supercap_capacity_capped_when_voltage_above_max(void)
 
     utest_systick_set_time_ms(WBEC_WBMZ6_POLL_PERIOD_MS);
     utest_wbmz6_battery_set_present(false);
-    utest_adc_set_ch_mv(ADC_CHANNEL_ADC_VBAT, WBEC_WBMZ6_SUPERCAP_VOLTAGE_MAX_MV + 100);
+    utest_adc_set_ch_mv(ADC_CHANNEL_ADC_VBAT, WBEC_WBMZ6_SUPERCAP_VOLTAGE_MAX_MV + 1);
 
     wbmz_subsystem_do_periodic_work();
 
@@ -416,20 +390,33 @@ static void test_supercap_current_at_threshold_boundary(void)
 
     utest_systick_set_time_ms(WBEC_WBMZ6_POLL_PERIOD_MS);
     utest_wbmz6_battery_set_present(false);
-    utest_adc_set_ch_mv(ADC_CHANNEL_ADC_VBAT, TEST_NOMINAL_VOLTAGE_MV);
+    uint16_t voltage = TEST_NOMINAL_VOLTAGE_MV;
+    utest_adc_set_ch_mv(ADC_CHANNEL_ADC_VBAT, voltage);
 
     // Первый вызов для инициализации
     wbmz_subsystem_do_periodic_work();
 
-    // Продвинуть время для следующего опроса
-    utest_systick_advance_time_ms(WBEC_WBMZ6_POLL_PERIOD_MS);
+    // Вычисление минимального dV для тока чуть выше порога обнуления
+    // i = C × dV/dt => dV = i × dt / C
+    const uint16_t target_current_ma = WBEC_WBMZ6_SUPERCAP_CURRENT_ZEROING_MA + 1; // 81 mA
+    uint16_t dv_mv = (target_current_ma * WBEC_WBMZ6_POLL_PERIOD_MS +
+                      WBEC_WBMZ6_SUPERCAP_CAPACITY_MF / 2) /
+                      WBEC_WBMZ6_SUPERCAP_CAPACITY_MF;
 
-    // Изменение напряжения для получения тока чуть выше порога (81 mA)
-    // i = C * dV/dt = 25 F * (dV mV) / (poll_period ms)
-    // 81 mA = 25000 mF * dV / 2000 ms => dV ≈ 6.5 mV
-    utest_adc_set_ch_mv(ADC_CHANNEL_ADC_VBAT, TEST_NOMINAL_VOLTAGE_MV + 7);
-    wbmz_subsystem_do_periodic_work();
+    // Убедимся, что dV не меньше 1 mV (практическое ограничение разрешения)
+    if (dv_mv < 1) {
+        dv_mv = 1;
+    }
 
+    // Повторяем 100 раз для схождения lowpass фильтра к установившемуся значению
+    for (int i = 0; i < 100; i++) {
+        utest_systick_advance_time_ms(WBEC_WBMZ6_POLL_PERIOD_MS);
+        voltage += dv_mv;
+        utest_adc_set_ch_mv(ADC_CHANNEL_ADC_VBAT, voltage);
+        wbmz_subsystem_do_periodic_work();
+    }
+
+    // После схождения фильтра проверяем, что ток не обнулился
     struct REGMAP_PWR_STATUS pwr_status = {};
     utest_regmap_get_region_data(REGMAP_REGION_PWR_STATUS, &pwr_status, sizeof(pwr_status));
 
@@ -541,11 +528,106 @@ static void test_supercap_current_direction_changes(void)
     );
 }
 
+// Сценарий: Проверка расчета тока по формуле i = C × dV/dt после схождения фильтра
+// Ожидается: Установившийся ток соответствует физической формуле (независимо от фильтра)
+static void test_supercap_current_formula_after_filter_convergence(void)
+{
+    LOG_INFO("Testing supercap current calculation formula after filter convergence");
+
+    utest_systick_set_time_ms(WBEC_WBMZ6_POLL_PERIOD_MS);
+    utest_wbmz6_battery_set_present(false);
+    uint16_t voltage = TEST_NOMINAL_VOLTAGE_MV;
+    utest_adc_set_ch_mv(ADC_CHANNEL_ADC_VBAT, voltage);
+
+    // Первый вызов для инициализации
+    wbmz_subsystem_do_periodic_work();
+
+    // Постоянное изменение напряжения на dV = 10 mV за каждый период опроса
+    const uint16_t dv_mv = 10;
+
+    // Повторяем 100 раз, чтобы фильтр гарантированно сошелся к установившемуся значению
+    for (int i = 0; i < 100; i++) {
+        utest_systick_advance_time_ms(WBEC_WBMZ6_POLL_PERIOD_MS);
+        voltage += dv_mv;
+        utest_adc_set_ch_mv(ADC_CHANNEL_ADC_VBAT, voltage);
+        wbmz_subsystem_do_periodic_work();
+    }
+
+    // После схождения фильтра проверяем установившийся ток
+    struct REGMAP_PWR_STATUS pwr_status = {};
+    utest_regmap_get_region_data(REGMAP_REGION_PWR_STATUS, &pwr_status, sizeof(pwr_status));
+
+    // Расчет ожидаемого тока по формуле: i = C × dV/dt
+    // i [mA] = C [mF] × dV [mV] / dt [ms]
+    const uint32_t expected_current_ma =
+        ((uint32_t)WBEC_WBMZ6_SUPERCAP_CAPACITY_MF * dv_mv) / WBEC_WBMZ6_POLL_PERIOD_MS;
+
+    TEST_ASSERT_EQUAL_UINT8_MESSAGE(
+        1, pwr_status.wbmz_is_charging,
+        "Should be charging with positive dV"
+    );
+    TEST_ASSERT_UINT16_WITHIN_MESSAGE(
+        expected_current_ma / 20, expected_current_ma, pwr_status.wbmz_charging_current,
+        "Charging current should match i = C × dV/dt formula within 5%"
+    );
+    TEST_ASSERT_EQUAL_UINT16_MESSAGE(
+        0, pwr_status.wbmz_discharging_current,
+        "Discharging current should be 0 during charging"
+    );
+}
+
+// Сценарий: Проверка расчета тока разрядки по формуле после схождения фильтра
+// Ожидается: Ток разрядки соответствует формуле при отрицательном dV
+static void test_supercap_discharging_current_formula_after_convergence(void)
+{
+    LOG_INFO("Testing supercap discharging current formula after filter convergence");
+
+    utest_systick_set_time_ms(WBEC_WBMZ6_POLL_PERIOD_MS);
+    utest_wbmz6_battery_set_present(false);
+    uint16_t voltage = WBEC_WBMZ6_SUPERCAP_VOLTAGE_MAX_MV - 100; // Начинаем с высокого напряжения
+    utest_adc_set_ch_mv(ADC_CHANNEL_ADC_VBAT, voltage);
+
+    // Первый вызов для инициализации
+    wbmz_subsystem_do_periodic_work();
+
+    // Постоянное падение напряжения на dV = 5 mV за каждый период
+    const uint16_t dv_mv = 5;
+
+    // Повторяем 100 раз для схождения фильтра
+    for (int i = 0; i < 100; i++) {
+        utest_systick_advance_time_ms(WBEC_WBMZ6_POLL_PERIOD_MS);
+        voltage -= dv_mv;
+        utest_adc_set_ch_mv(ADC_CHANNEL_ADC_VBAT, voltage);
+        wbmz_subsystem_do_periodic_work();
+    }
+
+    // Проверяем установившийся ток разрядки
+    struct REGMAP_PWR_STATUS pwr_status = {};
+    utest_regmap_get_region_data(REGMAP_REGION_PWR_STATUS, &pwr_status, sizeof(pwr_status));
+
+    // Расчет ожидаемого тока разрядки: i = C × |dV|/dt
+    const uint32_t expected_current_ma =
+        ((uint32_t)WBEC_WBMZ6_SUPERCAP_CAPACITY_MF * dv_mv) / WBEC_WBMZ6_POLL_PERIOD_MS;
+
+    TEST_ASSERT_EQUAL_UINT8_MESSAGE(
+        0, pwr_status.wbmz_is_charging,
+        "Should NOT be charging with negative dV"
+    );
+    TEST_ASSERT_EQUAL_UINT16_MESSAGE(
+        0, pwr_status.wbmz_charging_current,
+        "Charging current should be 0 during discharging"
+    );
+    TEST_ASSERT_UINT16_WITHIN_MESSAGE(
+        expected_current_ma / 20, expected_current_ma, pwr_status.wbmz_discharging_current,
+        "Discharging current should match i = C × dV/dt formula within 5%"
+    );
+}
+
 // ============================================================================
 // Тесты wbmz-subsystem: Определение устройства
 // ============================================================================
 
-// Сценарий: Только суперконденсатор присутствует
+// Сценарий: Только суперконденсатор присутствует (напряжение выше порога)
 // Ожидается: Обнаружен supercap, флаг в regmap установлен
 static void test_subsystem_detects_supercap_only(void)
 {
@@ -554,7 +636,7 @@ static void test_subsystem_detects_supercap_only(void)
     utest_systick_set_time_ms(WBEC_WBMZ6_POLL_PERIOD_MS);
     // Батарея отсутствует, суперконденсатор присутствует
     utest_wbmz6_battery_set_present(false);
-    utest_adc_set_ch_mv(ADC_CHANNEL_ADC_VBAT, WBEC_WBMZ6_SUPERCAP_DETECT_VOLTAGE_MV + 1000);
+    utest_adc_set_ch_mv(ADC_CHANNEL_ADC_VBAT, WBEC_WBMZ6_SUPERCAP_DETECT_VOLTAGE_MV + 1);
 
     wbmz_subsystem_do_periodic_work();
 
@@ -576,7 +658,7 @@ static void test_subsystem_detects_supercap_only(void)
     );
 }
 
-// Сценарий: Ни батарея, ни суперконденсатор не обнаружены
+// Сценарий: Ни батарея, ни суперконденсатор не обнаружены (напряжение ниже порога)
 // Ожидается: Оба флага сброшены в regmap
 static void test_subsystem_no_device_detected(void)
 {
@@ -584,7 +666,7 @@ static void test_subsystem_no_device_detected(void)
 
     utest_systick_set_time_ms(WBEC_WBMZ6_POLL_PERIOD_MS);
     utest_wbmz6_battery_set_present(false);
-    utest_adc_set_ch_mv(ADC_CHANNEL_ADC_VBAT, 0);
+    utest_adc_set_ch_mv(ADC_CHANNEL_ADC_VBAT, WBEC_WBMZ6_SUPERCAP_DETECT_VOLTAGE_MV - 1);
 
     wbmz_subsystem_do_periodic_work();
 
@@ -616,7 +698,7 @@ static void test_subsystem_battery_has_priority_over_supercap(void)
     // Оба устройства присутствуют
     utest_wbmz6_battery_set_present(true);
     utest_wbmz6_battery_set_init_result(true);
-    utest_adc_set_ch_mv(ADC_CHANNEL_ADC_VBAT, WBEC_WBMZ6_SUPERCAP_DETECT_VOLTAGE_MV + 1000);
+    utest_adc_set_ch_mv(ADC_CHANNEL_ADC_VBAT, WBEC_WBMZ6_SUPERCAP_DETECT_VOLTAGE_MV + 1);
 
     wbmz_subsystem_do_periodic_work();
 
@@ -677,79 +759,273 @@ static void test_subsystem_respects_poll_period(void)
     );
 }
 
-// Сценарий: Вызов после истечения периода
-// Ожидается: Опрос выполняется, изменения обнаружены
-static void test_subsystem_polls_after_period_elapsed(void)
+// ============================================================================
+// Тесты wbmz-subsystem: Device Switching (переходы между устройствами)
+// ============================================================================
+
+// Сценарий: Supercap обнаружен, затем напряжение падает ниже порога
+// Ожидается: Device переходит из SUPERCAP в NONE, флаги в regmap сброшены
+static void test_device_switching_supercap_to_none(void)
 {
-    LOG_INFO("Testing subsystem polls after period");
+    LOG_INFO("Testing device switching: supercap -> none");
 
     utest_systick_set_time_ms(WBEC_WBMZ6_POLL_PERIOD_MS);
     utest_wbmz6_battery_set_present(false);
     utest_adc_set_ch_mv(ADC_CHANNEL_ADC_VBAT, WBEC_WBMZ6_SUPERCAP_DETECT_VOLTAGE_MV + 1);
 
-    // Первый вызов
+    // Первый опрос: supercap обнаружен
     wbmz_subsystem_do_periodic_work();
 
-    // Продвинуть время
-    utest_systick_advance_time_ms(WBEC_WBMZ6_POLL_PERIOD_MS);
-
-    // Удалить суперконденсатор
-    utest_adc_set_ch_mv(ADC_CHANNEL_ADC_VBAT, 0);
-    wbmz_subsystem_do_periodic_work();
-
-    // Теперь supercap должен быть не обнаружен
     struct REGMAP_PWR_STATUS pwr_status = {};
-    utest_regmap_get_region_data(
-        REGMAP_REGION_PWR_STATUS,
-        &pwr_status,
-        sizeof(pwr_status)
+    utest_regmap_get_region_data(REGMAP_REGION_PWR_STATUS, &pwr_status, sizeof(pwr_status));
+
+    TEST_ASSERT_EQUAL_UINT8_MESSAGE(
+        1, pwr_status.wbmz_supercap_present,
+        "Supercap should be detected initially"
     );
+
+    // Продвинуть время и убрать supercap
+    utest_systick_advance_time_ms(WBEC_WBMZ6_POLL_PERIOD_MS);
+    utest_adc_set_ch_mv(ADC_CHANNEL_ADC_VBAT, 0);
+
+    // Второй опрос: supercap removed
+    wbmz_subsystem_do_periodic_work();
+    utest_regmap_get_region_data(REGMAP_REGION_PWR_STATUS, &pwr_status, sizeof(pwr_status));
 
     TEST_ASSERT_EQUAL_UINT8_MESSAGE(
         0, pwr_status.wbmz_supercap_present,
-        "Supercap should be removed after poll period"
+        "Supercap should be removed after voltage drops"
+    );
+}
+
+// Сценарий: Устройство отсутствует, затем появляется supercap
+// Ожидается: Device переходит из NONE в SUPERCAP, данные появляются в regmap
+static void test_device_switching_none_to_supercap(void)
+{
+    LOG_INFO("Testing device switching: none -> supercap");
+
+    utest_systick_set_time_ms(WBEC_WBMZ6_POLL_PERIOD_MS);
+    utest_wbmz6_battery_set_present(false);
+    utest_adc_set_ch_mv(ADC_CHANNEL_ADC_VBAT, 0);
+
+    // Первый опрос: нет устройства
+    wbmz_subsystem_do_periodic_work();
+
+    struct REGMAP_PWR_STATUS pwr_status = {};
+    utest_regmap_get_region_data(REGMAP_REGION_PWR_STATUS, &pwr_status, sizeof(pwr_status));
+
+    TEST_ASSERT_EQUAL_UINT8_MESSAGE(
+        0, pwr_status.wbmz_supercap_present,
+        "No device should be detected initially"
+    );
+
+    // Продвинуть время и добавить supercap
+    utest_systick_advance_time_ms(WBEC_WBMZ6_POLL_PERIOD_MS);
+    utest_adc_set_ch_mv(ADC_CHANNEL_ADC_VBAT, TEST_NOMINAL_VOLTAGE_MV);
+
+    // Второй опрос: supercap появился
+    wbmz_subsystem_do_periodic_work();
+    utest_regmap_get_region_data(REGMAP_REGION_PWR_STATUS, &pwr_status, sizeof(pwr_status));
+
+    TEST_ASSERT_EQUAL_UINT8_MESSAGE(
+        1, pwr_status.wbmz_supercap_present,
+        "Supercap should be detected after voltage appears"
+    );
+    TEST_ASSERT_EQUAL_UINT16_MESSAGE(
+        TEST_NOMINAL_VOLTAGE_MV, pwr_status.wbmz_battery_voltage,
+        "Voltage should be set after device detection"
+    );
+    TEST_ASSERT_EQUAL_UINT16_MESSAGE(
+        TEST_SUPERCAP_FULL_DESIGN_CAPACITY_MAH, pwr_status.wbmz_full_design_capacity,
+        "Supercap capacity should match calculated value after init"
+    );
+}
+
+// Сценарий: Supercap → Battery → Supercap (hot-swap устройств)
+// Ожидается: Корректная смена device type, параметры обновляются
+static void test_device_switching_supercap_battery_supercap(void)
+{
+    LOG_INFO("Testing device switching: supercap -> battery -> supercap");
+
+    utest_systick_set_time_ms(WBEC_WBMZ6_POLL_PERIOD_MS);
+    struct REGMAP_PWR_STATUS pwr_status = {};
+
+    // Фаза 1: Supercap обнаружен
+    utest_wbmz6_battery_set_present(false);
+    utest_adc_set_ch_mv(ADC_CHANNEL_ADC_VBAT, TEST_NOMINAL_VOLTAGE_MV);
+    wbmz_subsystem_do_periodic_work();
+    utest_regmap_get_region_data(REGMAP_REGION_PWR_STATUS, &pwr_status, sizeof(pwr_status));
+
+    TEST_ASSERT_EQUAL_UINT8_MESSAGE(1, pwr_status.wbmz_supercap_present, "Phase 1: Supercap");
+    TEST_ASSERT_EQUAL_UINT8_MESSAGE(0, pwr_status.wbmz_battery_present, "Phase 1: No battery");
+    uint16_t supercap_capacity = pwr_status.wbmz_full_design_capacity;
+
+    // Фаза 2: Battery подключается (имеет приоритет)
+    utest_systick_advance_time_ms(WBEC_WBMZ6_POLL_PERIOD_MS);
+    utest_wbmz6_battery_set_present(true);
+    utest_wbmz6_battery_set_init_result(true);
+
+    struct wbmz6_params battery_params = {
+        .full_design_capacity_mah = 2000,
+        .voltage_min_mv = 2900,
+        .voltage_max_mv = 4100,
+        .charge_current_ma = 600
+    };
+    utest_wbmz6_battery_set_params(&battery_params);
+
+    wbmz_subsystem_do_periodic_work();
+    utest_regmap_get_region_data(REGMAP_REGION_PWR_STATUS, &pwr_status, sizeof(pwr_status));
+
+    TEST_ASSERT_EQUAL_UINT8_MESSAGE(0, pwr_status.wbmz_supercap_present, "Phase 2: No supercap");
+    TEST_ASSERT_EQUAL_UINT8_MESSAGE(1, pwr_status.wbmz_battery_present, "Phase 2: Battery");
+    TEST_ASSERT_EQUAL_UINT16_MESSAGE(
+        2000, pwr_status.wbmz_full_design_capacity,
+        "Phase 2: Battery capacity should be different from supercap"
+    );
+
+    // Фаза 3: Battery отключается, supercap снова обнаруживается
+    utest_systick_advance_time_ms(WBEC_WBMZ6_POLL_PERIOD_MS);
+    utest_wbmz6_battery_set_present(false);
+    wbmz_subsystem_do_periodic_work();
+    utest_regmap_get_region_data(REGMAP_REGION_PWR_STATUS, &pwr_status, sizeof(pwr_status));
+
+    TEST_ASSERT_EQUAL_UINT8_MESSAGE(1, pwr_status.wbmz_supercap_present, "Phase 3: Supercap back");
+    TEST_ASSERT_EQUAL_UINT8_MESSAGE(0, pwr_status.wbmz_battery_present, "Phase 3: No battery");
+    TEST_ASSERT_EQUAL_UINT16_MESSAGE(
+        supercap_capacity, pwr_status.wbmz_full_design_capacity,
+        "Phase 3: Supercap capacity should be restored"
+    );
+}
+
+// Сценарий: Battery init возвращает false (ошибка инициализации)
+// Ожидается: Device остается NONE, battery_present = 0 в regmap
+static void test_device_init_failure_battery(void)
+{
+    LOG_INFO("Testing battery init failure handling");
+
+    utest_systick_set_time_ms(WBEC_WBMZ6_POLL_PERIOD_MS);
+    utest_wbmz6_battery_set_present(true);
+    utest_wbmz6_battery_set_init_result(false);  // Init fails
+    utest_adc_set_ch_mv(ADC_CHANNEL_ADC_VBAT, 0);
+
+    wbmz_subsystem_do_periodic_work();
+
+    struct REGMAP_PWR_STATUS pwr_status = {};
+    utest_regmap_get_region_data(REGMAP_REGION_PWR_STATUS, &pwr_status, sizeof(pwr_status));
+
+    TEST_ASSERT_EQUAL_UINT8_MESSAGE(
+        0, pwr_status.wbmz_battery_present,
+        "Battery should NOT be present when init fails"
+    );
+    TEST_ASSERT_TRUE_MESSAGE(
+        utest_wbmz6_battery_was_init_called(),
+        "Battery init should have been attempted"
     );
 }
 
 // ============================================================================
-// Тесты wbmz-subsystem: Передача данных в regmap
+// Тесты wbmz6-battery: Базовая функциональность
 // ============================================================================
 
-// Сценарий: Суперконденсатор инициализирован и данные обновлены
-// Ожидается: В regmap корректно записаны параметры и статус
-static void test_subsystem_writes_supercap_data_to_regmap(void)
+// Сценарий: Battery is present и успешно инициализируется
+// Ожидается: battery_present = 1, параметры в regmap установлены
+static void test_battery_detection_and_init(void)
 {
-    LOG_INFO("Testing subsystem writes supercap data to regmap");
+    LOG_INFO("Testing battery detection and initialization");
 
     utest_systick_set_time_ms(WBEC_WBMZ6_POLL_PERIOD_MS);
-    utest_wbmz6_battery_set_present(false);
-    utest_adc_set_ch_mv(ADC_CHANNEL_ADC_VBAT, TEST_NOMINAL_VOLTAGE_MV);
+    utest_wbmz6_battery_set_present(true);
+    utest_wbmz6_battery_set_init_result(true);
+
+    struct wbmz6_params expected_params = {
+        .full_design_capacity_mah = 2000,
+        .voltage_min_mv = 2900,
+        .voltage_max_mv = 4100,
+        .charge_current_ma = 600
+    };
+    utest_wbmz6_battery_set_params(&expected_params);
 
     wbmz_subsystem_do_periodic_work();
 
     struct REGMAP_PWR_STATUS pwr_status = {};
-    bool result = utest_regmap_get_region_data(
-        REGMAP_REGION_PWR_STATUS,
-        &pwr_status,
-        sizeof(pwr_status)
-    );
+    utest_regmap_get_region_data(REGMAP_REGION_PWR_STATUS, &pwr_status, sizeof(pwr_status));
 
-    TEST_ASSERT_TRUE_MESSAGE(result, "Should read regmap data");
-    TEST_ASSERT_EQUAL_UINT16_MESSAGE(
-        TEST_NOMINAL_VOLTAGE_MV, pwr_status.wbmz_battery_voltage,
-        "Voltage should be written to regmap"
-    );
-    TEST_ASSERT_GREATER_THAN_UINT16_MESSAGE(
-        0, pwr_status.wbmz_full_design_capacity,
-        "Design capacity should be written"
+    TEST_ASSERT_EQUAL_UINT8_MESSAGE(
+        1, pwr_status.wbmz_battery_present,
+        "Battery should be detected"
     );
     TEST_ASSERT_EQUAL_UINT16_MESSAGE(
-        WBEC_WBMZ6_SUPERCAP_VOLTAGE_MIN_MV, pwr_status.wbmz_voltage_min_design,
-        "Min voltage should be written"
+        2000, pwr_status.wbmz_full_design_capacity,
+        "Battery capacity should match"
     );
     TEST_ASSERT_EQUAL_UINT16_MESSAGE(
-        WBEC_WBMZ6_SUPERCAP_VOLTAGE_MAX_MV, pwr_status.wbmz_voltage_max_design,
-        "Max voltage should be written"
+        2900, pwr_status.wbmz_voltage_min_design,
+        "Battery min voltage should match"
+    );
+    TEST_ASSERT_EQUAL_UINT16_MESSAGE(
+        4100, pwr_status.wbmz_voltage_max_design,
+        "Battery max voltage should match"
+    );
+    TEST_ASSERT_EQUAL_UINT16_MESSAGE(
+        600, pwr_status.wbmz_constant_charge_current,
+        "Battery charge current should match"
+    );
+}
+
+// Сценарий: Battery status обновляется корректно
+// Ожидается: Все поля статуса передаются в regmap
+static void test_battery_status_update(void)
+{
+    LOG_INFO("Testing battery status update");
+
+    utest_systick_set_time_ms(WBEC_WBMZ6_POLL_PERIOD_MS);
+    utest_wbmz6_battery_set_present(true);
+    utest_wbmz6_battery_set_init_result(true);
+
+    struct wbmz6_status battery_status = {
+        .voltage_now_mv = 3700,
+        .charging_current_ma = 450,
+        .discharging_current_ma = 0,
+        .capacity_percent = 75,
+        .temperature = 25,
+        .is_charging = 1,
+        .is_dead = 0,
+        .is_inserted = 1
+    };
+    utest_wbmz6_battery_set_status(&battery_status);
+
+    wbmz_subsystem_do_periodic_work();
+
+    struct REGMAP_PWR_STATUS pwr_status = {};
+    utest_regmap_get_region_data(REGMAP_REGION_PWR_STATUS, &pwr_status, sizeof(pwr_status));
+
+    TEST_ASSERT_EQUAL_UINT8_MESSAGE(
+        1, pwr_status.wbmz_battery_present,
+        "Battery should be present"
+    );
+    TEST_ASSERT_EQUAL_UINT16_MESSAGE(
+        3700, pwr_status.wbmz_battery_voltage,
+        "Battery voltage should match"
+    );
+    TEST_ASSERT_EQUAL_UINT16_MESSAGE(
+        450, pwr_status.wbmz_charging_current,
+        "Charging current should match"
+    );
+    TEST_ASSERT_EQUAL_UINT16_MESSAGE(
+        75, pwr_status.wbmz_capacity_percent,
+        "Capacity should match"
+    );
+    TEST_ASSERT_EQUAL_INT16_MESSAGE(
+        25, pwr_status.wbmz_temperature,
+        "Temperature should match"
+    );
+    TEST_ASSERT_EQUAL_UINT8_MESSAGE(
+        1, pwr_status.wbmz_is_charging,
+        "Charging flag should match"
+    );
+    TEST_ASSERT_EQUAL_UINT8_MESSAGE(
+        1, pwr_status.wbmz_is_inserted,
+        "Inserted flag should match"
     );
 }
 
@@ -767,6 +1043,9 @@ static void test_subsystem_integrates_wbmz_common_data(void)
 
     utest_wbmz_set_powered_from_wbmz(true);
     utest_set_wbmz_stepup_enabled(true);
+    #if defined(WBEC_GPIO_WBMZ_CHARGE_ENABLE)
+        utest_set_wbmz_charging_enabled(true);
+    #endif
 
     wbmz_subsystem_do_periodic_work();
 
@@ -785,6 +1064,12 @@ static void test_subsystem_integrates_wbmz_common_data(void)
         1, pwr_status.wbmz_stepup_enabled,
         "stepup_enabled should be set from wbmz-common"
     );
+    #if defined(WBEC_GPIO_WBMZ_CHARGE_ENABLE)
+        TEST_ASSERT_EQUAL_UINT8_MESSAGE(
+            1, pwr_status.wbmz_charging_enabled,
+            "charging_enabled should be set from wbmz-common"
+        );
+    #endif
 }
 
 // Сценарий: Вызов subsystem без WBMZ6 поддержки (WB74)
@@ -822,13 +1107,53 @@ static void test_subsystem_without_wbmz6_support(void)
         0, pwr_status.wbmz_supercap_present,
         "Supercap present should be 0 on WB74 (no WBMZ6 support)"
     );
+    TEST_ASSERT_EQUAL_UINT8_MESSAGE(
+        0, pwr_status.wbmz_is_charging,
+        "is_charging should be 0 on WB74 (no WBMZ6 support)"
+    );
+    TEST_ASSERT_EQUAL_UINT8_MESSAGE(
+        0, pwr_status.wbmz_is_dead,
+        "is_dead should be 0 on WB74 (no WBMZ6 support)"
+    );
+    TEST_ASSERT_EQUAL_UINT8_MESSAGE(
+        0, pwr_status.wbmz_is_inserted,
+        "is_inserted should be 0 on WB74 (no WBMZ6 support)"
+    );
     TEST_ASSERT_EQUAL_UINT16_MESSAGE(
         0, pwr_status.wbmz_full_design_capacity,
         "Design capacity should be 0 on WB74 (no WBMZ6 support)"
     );
     TEST_ASSERT_EQUAL_UINT16_MESSAGE(
+        0, pwr_status.wbmz_voltage_min_design,
+        "Voltage min design should be 0 on WB74 (no WBMZ6 support)"
+    );
+    TEST_ASSERT_EQUAL_UINT16_MESSAGE(
+        0, pwr_status.wbmz_voltage_max_design,
+        "Voltage max design should be 0 on WB74 (no WBMZ6 support)"
+    );
+    TEST_ASSERT_EQUAL_UINT16_MESSAGE(
+        0, pwr_status.wbmz_constant_charge_current,
+        "Constant charge current should be 0 on WB74 (no WBMZ6 support)"
+    );
+    TEST_ASSERT_EQUAL_UINT16_MESSAGE(
         0, pwr_status.wbmz_battery_voltage,
         "Battery voltage should be 0 on WB74 (no WBMZ6 support)"
+    );
+    TEST_ASSERT_EQUAL_UINT16_MESSAGE(
+        0, pwr_status.wbmz_charging_current,
+        "Charging current should be 0 on WB74 (no WBMZ6 support)"
+    );
+    TEST_ASSERT_EQUAL_UINT16_MESSAGE(
+        0, pwr_status.wbmz_discharging_current,
+        "Discharging current should be 0 on WB74 (no WBMZ6 support)"
+    );
+    TEST_ASSERT_EQUAL_UINT16_MESSAGE(
+        0, pwr_status.wbmz_capacity_percent,
+        "Capacity percent should be 0 on WB74 (no WBMZ6 support)"
+    );
+    TEST_ASSERT_EQUAL_INT16_MESSAGE(
+        0, pwr_status.wbmz_temperature,
+        "Temperature should be 0 on WB74 (no WBMZ6 support)"
     );
 #endif
 }
@@ -838,10 +1163,6 @@ int main(void)
     UNITY_BEGIN();
 
 #if defined(WBEC_WBMZ6_SUPPORT)
-    // Тесты wbmz6-supercap: Определение наличия
-    RUN_TEST(test_supercap_is_present_when_voltage_above_threshold);
-    RUN_TEST(test_supercap_not_present_when_voltage_below_threshold);
-
     // Тесты wbmz6-supercap: Инициализация
     RUN_TEST(test_supercap_init_sets_correct_params);
 
@@ -857,18 +1178,26 @@ int main(void)
     RUN_TEST(test_supercap_current_at_threshold_boundary);
     RUN_TEST(test_supercap_lowpass_filter_convergence);
     RUN_TEST(test_supercap_current_direction_changes);
+    RUN_TEST(test_supercap_current_formula_after_filter_convergence);
+    RUN_TEST(test_supercap_discharging_current_formula_after_convergence);
 
     // Тесты wbmz-subsystem: Определение устройства
     RUN_TEST(test_subsystem_detects_supercap_only);
     RUN_TEST(test_subsystem_no_device_detected);
     RUN_TEST(test_subsystem_battery_has_priority_over_supercap);
 
+    // Тесты wbmz-subsystem: Device Switching
+    RUN_TEST(test_device_switching_supercap_to_none);
+    RUN_TEST(test_device_switching_none_to_supercap);
+    RUN_TEST(test_device_switching_supercap_battery_supercap);
+    RUN_TEST(test_device_init_failure_battery);
+
+    // Тесты wbmz6-battery: Базовая функциональность
+    RUN_TEST(test_battery_detection_and_init);
+    RUN_TEST(test_battery_status_update);
+
     // Тесты wbmz-subsystem: Периодический опрос
     RUN_TEST(test_subsystem_respects_poll_period);
-    RUN_TEST(test_subsystem_polls_after_period_elapsed);
-
-    // Тесты wbmz-subsystem: Передача данных в regmap
-    RUN_TEST(test_subsystem_writes_supercap_data_to_regmap);
 #endif
 
     // Тесты wbmz-subsystem: Базовая функциональность (для всех таргетов)
