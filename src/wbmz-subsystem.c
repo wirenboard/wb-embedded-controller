@@ -19,7 +19,7 @@ enum wbmz6_device {
 static enum wbmz6_device wbmz6_device = WBMZ6_DEVICE_NONE;
 static struct wbmz6_params wbmz6_params = {};
 static struct wbmz6_status wbmz6_status = {};
-static systime_t wbmz6_last_poll_time;
+static systime_t wbmz6_last_poll_time = 0;
 
 static enum wbmz6_device wmbz6_detect_device(void)
 {
