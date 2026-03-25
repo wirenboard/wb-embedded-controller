@@ -31,13 +31,11 @@ void setUp(void)
     // Сброс всех моков
     #if defined(WBEC_WBMZ6_SUPPORT)
         utest_adc_set_ch_mv(ADC_CHANNEL_ADC_VBAT, 0);
-        utest_systick_set_time_ms(WBEC_WBMZ6_POLL_PERIOD_MS);  // Установить время > 0 для срабатывания первого опроса
         utest_wbmz6_battery_reset();
         // Сброс внутреннего состояния wbmz-subsystem
         utest_wbmz_subsystem_reset_state();
-    #else
-        utest_systick_set_time_ms(0);
     #endif
+    utest_systick_set_time_ms(0);
     utest_regmap_reset();
     utest_wbmz_common_reset();
 
@@ -64,6 +62,7 @@ static void test_supercap_is_present_when_voltage_above_threshold(void)
 {
     LOG_INFO("Testing supercap detection: voltage above threshold");
 
+    utest_systick_set_time_ms(WBEC_WBMZ6_POLL_PERIOD_MS);
     utest_wbmz6_battery_set_present(false);
     utest_adc_set_ch_mv(ADC_CHANNEL_ADC_VBAT, WBEC_WBMZ6_SUPERCAP_DETECT_VOLTAGE_MV + 1);
 
@@ -84,6 +83,7 @@ static void test_supercap_not_present_when_voltage_below_threshold(void)
 {
     LOG_INFO("Testing supercap detection: voltage below threshold");
 
+    utest_systick_set_time_ms(WBEC_WBMZ6_POLL_PERIOD_MS);
     utest_wbmz6_battery_set_present(false);
     utest_adc_set_ch_mv(ADC_CHANNEL_ADC_VBAT, WBEC_WBMZ6_SUPERCAP_DETECT_VOLTAGE_MV - 1);
 
@@ -108,6 +108,7 @@ static void test_supercap_init_sets_correct_params(void)
 {
     LOG_INFO("Testing supercap initialization");
 
+    utest_systick_set_time_ms(WBEC_WBMZ6_POLL_PERIOD_MS);
     utest_wbmz6_battery_set_present(false);
     utest_adc_set_ch_mv(ADC_CHANNEL_ADC_VBAT, TEST_NOMINAL_VOLTAGE_MV);
 
@@ -144,6 +145,7 @@ static void test_supercap_status_at_max_voltage(void)
 {
     LOG_INFO("Testing supercap status at max voltage");
 
+    utest_systick_set_time_ms(WBEC_WBMZ6_POLL_PERIOD_MS);
     utest_wbmz6_battery_set_present(false);
     utest_adc_set_ch_mv(ADC_CHANNEL_ADC_VBAT, WBEC_WBMZ6_SUPERCAP_VOLTAGE_MAX_MV);
 
@@ -176,6 +178,7 @@ static void test_supercap_status_at_min_voltage(void)
 {
     LOG_INFO("Testing supercap status at min voltage");
 
+    utest_systick_set_time_ms(WBEC_WBMZ6_POLL_PERIOD_MS);
     utest_wbmz6_battery_set_present(false);
     utest_adc_set_ch_mv(ADC_CHANNEL_ADC_VBAT, WBEC_WBMZ6_SUPERCAP_VOLTAGE_MIN_MV);
 
@@ -196,6 +199,7 @@ static void test_supercap_dead_when_voltage_below_min(void)
 {
     LOG_INFO("Testing supercap dead flag below min voltage");
 
+    utest_systick_set_time_ms(WBEC_WBMZ6_POLL_PERIOD_MS);
     utest_wbmz6_battery_set_present(false);
     utest_adc_set_ch_mv(ADC_CHANNEL_ADC_VBAT, WBEC_WBMZ6_SUPERCAP_VOLTAGE_MIN_MV - 100);
 
@@ -216,6 +220,7 @@ static void test_supercap_capacity_capped_when_voltage_above_max(void)
 {
     LOG_INFO("Testing supercap capacity capped at 100%% when voltage above max");
 
+    utest_systick_set_time_ms(WBEC_WBMZ6_POLL_PERIOD_MS);
     utest_wbmz6_battery_set_present(false);
     utest_adc_set_ch_mv(ADC_CHANNEL_ADC_VBAT, WBEC_WBMZ6_SUPERCAP_VOLTAGE_MAX_MV + 100);
 
@@ -236,6 +241,7 @@ static void test_supercap_capacity_calculated_correctly_at_intermediate_voltages
 {
     LOG_INFO("Testing supercap energy calculation at intermediate voltages");
 
+    utest_systick_set_time_ms(WBEC_WBMZ6_POLL_PERIOD_MS);
     utest_wbmz6_battery_set_present(false);
     struct REGMAP_PWR_STATUS pwr_status = {};
 
@@ -243,10 +249,10 @@ static void test_supercap_capacity_calculated_correctly_at_intermediate_voltages
     const uint32_t v_min = WBEC_WBMZ6_SUPERCAP_VOLTAGE_MIN_MV;
     const uint32_t v_max = WBEC_WBMZ6_SUPERCAP_VOLTAGE_MAX_MV;
     const uint32_t v_range = v_max - v_min;
+    const uint32_t energy_range = v_max * v_max - v_min * v_min;
 
     // Тест 1: V = V_min + 25% диапазона (ближе к минимуму)
     const uint16_t test_voltage_1 = v_min + v_range / 4;
-    const uint32_t energy_range = v_max * v_max - v_min * v_min;
     const uint32_t energy_1 = test_voltage_1 * test_voltage_1 - v_min * v_min;
     const uint16_t expected_capacity_1 = (energy_1 * 100 + energy_range / 2) / energy_range;
 
@@ -259,8 +265,7 @@ static void test_supercap_capacity_calculated_correctly_at_intermediate_voltages
         "Capacity should match energy formula at V_min + 25%% of range"
     );
 
-    // Сброс состояния для следующего теста
-    utest_wbmz_subsystem_reset_state();
+    // Продвинуть время для следующего опроса
     utest_systick_advance_time_ms(WBEC_WBMZ6_POLL_PERIOD_MS);
 
     // Тест 2: V = (V_min + V_max) / 2 (середина диапазона по напряжению)
@@ -277,8 +282,7 @@ static void test_supercap_capacity_calculated_correctly_at_intermediate_voltages
         "Capacity < 50%% at voltage midpoint (quadratic energy dependence)"
     );
 
-    // Сброс состояния для следующего теста
-    utest_wbmz_subsystem_reset_state();
+    // Продвинуть время для следующего опроса
     utest_systick_advance_time_ms(WBEC_WBMZ6_POLL_PERIOD_MS);
 
     // Тест 3: V = V_min + 75% диапазона (ближе к максимуму)
@@ -302,6 +306,7 @@ static void test_supercap_current_zero_when_voltage_change_small(void)
 {
     LOG_INFO("Testing supercap current zeroing for small voltage changes");
 
+    utest_systick_set_time_ms(WBEC_WBMZ6_POLL_PERIOD_MS);
     utest_wbmz6_battery_set_present(false);
     utest_adc_set_ch_mv(ADC_CHANNEL_ADC_VBAT, TEST_NOMINAL_VOLTAGE_MV);
 
@@ -335,6 +340,7 @@ static void test_supercap_charging_when_voltage_increasing(void)
 {
     LOG_INFO("Testing supercap charging status when voltage increasing");
 
+    utest_systick_set_time_ms(WBEC_WBMZ6_POLL_PERIOD_MS);
     utest_wbmz6_battery_set_present(false);
     utest_adc_set_ch_mv(ADC_CHANNEL_ADC_VBAT, TEST_NOMINAL_VOLTAGE_MV);
 
@@ -371,6 +377,7 @@ static void test_supercap_discharging_when_voltage_decreasing(void)
 {
     LOG_INFO("Testing supercap discharging status when voltage decreasing");
 
+    utest_systick_set_time_ms(WBEC_WBMZ6_POLL_PERIOD_MS);
     utest_wbmz6_battery_set_present(false);
     utest_adc_set_ch_mv(ADC_CHANNEL_ADC_VBAT, TEST_NOMINAL_VOLTAGE_MV + 100);
 
@@ -407,6 +414,7 @@ static void test_supercap_current_at_threshold_boundary(void)
 {
     LOG_INFO("Testing supercap current near zeroing threshold");
 
+    utest_systick_set_time_ms(WBEC_WBMZ6_POLL_PERIOD_MS);
     utest_wbmz6_battery_set_present(false);
     utest_adc_set_ch_mv(ADC_CHANNEL_ADC_VBAT, TEST_NOMINAL_VOLTAGE_MV);
 
@@ -437,6 +445,7 @@ static void test_supercap_lowpass_filter_convergence(void)
 {
     LOG_INFO("Testing supercap lowpass filter convergence over multiple polls");
 
+    utest_systick_set_time_ms(WBEC_WBMZ6_POLL_PERIOD_MS);
     utest_wbmz6_battery_set_present(false);
     utest_adc_set_ch_mv(ADC_CHANNEL_ADC_VBAT, TEST_NOMINAL_VOLTAGE_MV);
 
@@ -478,6 +487,7 @@ static void test_supercap_current_direction_changes(void)
 {
     LOG_INFO("Testing supercap current direction changes");
 
+    utest_systick_set_time_ms(WBEC_WBMZ6_POLL_PERIOD_MS);
     utest_wbmz6_battery_set_present(false);
     utest_adc_set_ch_mv(ADC_CHANNEL_ADC_VBAT, TEST_NOMINAL_VOLTAGE_MV);
 
@@ -541,6 +551,7 @@ static void test_subsystem_detects_supercap_only(void)
 {
     LOG_INFO("Testing subsystem detects supercap only");
 
+    utest_systick_set_time_ms(WBEC_WBMZ6_POLL_PERIOD_MS);
     // Батарея отсутствует, суперконденсатор присутствует
     utest_wbmz6_battery_set_present(false);
     utest_adc_set_ch_mv(ADC_CHANNEL_ADC_VBAT, WBEC_WBMZ6_SUPERCAP_DETECT_VOLTAGE_MV + 1000);
@@ -571,6 +582,7 @@ static void test_subsystem_no_device_detected(void)
 {
     LOG_INFO("Testing subsystem with no device detected");
 
+    utest_systick_set_time_ms(WBEC_WBMZ6_POLL_PERIOD_MS);
     utest_wbmz6_battery_set_present(false);
     utest_adc_set_ch_mv(ADC_CHANNEL_ADC_VBAT, 0);
 
@@ -600,6 +612,7 @@ static void test_subsystem_battery_has_priority_over_supercap(void)
 {
     LOG_INFO("Testing battery priority over supercap");
 
+    utest_systick_set_time_ms(WBEC_WBMZ6_POLL_PERIOD_MS);
     // Оба устройства присутствуют
     utest_wbmz6_battery_set_present(true);
     utest_wbmz6_battery_set_init_result(true);
@@ -639,6 +652,7 @@ static void test_subsystem_respects_poll_period(void)
 {
     LOG_INFO("Testing subsystem poll period enforcement");
 
+    utest_systick_set_time_ms(WBEC_WBMZ6_POLL_PERIOD_MS);
     utest_wbmz6_battery_set_present(false);
     utest_adc_set_ch_mv(ADC_CHANNEL_ADC_VBAT, WBEC_WBMZ6_SUPERCAP_DETECT_VOLTAGE_MV + 1);
 
@@ -669,6 +683,7 @@ static void test_subsystem_polls_after_period_elapsed(void)
 {
     LOG_INFO("Testing subsystem polls after period");
 
+    utest_systick_set_time_ms(WBEC_WBMZ6_POLL_PERIOD_MS);
     utest_wbmz6_battery_set_present(false);
     utest_adc_set_ch_mv(ADC_CHANNEL_ADC_VBAT, WBEC_WBMZ6_SUPERCAP_DETECT_VOLTAGE_MV + 1);
 
@@ -706,6 +721,7 @@ static void test_subsystem_writes_supercap_data_to_regmap(void)
 {
     LOG_INFO("Testing subsystem writes supercap data to regmap");
 
+    utest_systick_set_time_ms(WBEC_WBMZ6_POLL_PERIOD_MS);
     utest_wbmz6_battery_set_present(false);
     utest_adc_set_ch_mv(ADC_CHANNEL_ADC_VBAT, TEST_NOMINAL_VOLTAGE_MV);
 
