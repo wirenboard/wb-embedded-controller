@@ -122,8 +122,13 @@ static void test_supercap_status_at_max_voltage(void)
     wbmz_subsystem_do_periodic_work();
 
     struct REGMAP_PWR_STATUS pwr_status = {};
-    utest_regmap_get_region_data(REGMAP_REGION_PWR_STATUS, &pwr_status, sizeof(pwr_status));
+    bool result = utest_regmap_get_region_data(
+        REGMAP_REGION_PWR_STATUS,
+        &pwr_status,
+        sizeof(pwr_status)
+    );
 
+    TEST_ASSERT_TRUE_MESSAGE(result, "Should read regmap data");
     TEST_ASSERT_EQUAL_UINT16_MESSAGE(
         WBEC_WBMZ6_SUPERCAP_VOLTAGE_MAX_MV, pwr_status.wbmz_battery_voltage,
         "Voltage should match ADC reading"
@@ -159,8 +164,17 @@ static void test_supercap_status_at_min_voltage(void)
     wbmz_subsystem_do_periodic_work();
 
     struct REGMAP_PWR_STATUS pwr_status = {};
-    utest_regmap_get_region_data(REGMAP_REGION_PWR_STATUS, &pwr_status, sizeof(pwr_status));
+    bool result = utest_regmap_get_region_data(
+        REGMAP_REGION_PWR_STATUS,
+        &pwr_status,
+        sizeof(pwr_status)
+    );
 
+    TEST_ASSERT_TRUE_MESSAGE(result, "Should read regmap data");
+    TEST_ASSERT_EQUAL_UINT16_MESSAGE(
+        WBEC_WBMZ6_SUPERCAP_VOLTAGE_MIN_MV, pwr_status.wbmz_battery_voltage,
+        "Voltage should match ADC reading"
+    );
     TEST_ASSERT_EQUAL_UINT16_MESSAGE(
         0, pwr_status.wbmz_capacity_percent,
         "Capacity should be 0% at min voltage"
@@ -180,8 +194,17 @@ static void test_supercap_dead_when_voltage_below_min(void)
     wbmz_subsystem_do_periodic_work();
 
     struct REGMAP_PWR_STATUS pwr_status = {};
-    utest_regmap_get_region_data(REGMAP_REGION_PWR_STATUS, &pwr_status, sizeof(pwr_status));
+    bool result = utest_regmap_get_region_data(
+        REGMAP_REGION_PWR_STATUS,
+        &pwr_status,
+        sizeof(pwr_status)
+    );
 
+    TEST_ASSERT_TRUE_MESSAGE(result, "Should read regmap data");
+    TEST_ASSERT_EQUAL_UINT16_MESSAGE(
+        WBEC_WBMZ6_SUPERCAP_VOLTAGE_MIN_MV - 1, pwr_status.wbmz_battery_voltage,
+        "Voltage should match ADC reading"
+    );
     TEST_ASSERT_EQUAL_UINT8_MESSAGE(
         1, pwr_status.wbmz_is_dead,
         "Supercap should be marked as dead when voltage below minimum"
@@ -201,8 +224,17 @@ static void test_supercap_capacity_capped_when_voltage_above_max(void)
     wbmz_subsystem_do_periodic_work();
 
     struct REGMAP_PWR_STATUS pwr_status = {};
-    utest_regmap_get_region_data(REGMAP_REGION_PWR_STATUS, &pwr_status, sizeof(pwr_status));
+    bool result = utest_regmap_get_region_data(
+        REGMAP_REGION_PWR_STATUS,
+        &pwr_status,
+        sizeof(pwr_status)
+    );
 
+    TEST_ASSERT_TRUE_MESSAGE(result, "Should read regmap data");
+    TEST_ASSERT_EQUAL_UINT16_MESSAGE(
+        WBEC_WBMZ6_SUPERCAP_VOLTAGE_MAX_MV + 1, pwr_status.wbmz_battery_voltage,
+        "Voltage should match ADC reading"
+    );
     TEST_ASSERT_EQUAL_UINT16_MESSAGE(
         100, pwr_status.wbmz_capacity_percent,
         "Capacity should be capped at 100% when voltage above max"
@@ -232,8 +264,13 @@ static void test_supercap_capacity_calculated_correctly_at_intermediate_voltages
 
     utest_adc_set_ch_mv(ADC_CHANNEL_ADC_VBAT, test_voltage_1);
     wbmz_subsystem_do_periodic_work();
-    utest_regmap_get_region_data(REGMAP_REGION_PWR_STATUS, &pwr_status, sizeof(pwr_status));
+    bool result = utest_regmap_get_region_data(
+        REGMAP_REGION_PWR_STATUS,
+        &pwr_status,
+        sizeof(pwr_status)
+    );
 
+    TEST_ASSERT_TRUE_MESSAGE(result, "Should read regmap data");
     TEST_ASSERT_UINT16_WITHIN_MESSAGE(
         2, expected_capacity_1, pwr_status.wbmz_capacity_percent,
         "Capacity should match energy formula at V_min + 25%% of range"
@@ -249,8 +286,13 @@ static void test_supercap_capacity_calculated_correctly_at_intermediate_voltages
 
     utest_adc_set_ch_mv(ADC_CHANNEL_ADC_VBAT, test_voltage_2);
     wbmz_subsystem_do_periodic_work();
-    utest_regmap_get_region_data(REGMAP_REGION_PWR_STATUS, &pwr_status, sizeof(pwr_status));
+    result = utest_regmap_get_region_data(
+        REGMAP_REGION_PWR_STATUS,
+        &pwr_status,
+        sizeof(pwr_status)
+    );
 
+    TEST_ASSERT_TRUE_MESSAGE(result, "Should read regmap data");
     TEST_ASSERT_UINT16_WITHIN_MESSAGE(
         2, expected_capacity_2, pwr_status.wbmz_capacity_percent,
         "Capacity < 50%% at voltage midpoint (quadratic energy dependence)"
@@ -266,8 +308,13 @@ static void test_supercap_capacity_calculated_correctly_at_intermediate_voltages
 
     utest_adc_set_ch_mv(ADC_CHANNEL_ADC_VBAT, test_voltage_3);
     wbmz_subsystem_do_periodic_work();
-    utest_regmap_get_region_data(REGMAP_REGION_PWR_STATUS, &pwr_status, sizeof(pwr_status));
+    result = utest_regmap_get_region_data(
+        REGMAP_REGION_PWR_STATUS,
+        &pwr_status,
+        sizeof(pwr_status)
+    );
 
+    TEST_ASSERT_TRUE_MESSAGE(result, "Should read regmap data");
     TEST_ASSERT_UINT16_WITHIN_MESSAGE(
         2, expected_capacity_3, pwr_status.wbmz_capacity_percent,
         "Capacity should match energy formula at V_min + 75%% of range"
@@ -296,8 +343,13 @@ static void test_supercap_current_zero_when_voltage_change_small(void)
     wbmz_subsystem_do_periodic_work();
 
     struct REGMAP_PWR_STATUS pwr_status = {};
-    utest_regmap_get_region_data(REGMAP_REGION_PWR_STATUS, &pwr_status, sizeof(pwr_status));
+    bool result = utest_regmap_get_region_data(
+        REGMAP_REGION_PWR_STATUS,
+        &pwr_status,
+        sizeof(pwr_status)
+    );
 
+    TEST_ASSERT_TRUE_MESSAGE(result, "Should read regmap data");
     TEST_ASSERT_EQUAL_UINT16_MESSAGE(
         0, pwr_status.wbmz_charging_current,
         "Charging current should be 0 for very small voltage changes"
@@ -329,8 +381,13 @@ static void test_supercap_charging_when_voltage_increasing(void)
     wbmz_subsystem_do_periodic_work();
 
     struct REGMAP_PWR_STATUS pwr_status = {};
-    utest_regmap_get_region_data(REGMAP_REGION_PWR_STATUS, &pwr_status, sizeof(pwr_status));
+    bool result = utest_regmap_get_region_data(
+        REGMAP_REGION_PWR_STATUS,
+        &pwr_status,
+        sizeof(pwr_status)
+    );
 
+    TEST_ASSERT_TRUE_MESSAGE(result, "Should read regmap data");
     TEST_ASSERT_EQUAL_UINT8_MESSAGE(
         1, pwr_status.wbmz_is_charging,
         "Should report charging when voltage increasing"
@@ -366,8 +423,13 @@ static void test_supercap_discharging_when_voltage_decreasing(void)
     wbmz_subsystem_do_periodic_work();
 
     struct REGMAP_PWR_STATUS pwr_status = {};
-    utest_regmap_get_region_data(REGMAP_REGION_PWR_STATUS, &pwr_status, sizeof(pwr_status));
+    bool result = utest_regmap_get_region_data(
+        REGMAP_REGION_PWR_STATUS,
+        &pwr_status,
+        sizeof(pwr_status)
+    );
 
+    TEST_ASSERT_TRUE_MESSAGE(result, "Should read regmap data");
     TEST_ASSERT_EQUAL_UINT8_MESSAGE(
         0, pwr_status.wbmz_is_charging,
         "Should NOT report charging when voltage decreasing"
@@ -399,27 +461,38 @@ static void test_supercap_current_at_threshold_boundary(void)
     // Вычисление минимального dV для тока чуть выше порога обнуления
     // i = C × dV/dt => dV = i × dt / C
     const uint16_t target_current_ma = WBEC_WBMZ6_SUPERCAP_CURRENT_ZEROING_MA + 1; // 81 mA
-    uint16_t dv_mv = (target_current_ma * WBEC_WBMZ6_POLL_PERIOD_MS +
-                      WBEC_WBMZ6_SUPERCAP_CAPACITY_MF / 2) /
-                      WBEC_WBMZ6_SUPERCAP_CAPACITY_MF;
 
-    // Убедимся, что dV не меньше 1 mV (практическое ограничение разрешения)
-    if (dv_mv < 1) {
-        dv_mv = 1;
-    }
+    // Вычисляем частоту прироста: каждый N-ный шаг прибавляем 1 mV
+    // N = C / (target_current × dt)
+    const uint32_t step_interval = (WBEC_WBMZ6_SUPERCAP_CAPACITY_MF + target_current_ma * WBEC_WBMZ6_POLL_PERIOD_MS / 2) /
+                                   (target_current_ma * WBEC_WBMZ6_POLL_PERIOD_MS);
+
+    // Если можно прибавлять каждый шаг (step_interval == 0), то dv_mv >= 1
+    const uint16_t dv_mv = (step_interval == 0) ? 1 : 0;
+    const uint16_t dv_step = (step_interval == 0) ? 1 : step_interval;
 
     // Повторяем 100 раз для схождения lowpass фильтра к установившемуся значению
     for (int i = 0; i < 100; i++) {
         utest_systick_advance_time_ms(WBEC_WBMZ6_POLL_PERIOD_MS);
-        voltage += dv_mv;
+
+        // Дробный прирост: прибавляем 1 mV каждый dv_step-ный шаг
+        if (dv_mv > 0 || (i % dv_step) == 0) {
+            voltage += (dv_mv > 0) ? dv_mv : 1;
+        }
+
         utest_adc_set_ch_mv(ADC_CHANNEL_ADC_VBAT, voltage);
         wbmz_subsystem_do_periodic_work();
     }
 
     // После схождения фильтра проверяем, что ток не обнулился
     struct REGMAP_PWR_STATUS pwr_status = {};
-    utest_regmap_get_region_data(REGMAP_REGION_PWR_STATUS, &pwr_status, sizeof(pwr_status));
+    bool result = utest_regmap_get_region_data(
+        REGMAP_REGION_PWR_STATUS,
+        &pwr_status,
+        sizeof(pwr_status)
+    );
 
+    TEST_ASSERT_TRUE_MESSAGE(result, "Should read regmap data");
     TEST_ASSERT_GREATER_THAN_UINT16_MESSAGE(
         0, pwr_status.wbmz_charging_current,
         "Current should NOT be zeroed when above threshold"
@@ -486,8 +559,13 @@ static void test_supercap_current_direction_changes(void)
     utest_systick_advance_time_ms(WBEC_WBMZ6_POLL_PERIOD_MS);
     utest_adc_set_ch_mv(ADC_CHANNEL_ADC_VBAT, TEST_NOMINAL_VOLTAGE_MV + 100);
     wbmz_subsystem_do_periodic_work();
-    utest_regmap_get_region_data(REGMAP_REGION_PWR_STATUS, &pwr_status, sizeof(pwr_status));
+    bool result = utest_regmap_get_region_data(
+        REGMAP_REGION_PWR_STATUS,
+        &pwr_status,
+        sizeof(pwr_status)
+    );
 
+    TEST_ASSERT_TRUE_MESSAGE(result, "Should read regmap data for phase 1");
     TEST_ASSERT_EQUAL_UINT8_MESSAGE(
         1, pwr_status.wbmz_is_charging,
         "Phase 1: Should be charging"
@@ -501,8 +579,13 @@ static void test_supercap_current_direction_changes(void)
     utest_systick_advance_time_ms(WBEC_WBMZ6_POLL_PERIOD_MS);
     utest_adc_set_ch_mv(ADC_CHANNEL_ADC_VBAT, TEST_NOMINAL_VOLTAGE_MV);
     wbmz_subsystem_do_periodic_work();
-    utest_regmap_get_region_data(REGMAP_REGION_PWR_STATUS, &pwr_status, sizeof(pwr_status));
+    result = utest_regmap_get_region_data(
+        REGMAP_REGION_PWR_STATUS,
+        &pwr_status,
+        sizeof(pwr_status)
+    );
 
+    TEST_ASSERT_TRUE_MESSAGE(result, "Should read regmap data for phase 2");
     TEST_ASSERT_EQUAL_UINT8_MESSAGE(
         0, pwr_status.wbmz_is_charging,
         "Phase 2: Should NOT be charging"
@@ -516,8 +599,13 @@ static void test_supercap_current_direction_changes(void)
     utest_systick_advance_time_ms(WBEC_WBMZ6_POLL_PERIOD_MS);
     utest_adc_set_ch_mv(ADC_CHANNEL_ADC_VBAT, TEST_NOMINAL_VOLTAGE_MV + 100);
     wbmz_subsystem_do_periodic_work();
-    utest_regmap_get_region_data(REGMAP_REGION_PWR_STATUS, &pwr_status, sizeof(pwr_status));
+    result = utest_regmap_get_region_data(
+        REGMAP_REGION_PWR_STATUS,
+        &pwr_status,
+        sizeof(pwr_status)
+    );
 
+    TEST_ASSERT_TRUE_MESSAGE(result, "Should read regmap data for phase 3");
     TEST_ASSERT_EQUAL_UINT8_MESSAGE(
         1, pwr_status.wbmz_is_charging,
         "Phase 3: Should be charging again"
@@ -555,7 +643,13 @@ static void test_supercap_current_formula_after_filter_convergence(void)
 
     // После схождения фильтра проверяем установившийся ток
     struct REGMAP_PWR_STATUS pwr_status = {};
-    utest_regmap_get_region_data(REGMAP_REGION_PWR_STATUS, &pwr_status, sizeof(pwr_status));
+    bool result = utest_regmap_get_region_data(
+        REGMAP_REGION_PWR_STATUS,
+        &pwr_status,
+        sizeof(pwr_status)
+    );
+
+    TEST_ASSERT_TRUE_MESSAGE(result, "Should read regmap data");
 
     // Расчет ожидаемого тока по формуле: i = C × dV/dt
     // i [mA] = C [mF] × dV [mV] / dt [ms]
@@ -603,7 +697,13 @@ static void test_supercap_discharging_current_formula_after_convergence(void)
 
     // Проверяем установившийся ток разрядки
     struct REGMAP_PWR_STATUS pwr_status = {};
-    utest_regmap_get_region_data(REGMAP_REGION_PWR_STATUS, &pwr_status, sizeof(pwr_status));
+    bool result = utest_regmap_get_region_data(
+        REGMAP_REGION_PWR_STATUS,
+        &pwr_status,
+        sizeof(pwr_status)
+    );
+
+    TEST_ASSERT_TRUE_MESSAGE(result, "Should read regmap data");
 
     // Расчет ожидаемого тока разрядки: i = C × |dV|/dt
     const uint32_t expected_current_ma =
@@ -747,12 +847,13 @@ static void test_subsystem_respects_poll_period(void)
 
     // Supercap должен остаться обнаруженным, т.к. период не прошел
     struct REGMAP_PWR_STATUS pwr_status = {};
-    utest_regmap_get_region_data(
+    bool result = utest_regmap_get_region_data(
         REGMAP_REGION_PWR_STATUS,
         &pwr_status,
         sizeof(pwr_status)
     );
 
+    TEST_ASSERT_TRUE_MESSAGE(result, "Should read regmap data");
     TEST_ASSERT_EQUAL_UINT8_MESSAGE(
         1, pwr_status.wbmz_supercap_present,
         "Supercap should still be detected (poll period not elapsed)"
@@ -777,8 +878,13 @@ static void test_device_switching_supercap_to_none(void)
     wbmz_subsystem_do_periodic_work();
 
     struct REGMAP_PWR_STATUS pwr_status = {};
-    utest_regmap_get_region_data(REGMAP_REGION_PWR_STATUS, &pwr_status, sizeof(pwr_status));
+    bool result = utest_regmap_get_region_data(
+        REGMAP_REGION_PWR_STATUS,
+        &pwr_status,
+        sizeof(pwr_status)
+    );
 
+    TEST_ASSERT_TRUE_MESSAGE(result, "Should read regmap data");
     TEST_ASSERT_EQUAL_UINT8_MESSAGE(
         1, pwr_status.wbmz_supercap_present,
         "Supercap should be detected initially"
@@ -790,8 +896,13 @@ static void test_device_switching_supercap_to_none(void)
 
     // Второй опрос: supercap removed
     wbmz_subsystem_do_periodic_work();
-    utest_regmap_get_region_data(REGMAP_REGION_PWR_STATUS, &pwr_status, sizeof(pwr_status));
+    result = utest_regmap_get_region_data(
+        REGMAP_REGION_PWR_STATUS,
+        &pwr_status,
+        sizeof(pwr_status)
+    );
 
+    TEST_ASSERT_TRUE_MESSAGE(result, "Should read regmap data");
     TEST_ASSERT_EQUAL_UINT8_MESSAGE(
         0, pwr_status.wbmz_supercap_present,
         "Supercap should be removed after voltage drops"
@@ -812,8 +923,13 @@ static void test_device_switching_none_to_supercap(void)
     wbmz_subsystem_do_periodic_work();
 
     struct REGMAP_PWR_STATUS pwr_status = {};
-    utest_regmap_get_region_data(REGMAP_REGION_PWR_STATUS, &pwr_status, sizeof(pwr_status));
+    bool result = utest_regmap_get_region_data(
+        REGMAP_REGION_PWR_STATUS,
+        &pwr_status,
+        sizeof(pwr_status)
+    );
 
+    TEST_ASSERT_TRUE_MESSAGE(result, "Should read regmap data");
     TEST_ASSERT_EQUAL_UINT8_MESSAGE(
         0, pwr_status.wbmz_supercap_present,
         "No device should be detected initially"
@@ -825,8 +941,13 @@ static void test_device_switching_none_to_supercap(void)
 
     // Второй опрос: supercap появился
     wbmz_subsystem_do_periodic_work();
-    utest_regmap_get_region_data(REGMAP_REGION_PWR_STATUS, &pwr_status, sizeof(pwr_status));
+    result = utest_regmap_get_region_data(
+        REGMAP_REGION_PWR_STATUS,
+        &pwr_status,
+        sizeof(pwr_status)
+    );
 
+    TEST_ASSERT_TRUE_MESSAGE(result, "Should read regmap data");
     TEST_ASSERT_EQUAL_UINT8_MESSAGE(
         1, pwr_status.wbmz_supercap_present,
         "Supercap should be detected after voltage appears"
@@ -854,8 +975,13 @@ static void test_device_switching_supercap_battery_supercap(void)
     utest_wbmz6_battery_set_present(false);
     utest_adc_set_ch_mv(ADC_CHANNEL_ADC_VBAT, TEST_NOMINAL_VOLTAGE_MV);
     wbmz_subsystem_do_periodic_work();
-    utest_regmap_get_region_data(REGMAP_REGION_PWR_STATUS, &pwr_status, sizeof(pwr_status));
+    bool result = utest_regmap_get_region_data(
+        REGMAP_REGION_PWR_STATUS,
+        &pwr_status,
+        sizeof(pwr_status)
+    );
 
+    TEST_ASSERT_TRUE_MESSAGE(result, "Should read regmap data for phase 1");
     TEST_ASSERT_EQUAL_UINT8_MESSAGE(1, pwr_status.wbmz_supercap_present, "Phase 1: Supercap");
     TEST_ASSERT_EQUAL_UINT8_MESSAGE(0, pwr_status.wbmz_battery_present, "Phase 1: No battery");
     uint16_t supercap_capacity = pwr_status.wbmz_full_design_capacity;
@@ -874,8 +1000,13 @@ static void test_device_switching_supercap_battery_supercap(void)
     utest_wbmz6_battery_set_params(&battery_params);
 
     wbmz_subsystem_do_periodic_work();
-    utest_regmap_get_region_data(REGMAP_REGION_PWR_STATUS, &pwr_status, sizeof(pwr_status));
+    result = utest_regmap_get_region_data(
+        REGMAP_REGION_PWR_STATUS,
+        &pwr_status,
+        sizeof(pwr_status)
+    );
 
+    TEST_ASSERT_TRUE_MESSAGE(result, "Should read regmap data for phase 2");
     TEST_ASSERT_EQUAL_UINT8_MESSAGE(0, pwr_status.wbmz_supercap_present, "Phase 2: No supercap");
     TEST_ASSERT_EQUAL_UINT8_MESSAGE(1, pwr_status.wbmz_battery_present, "Phase 2: Battery");
     TEST_ASSERT_EQUAL_UINT16_MESSAGE(
@@ -887,8 +1018,13 @@ static void test_device_switching_supercap_battery_supercap(void)
     utest_systick_advance_time_ms(WBEC_WBMZ6_POLL_PERIOD_MS);
     utest_wbmz6_battery_set_present(false);
     wbmz_subsystem_do_periodic_work();
-    utest_regmap_get_region_data(REGMAP_REGION_PWR_STATUS, &pwr_status, sizeof(pwr_status));
+    result = utest_regmap_get_region_data(
+        REGMAP_REGION_PWR_STATUS,
+        &pwr_status,
+        sizeof(pwr_status)
+    );
 
+    TEST_ASSERT_TRUE_MESSAGE(result, "Should read regmap data for phase 3");
     TEST_ASSERT_EQUAL_UINT8_MESSAGE(1, pwr_status.wbmz_supercap_present, "Phase 3: Supercap back");
     TEST_ASSERT_EQUAL_UINT8_MESSAGE(0, pwr_status.wbmz_battery_present, "Phase 3: No battery");
     TEST_ASSERT_EQUAL_UINT16_MESSAGE(
@@ -911,8 +1047,13 @@ static void test_device_init_failure_battery(void)
     wbmz_subsystem_do_periodic_work();
 
     struct REGMAP_PWR_STATUS pwr_status = {};
-    utest_regmap_get_region_data(REGMAP_REGION_PWR_STATUS, &pwr_status, sizeof(pwr_status));
+    bool result = utest_regmap_get_region_data(
+        REGMAP_REGION_PWR_STATUS,
+        &pwr_status,
+        sizeof(pwr_status)
+    );
 
+    TEST_ASSERT_TRUE_MESSAGE(result, "Should read regmap data");
     TEST_ASSERT_EQUAL_UINT8_MESSAGE(
         0, pwr_status.wbmz_battery_present,
         "Battery should NOT be present when init fails"
@@ -948,8 +1089,13 @@ static void test_battery_detection_and_init(void)
     wbmz_subsystem_do_periodic_work();
 
     struct REGMAP_PWR_STATUS pwr_status = {};
-    utest_regmap_get_region_data(REGMAP_REGION_PWR_STATUS, &pwr_status, sizeof(pwr_status));
+    bool result = utest_regmap_get_region_data(
+        REGMAP_REGION_PWR_STATUS,
+        &pwr_status,
+        sizeof(pwr_status)
+    );
 
+    TEST_ASSERT_TRUE_MESSAGE(result, "Should read regmap data");
     TEST_ASSERT_EQUAL_UINT8_MESSAGE(
         1, pwr_status.wbmz_battery_present,
         "Battery should be detected"
@@ -997,8 +1143,13 @@ static void test_battery_status_update(void)
     wbmz_subsystem_do_periodic_work();
 
     struct REGMAP_PWR_STATUS pwr_status = {};
-    utest_regmap_get_region_data(REGMAP_REGION_PWR_STATUS, &pwr_status, sizeof(pwr_status));
+    bool result = utest_regmap_get_region_data(
+        REGMAP_REGION_PWR_STATUS,
+        &pwr_status,
+        sizeof(pwr_status)
+    );
 
+    TEST_ASSERT_TRUE_MESSAGE(result, "Should read regmap data");
     TEST_ASSERT_EQUAL_UINT8_MESSAGE(
         1, pwr_status.wbmz_battery_present,
         "Battery should be present"
@@ -1050,12 +1201,13 @@ static void test_subsystem_integrates_wbmz_common_data(void)
     wbmz_subsystem_do_periodic_work();
 
     struct REGMAP_PWR_STATUS pwr_status = {};
-    utest_regmap_get_region_data(
+    bool result = utest_regmap_get_region_data(
         REGMAP_REGION_PWR_STATUS,
         &pwr_status,
         sizeof(pwr_status)
     );
 
+    TEST_ASSERT_TRUE_MESSAGE(result, "Should read regmap data");
     TEST_ASSERT_EQUAL_UINT8_MESSAGE(
         1, pwr_status.powered_from_wbmz,
         "powered_from_wbmz should be set from wbmz-common"
@@ -1072,20 +1224,23 @@ static void test_subsystem_integrates_wbmz_common_data(void)
     #endif
 }
 
-// Сценарий: Вызов subsystem без WBMZ6 поддержки (WB74)
-// Ожидается: Функция работает корректно, флаги WBMZ6 остаются в 0
-static void test_subsystem_without_wbmz6_support(void)
+// Сценарий: Поля WBMZ6 в regmap равны нулю, когда устройства не обнаружены
+// Ожидается: На WB85 (с поддержкой) - флаги = 0 при отсутствии устройств
+//            На WB74 (без поддержки) - все WBMZ6 поля всегда = 0
+static void test_wbmz6_fields_are_zero_when_no_device_detected(void)
 {
-    LOG_INFO("Testing subsystem without WBMZ6 support");
+    LOG_INFO("Testing WBMZ6 regmap fields default to zero when no device detected");
 
     wbmz_subsystem_do_periodic_work();
 
     struct REGMAP_PWR_STATUS pwr_status = {};
-    utest_regmap_get_region_data(
+    bool result = utest_regmap_get_region_data(
         REGMAP_REGION_PWR_STATUS,
         &pwr_status,
         sizeof(pwr_status)
     );
+
+    TEST_ASSERT_TRUE_MESSAGE(result, "Should read regmap data");
 
 #if defined(WBEC_WBMZ6_SUPPORT)
     // На WB85 можно ожидать значения 0, если устройства не обнаружены
@@ -1202,7 +1357,7 @@ int main(void)
 
     // Тесты wbmz-subsystem: Базовая функциональность (для всех таргетов)
     RUN_TEST(test_subsystem_integrates_wbmz_common_data);
-    RUN_TEST(test_subsystem_without_wbmz6_support);
+    RUN_TEST(test_wbmz6_fields_are_zero_when_no_device_detected);
 
     return UNITY_END();
 }
