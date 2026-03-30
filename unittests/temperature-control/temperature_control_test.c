@@ -17,10 +17,10 @@ static const gpio_pin_t heater_pin = { EC_GPIO_HEATER };
 
 void setUp(void)
 {
-    // Reset GPIO state
+    // Сброс состояния GPIO
     utest_gpio_reset_instances();
 
-    // Set default values
+    // Установка значений по умолчанию
     utest_ntc_set_temperature(F16(25.0));  // 25°C
     utest_wbmz_set_powered_from_wbmz(false);
     vmon_init();
@@ -31,87 +31,87 @@ void tearDown(void)
 
 }
 
-// Scenario: Initialize temperature control subsystem
-// Expected: Initialization completes successfully without errors
+// Сценарий: Инициализация подсистемы управления температурой
+// Ожидается: Инициализация завершается успешно, без ошибок
 static void test_temperature_control_init(void)
 {
     LOG_INFO("Testing initialization");
 
     temperature_control_init();
-    // Init should succeed without errors
+    // Инициализация должна пройти без ошибок
     TEST_PASS();
 }
 
 #if defined(EC_GPIO_HEATER)
-// Scenario: Initialize temperature control with heater support
-// Expected: Heater GPIO configured as output push-pull, initially set LOW (off)
+// Сценарий: Инициализация управления температурой с поддержкой нагревателя
+// Ожидается: GPIO нагревателя настроен как push-pull выход, начальное состояние LOW (выключен)
 static void test_heater_gpio_init(void)
 {
     LOG_INFO("Testing heater GPIO initialization");
 
     temperature_control_init();
 
-    // Check that heater GPIO is configured as output
+    // Проверка, что GPIO нагревателя настроен как выход
     uint32_t mode = utest_gpio_get_mode(heater_pin);
     TEST_ASSERT_EQUAL_UINT32_MESSAGE(GPIO_MODE_OUTPUT, mode, "Heater GPIO should be configured as OUTPUT");
 
-    // Check that heater GPIO is configured as push-pull
+    // Проверка, что GPIO нагревателя настроен как push-pull
     uint32_t otype = utest_gpio_get_output_type(heater_pin);
     TEST_ASSERT_EQUAL_UINT32_MESSAGE(GPIO_OTYPE_PUSH_PULL, otype, "Heater GPIO should be configured as PUSH-PULL");
 
-    // Check that heater is off after init
+    // Проверка, что после инициализации нагреватель выключен
     uint32_t state = utest_gpio_get_output_state(heater_pin);
     TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, state, "Heater GPIO should be LOW (off) after initialization");
 }
 #endif
 
-// Scenario: Check temperature readiness when above minimum working temperature
-// Expected: temperature_control_is_temperature_ready() returns true
+// Сценарий: Проверка готовности при температуре выше минимальной рабочей
+// Ожидается: temperature_control_is_temperature_ready() возвращает true
 static void test_temperature_is_ready_above_minimum(void)
 {
     LOG_INFO("Testing temperature ready when above minimum");
 
-    // Set temperature above minimum (WBEC_MINIMUM_WORKING_TEMPERATURE)
+    // Установка температуры выше минимума (WBEC_MINIMUM_WORKING_TEMPERATURE)
     utest_ntc_set_temperature(F16(WBEC_MINIMUM_WORKING_TEMPERATURE + 1.0));
 
     bool ready = temperature_control_is_temperature_ready();
     TEST_ASSERT_TRUE_MESSAGE(ready, "Temperature should be ready when above minimum working temperature");
 }
 
-// Scenario: Check temperature readiness when below minimum working temperature
-// Expected: temperature_control_is_temperature_ready() returns false
+// Сценарий: Проверка готовности при температуре ниже минимальной рабочей
+// Ожидается: temperature_control_is_temperature_ready() возвращает false
 static void test_temperature_is_not_ready_below_minimum(void)
 {
     LOG_INFO("Testing temperature not ready when below minimum");
 
-    // Set temperature below minimum (WBEC_MINIMUM_WORKING_TEMPERATURE)
+    // Установка температуры ниже минимума (WBEC_MINIMUM_WORKING_TEMPERATURE)
     utest_ntc_set_temperature(F16(WBEC_MINIMUM_WORKING_TEMPERATURE - 10.0));
 
     bool ready = temperature_control_is_temperature_ready();
     TEST_ASSERT_FALSE_MESSAGE(ready, "Temperature should not be ready when below minimum working temperature");
 }
 
-// Scenario: Check temperature readiness at exact minimum threshold
-// Expected: False at threshold, true when 1°C above
+// Сценарий: Проверка готовности при температуре на точном минимальном пороге
+// Ожидается: false на пороге, true при превышении на 1°C
 static void test_temperature_is_ready_at_minimum_threshold(void)
 {
     LOG_INFO("Testing temperature ready at threshold");
 
-    // Set temperature exactly at minimum threshold
+    // Установка температуры ровно на минимальном пороге
     utest_ntc_set_temperature(F16(WBEC_MINIMUM_WORKING_TEMPERATURE));
 
     bool ready = temperature_control_is_temperature_ready();
     TEST_ASSERT_FALSE_MESSAGE(ready, "Temperature should not be ready at exact minimum threshold");
 
-    // Just above the threshold
+    // Чуть выше порога
     utest_ntc_set_temperature(F16(WBEC_MINIMUM_WORKING_TEMPERATURE + 1.0));
 
     ready = temperature_control_is_temperature_ready();
     TEST_ASSERT_TRUE_MESSAGE(ready, "Temperature should be ready above minimum threshold");
 }
 
-// Scenario: Get temperature value in 0.01°C units for positive temperature
-// Expected: Returns temperature scaled by 100 (e.g., 25.5°C returns 2550)
+// Сценарий: Получение температуры в единицах 0.01°C для положительной температуры
+// Ожидается: Возвращается температура, умноженная на 100 (например, 25.5°C -> 2550)
 static void test_get_temperature_positive(void)
 {
     LOG_INFO("Testing get temperature - positive values");
@@ -122,8 +122,8 @@ static void test_get_temperature_positive(void)
     TEST_ASSERT_EQUAL_INT16_MESSAGE(2550, temp_x100, "Temperature x100 should be 2550 for 25.5°C");
 }
 
-// Scenario: Get temperature value in 0.01°C units for negative temperature
-// Expected: Returns temperature scaled by 100 (e.g., -15.5°C returns -1550)
+// Сценарий: Получение температуры в единицах 0.01°C для отрицательной температуры
+// Ожидается: Возвращается температура, умноженная на 100 (например, -15.5°C -> -1550)
 static void test_get_temperature_negative(void)
 {
     LOG_INFO("Testing get temperature - negative values");
@@ -134,8 +134,8 @@ static void test_get_temperature_negative(void)
     TEST_ASSERT_EQUAL_INT16_MESSAGE(-1550, temp_x100, "Temperature x100 should be -1550 for -15.5°C");
 }
 
-// Scenario: Get temperature value at exactly 0°C
-// Expected: Returns 0
+// Сценарий: Получение температуры ровно при 0°C
+// Ожидается: Возвращается 0
 static void test_get_temperature_zero(void)
 {
     LOG_INFO("Testing get temperature - zero");
@@ -148,240 +148,255 @@ static void test_get_temperature_zero(void)
 
 
 #if defined(EC_GPIO_HEATER)
-// Scenario: Temperature below heater ON threshold with Vin power present
-// Expected: Heater GPIO turns HIGH (heater enabled)
+// Сценарий: Температура ниже порога включения нагревателя при наличии питания Vin
+// Ожидается: GPIO нагревателя переходит в HIGH (нагреватель включен)
 static void test_heater_turns_on_at_low_temperature(void)
 {
     LOG_INFO("Testing heater turns on at low temperature");
 
     temperature_control_init();
 
-    // Set temperature below heater ON threshold (EC_HEATER_ON_TEMP)
+    // Установка температуры ниже порога включения нагревателя (EC_HEATER_ON_TEMP)
     utest_ntc_set_temperature(F16(EC_HEATER_ON_TEMP - 1.0));
 
-    // Set power from Vin (heater requires Vin to be present)
+    // Установка питания от Vin (для нагревателя требуется наличие Vin)
     utest_wbmz_set_powered_from_wbmz(false);
     utest_vmon_set_ch_status(VMON_CHANNEL_V_IN, true);
 
     temperature_control_do_periodic_work();
 
-    // Check that heater GPIO is HIGH (on)
+    // Проверка, что GPIO нагревателя в HIGH (вкл)
     uint32_t state = utest_gpio_get_output_state(heater_pin);
     TEST_ASSERT_EQUAL_UINT32_MESSAGE(1, state, "Heater GPIO should be HIGH (on) at low temperature");
 }
 
-// Scenario: Temperature rises above heater OFF threshold while heater is on
-// Expected: Heater GPIO turns LOW (heater disabled)
+// Сценарий: Температура поднимается выше порога выключения при включенном нагревателе
+// Ожидается: GPIO нагревателя переходит в LOW (нагреватель выключен)
 static void test_heater_turns_off_at_high_temperature(void)
 {
     LOG_INFO("Testing heater turns off at high temperature");
 
     temperature_control_init();
 
-    // First turn heater on
+    // Сначала включаем нагреватель
     utest_ntc_set_temperature(F16(EC_HEATER_ON_TEMP - 1.0));
     utest_wbmz_set_powered_from_wbmz(false);
     utest_vmon_set_ch_status(VMON_CHANNEL_V_IN, true);
     temperature_control_do_periodic_work();
 
-    // Verify heater is on
+    // Убеждаемся, что нагреватель включен
     uint32_t state = utest_gpio_get_output_state(heater_pin);
     TEST_ASSERT_EQUAL_UINT32_MESSAGE(1, state, "Heater should be on initially");
 
-    // Then set temperature above heater OFF threshold (EC_HEATER_OFF_TEMP)
+    // Затем устанавливаем температуру выше порога выключения (EC_HEATER_OFF_TEMP)
     utest_ntc_set_temperature(F16(EC_HEATER_OFF_TEMP + 1.0));
     temperature_control_do_periodic_work();
 
-    // Check that heater GPIO is LOW (off)
+    // Проверка, что GPIO нагревателя в LOW (выключен)
     state = utest_gpio_get_output_state(heater_pin);
     TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, state, "Heater GPIO should be LOW (off) at high temperature");
 }
 
-// Scenario: Low temperature but system powered from WBMZ (no Vin)
-// Expected: Heater stays LOW (off) to avoid drawing power from WBMZ
+// Сценарий: Низкая температура, но система питается от WBMZ (без Vin)
+// Ожидается: Нагреватель остается в LOW (выключен), чтобы не потреблять питание от WBMZ
 static void test_heater_stays_off_when_powered_from_wbmz(void)
 {
     LOG_INFO("Testing heater stays off when powered from WBMZ");
 
     temperature_control_init();
 
-    // Set low temperature
+    // Установка низкой температуры
     utest_ntc_set_temperature(F16(EC_HEATER_ON_TEMP - 1.0));
 
-    // Set power from WBMZ (heater should not turn on)
+    // Установка питания от WBMZ (нагреватель не должен включиться)
     utest_wbmz_set_powered_from_wbmz(true);
     utest_vmon_set_ch_status(VMON_CHANNEL_V_IN, false);
 
     temperature_control_do_periodic_work();
 
-    // Check that heater GPIO is LOW (off)
+    // Проверка, что GPIO нагревателя в LOW (выключен)
     uint32_t state = utest_gpio_get_output_state(heater_pin);
     TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, state, "Heater GPIO should stay LOW (off) when powered from WBMZ");
 }
 
-// Scenario: Low temperature but Vin is not present
-// Expected: Heater stays LOW (off) due to lack of input power
+// Сценарий: Низкая температура, но Vin отсутствует
+// Ожидается: Нагреватель остается в LOW (выключен) из-за отсутствия входного питания
 static void test_heater_stays_off_when_vin_not_present(void)
 {
     LOG_INFO("Testing heater stays off when Vin not present");
 
     temperature_control_init();
 
-    // Set low temperature
+    // Установка низкой температуры
     utest_ntc_set_temperature(F16(EC_HEATER_ON_TEMP - 1.0));
 
-    // Set no Vin (heater should not turn on)
+    // Отключим Vin (нагреватель не должен включиться)
     utest_wbmz_set_powered_from_wbmz(false);
     utest_vmon_set_ch_status(VMON_CHANNEL_V_IN, false);
 
     temperature_control_do_periodic_work();
 
-    // Check that heater GPIO is LOW (off)
+    // Проверка, что GPIO нагревателя в LOW (выключен)
     uint32_t state = utest_gpio_get_output_state(heater_pin);
     TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, state, "Heater GPIO should stay LOW (off) when Vin not present");
 }
 
-// Scenario: Temperature cycles around ON/OFF thresholds
-// Expected: Hysteresis prevents rapid on/off cycling; heater turns on below
-// ON threshold and turns off above OFF threshold
+// Сценарий: Циклическое изменение температуры рядом с порогами ON/OFF
+// Ожидается: Гистерезис предотвращает частые переключения; нагреватель включается ниже
+// порога ON и выключается выше порога OFF
 static void test_heater_hysteresis(void)
 {
     LOG_INFO("Testing heater hysteresis");
 
     temperature_control_init();
 
-    // Heater ON threshold: EC_HEATER_ON_TEMP, OFF threshold: EC_HEATER_OFF_TEMP
+    // Порог включения нагревателя: EC_HEATER_ON_TEMP, порог выключения: EC_HEATER_OFF_TEMP
     utest_wbmz_set_powered_from_wbmz(false);
     utest_vmon_set_ch_status(VMON_CHANNEL_V_IN, true);
 
-    // Start with low temperature - heater should turn on
+    // Начинаем с низкой температуры: нагреватель должен включиться
     utest_ntc_set_temperature(F16(EC_HEATER_ON_TEMP - 1.0));
     temperature_control_do_periodic_work();
+    uint32_t state = utest_gpio_get_output_state(heater_pin);
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(1, state, "Heater should turn ON below ON threshold");
 
-    // Temperature rises but still below OFF threshold
+    // Температура растет, но все еще ниже порога OFF
     utest_ntc_set_temperature(F16((EC_HEATER_ON_TEMP + EC_HEATER_OFF_TEMP) / 2.0));
     temperature_control_do_periodic_work();
-    // Heater should still be on (above ON, below OFF)
+    // Нагреватель должен оставаться включенным (выше ON, ниже OFF)
+    state = utest_gpio_get_output_state(heater_pin);
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(1, state, "Heater should stay ON inside hysteresis band");
 
-    // Temperature rises above OFF threshold
+    // Температура поднимается выше порога OFF
     utest_ntc_set_temperature(F16(EC_HEATER_OFF_TEMP + 1.0));
     temperature_control_do_periodic_work();
-    // Heater should turn off
+    // Нагреватель должен выключиться
+    state = utest_gpio_get_output_state(heater_pin);
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, state, "Heater should turn OFF above OFF threshold");
 
-    // Temperature drops but still above ON threshold
+    // Температура падает, но все еще выше порога ON
     utest_ntc_set_temperature(F16((EC_HEATER_ON_TEMP + EC_HEATER_OFF_TEMP) / 2.0));
     temperature_control_do_periodic_work();
-    // Heater should still be off (below OFF, above ON)
+    // Нагреватель должен оставаться выключенным (ниже OFF, выше ON)
+    state = utest_gpio_get_output_state(heater_pin);
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, state, "Heater should stay OFF inside hysteresis band");
 
-    // Temperature drops below ON threshold
+    // Температура падает ниже порога ON
     utest_ntc_set_temperature(F16(EC_HEATER_ON_TEMP - 1.0));
     temperature_control_do_periodic_work();
-    // Heater should turn on again
-
-    TEST_PASS();
+    // Нагреватель должен снова включиться
+    state = utest_gpio_get_output_state(heater_pin);
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(1, state, "Heater should turn ON again below ON threshold");
 }
 
-// Scenario: Heater running on Vin, then system switches to WBMZ power
-// Expected: Heater automatically turns off when power source changes
+// Сценарий: Нагреватель работает от Vin, затем система переключается на питание WBMZ
+// Ожидается: Нагреватель автоматически выключается при смене источника питания
 static void test_heater_turns_off_when_wbmz_power_enabled_during_heating(void)
 {
     LOG_INFO("Testing heater turns off when switched to WBMZ power during heating");
 
     temperature_control_init();
 
-    // Set low temperature and proper power conditions to enable heater
+    // Установка низкой температуры и корректных условий питания для включения нагревателя
     utest_ntc_set_temperature(F16(EC_HEATER_ON_TEMP - 1.0));
     utest_wbmz_set_powered_from_wbmz(false);
     utest_vmon_set_ch_status(VMON_CHANNEL_V_IN, true);
 
     temperature_control_do_periodic_work();
 
-    // Verify heater turned on
+    // Убеждаемся, что нагреватель включился
     uint32_t state = utest_gpio_get_output_state(heater_pin);
     TEST_ASSERT_EQUAL_UINT32_MESSAGE(1, state, "Heater should be ON at low temperature with Vin");
 
-    // Now switch to WBMZ power while heater is running
+    // Теперь переключаемся на питание WBMZ при работающем нагревателе
     utest_wbmz_set_powered_from_wbmz(true);
     temperature_control_do_periodic_work();
 
-    // Heater should automatically turn off
+    // Нагреватель должен автоматически выключиться
     state = utest_gpio_get_output_state(heater_pin);
     TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, state, "Heater should turn OFF when switched to WBMZ power");
 }
 
-// Scenario: Heater running on Vin, then Vin is lost
-// Expected: Heater automatically turns off when Vin is lost
+// Сценарий: Нагреватель работает от Vin, затем Vin пропадает
+// Ожидается: Нагреватель автоматически выключается при пропадании Vin
 static void test_heater_turns_off_when_vin_lost_during_heating(void)
 {
     LOG_INFO("Testing heater turns off when Vin is lost during heating");
 
     temperature_control_init();
 
-    // Set low temperature and proper power conditions to enable heater
+    // Установка низкой температуры и корректных условий питания для включения нагревателя
     utest_ntc_set_temperature(F16(EC_HEATER_ON_TEMP - 1.0));
     utest_wbmz_set_powered_from_wbmz(false);
     utest_vmon_set_ch_status(VMON_CHANNEL_V_IN, true);
 
     temperature_control_do_periodic_work();
 
-    // Verify heater turned on
+    // Убеждаемся, что нагреватель включился
     uint32_t state = utest_gpio_get_output_state(heater_pin);
     TEST_ASSERT_EQUAL_UINT32_MESSAGE(1, state, "Heater should be ON at low temperature with Vin");
 
-    // Now lose Vin while heater is running
+    // Теперь отключить Vin при работающем нагревателе
     utest_vmon_set_ch_status(VMON_CHANNEL_V_IN, false);
     temperature_control_do_periodic_work();
 
-    // Heater should automatically turn off
+    // Нагреватель должен автоматически выключиться
     state = utest_gpio_get_output_state(heater_pin);
     TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, state, "Heater should turn OFF when Vin is lost");
 }
 
-// Scenario: Force heater enable at high temperature (override normal control)
-// Expected: Heater turns on despite temperature being above threshold
+// Сценарий: Принудительное включение нагревателя при высокой температуре (в обход штатного управления)
+// Ожидается: Нагреватель включается, несмотря на температуру выше порога
 static void test_heater_force_control_enable(void)
 {
     LOG_INFO("Testing heater force control enable");
 
     temperature_control_init();
 
-    // Set high temperature (heater would normally be off)
+    // Установка высокой температуры (обычно нагреватель должен быть выключен при этом)
     utest_ntc_set_temperature(F16(25.0));
     utest_wbmz_set_powered_from_wbmz(false);
     utest_vmon_set_ch_status(VMON_CHANNEL_V_IN, true);
 
-    // Force enable heater
+    // Принудительно включаем нагреватель
     temperature_control_heater_force_control(true);
+    uint32_t state = utest_gpio_get_output_state(heater_pin);
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(1, state, "Heater should turn ON immediately in force mode");
 
-    // Heater should be on despite high temperature
+    // Нагреватель должен быть включен, несмотря на высокую температуру
     temperature_control_do_periodic_work();
-
-    TEST_PASS();
+    state = utest_gpio_get_output_state(heater_pin);
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(1, state, "Heater should stay ON in force mode");
 }
 
-// Scenario: Disable forced heater control, then set low temperature
-// Expected: Heater returns to normal temperature-based control
+// Сценарий: Отключение принудительного режима нагревателя, затем установка низкой температуры
+// Ожидается: Нагреватель возвращается к обычному управлению по температуре
 static void test_heater_force_control_disable(void)
 {
     LOG_INFO("Testing heater force control disable");
 
     temperature_control_init();
 
-    // Force enable heater first
+    // Сначала принудительно включаем нагреватель
     utest_ntc_set_temperature(F16(25.0));
     utest_wbmz_set_powered_from_wbmz(false);
     utest_vmon_set_ch_status(VMON_CHANNEL_V_IN, true);
     temperature_control_heater_force_control(true);
+    uint32_t state = utest_gpio_get_output_state(heater_pin);
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(1, state, "Heater should be ON in force mode");
 
-    // Disable force control
+    // Отключаем принудительное управление
     temperature_control_heater_force_control(false);
+    temperature_control_do_periodic_work();
+    state = utest_gpio_get_output_state(heater_pin);
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, state, "Heater should turn OFF after force mode is disabled at high temperature");
 
-    // Set low temperature
+    // Установка низкой температуры
     utest_ntc_set_temperature(F16(EC_HEATER_ON_TEMP - 1.0));
     temperature_control_do_periodic_work();
-    // Heater should now be controlled by temperature
-
-    TEST_PASS();
+    // Теперь нагреватель должен управляться температурой
+    state = utest_gpio_get_output_state(heater_pin);
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(1, state, "Heater should be controlled by temperature after force mode is disabled");
 }
 #endif
 

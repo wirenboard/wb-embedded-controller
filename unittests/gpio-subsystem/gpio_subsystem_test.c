@@ -17,14 +17,14 @@
 #define LOG_LEVEL LOG_LEVEL_INFO
 #include "console_log.h"
 
-// GPIO enumeration matching gpio-subsytem.c
+// Перечисление GPIO, соответствующее gpio-subsytem.c
 enum ec_ext_gpio {
     EC_EXT_GPIO_A1,
     EC_EXT_GPIO_A2,
     EC_EXT_GPIO_A3,
     EC_EXT_GPIO_A4,
     EC_EXT_GPIO_V_OUT,
-    // Order of TX, RX, RTS must match the order in enum mod_gpio from shared-gpio.h
+    // Порядок TX, RX, RTS должен соответствовать порядку в enum mod_gpio из shared-gpio.h
     EC_EXT_GPIO_MOD1_TX,
     EC_EXT_GPIO_MOD1_RX,
     EC_EXT_GPIO_MOD1_RTS,
@@ -35,14 +35,14 @@ enum ec_ext_gpio {
     EC_EXT_GPIO_COUNT
 };
 
-// Values in GPIO_AF region (2 bits per pin) matching gpio-subsytem.c
+// Значения в регионе GPIO_AF (2 бита на пин), соответствующие gpio-subsytem.c
 enum gpio_regmap_af {
     GPIO_REGMAP_AF_GPIO = 0,
     GPIO_REGMAP_AF_UART = 1,
 };
 
 #ifdef EC_MOD1_MOD2_GPIO_CONTROL
-// AF index for MOD GPIOs (calculated as: mod * MOD_GPIO_COUNT + mod_gpio)
+// Индекс AF для MOD GPIO (вычисляется как: mod * MOD_GPIO_COUNT + mod_gpio)
 enum gpio_af_index {
     GPIO_AF_MOD1_TX = 0,
     GPIO_AF_MOD1_RX = 1,
@@ -52,19 +52,19 @@ enum gpio_af_index {
     GPIO_AF_MOD2_RTS = 5,
 };
 
-// Calculate AF index from mod and mod_gpio (matching gpio-subsytem.c logic)
+// Вычисление индекса AF из mod и mod_gpio (соответствует логике gpio-subsytem.c)
 #define GPIO_AF_INDEX(mod, mod_gpio) ((mod) * MOD_GPIO_COUNT + (mod_gpio))
 
-// Helper macro to set AF value for specific MOD GPIO
+// Вспомогательный макрос для установки значения AF для конкретного MOD GPIO
 #define GPIO_AF_SET(gpio_af_index, af_value) ((af_value) << ((gpio_af_index) * 2))
 #endif
 
-// V_OUT GPIO pin
+// Пин V_OUT GPIO
 static const gpio_pin_t v_out_gpio = { EC_GPIO_VOUT_EN };
 
 void setUp(void)
 {
-    // Reset all mock states
+    // Сброс всех состояний моков
     utest_gpio_reset_instances();
     utest_regmap_reset();
     utest_vmon_reset();
@@ -79,29 +79,29 @@ void tearDown(void)
 
 }
 
-// Scenario: Initialize GPIO subsystem
-// Expected: V_OUT pin configured as output push-pull and set LOW,
-// all shared GPIOs in INPUT mode
+// Сценарий: Инициализация подсистемы GPIO
+// Ожидается: пин V_OUT сконфигурирован как выход push-pull и установлен в LOW,
+// все разделяемые GPIO в режиме INPUT
 static void test_gpio_init(void)
 {
     LOG_INFO("Testing GPIO initialization");
 
     gpio_init();
 
-    // Check that V_OUT GPIO is configured as output
+    // Проверка, что V_OUT GPIO сконфигурирован как выход
     uint32_t mode = utest_gpio_get_mode(v_out_gpio);
     TEST_ASSERT_EQUAL_UINT32_MESSAGE(GPIO_MODE_OUTPUT, mode, "V_OUT GPIO should be configured as OUTPUT");
 
-    // Check that V_OUT GPIO is configured as push-pull
+    // Проверка, что V_OUT GPIO сконфигурирован как push-pull
     uint32_t otype = utest_gpio_get_output_type(v_out_gpio);
     TEST_ASSERT_EQUAL_UINT32_MESSAGE(GPIO_OTYPE_PUSH_PULL, otype, "V_OUT GPIO should be configured as PUSH-PULL");
 
-    // Check that V_OUT is off after init
+    // Проверка, что V_OUT выключен после инициализации
     uint32_t state = utest_gpio_get_output_state(v_out_gpio);
     TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, state, "V_OUT GPIO should be LOW (off) after initialization");
 
 #ifdef EC_MOD1_MOD2_GPIO_CONTROL
-    // Check that shared_gpio was initialized (all GPIOs should be in INPUT mode)
+    // Проверка, что shared_gpio был инициализирован (все GPIO должны быть в режиме INPUT)
     for (unsigned mod = 0; mod < MOD_COUNT; mod++) {
         for (unsigned gpio = 0; gpio < MOD_GPIO_COUNT; gpio++) {
             enum mod_gpio_mode gpio_mode = utest_shared_gpio_get_mode(mod, gpio);
@@ -111,8 +111,8 @@ static void test_gpio_init(void)
 #endif
 }
 
-// Scenario: Reset GPIO subsystem after initialization
-// Expected: All regmap regions initialized, MOD GPIOs set to INPUT mode
+// Сценарий: Сброс подсистемы GPIO после инициализации
+// Ожидается: Все регионы regmap инициализированы, MOD GPIO установлены в режим INPUT
 static void test_gpio_reset(void)
 {
     LOG_INFO("Testing GPIO reset");
@@ -120,7 +120,7 @@ static void test_gpio_reset(void)
     gpio_init();
     gpio_reset();
 
-    // After reset, check that regmap regions are initialized
+    // После сброса проверка, что регионы regmap инициализированы
     struct REGMAP_GPIO_CTRL gpio_ctrl;
     bool result = utest_regmap_get_region_data(REGMAP_REGION_GPIO_CTRL, &gpio_ctrl, sizeof(gpio_ctrl));
     TEST_ASSERT_TRUE_MESSAGE(result, "Should be able to read GPIO_CTRL region after reset");
@@ -134,7 +134,7 @@ static void test_gpio_reset(void)
     TEST_ASSERT_TRUE_MESSAGE(result, "Should be able to read GPIO_AF region after reset");
 
 #ifdef EC_MOD1_MOD2_GPIO_CONTROL
-    // After reset, all MOD GPIOs should be in INPUT mode
+    // После сброса все MOD GPIO должны быть в режиме INPUT
     for (unsigned mod = 0; mod < MOD_COUNT; mod++) {
         for (unsigned gpio = 0; gpio < MOD_GPIO_COUNT; gpio++) {
             enum mod_gpio_mode mode = utest_shared_gpio_get_mode(mod, gpio);
@@ -146,8 +146,8 @@ static void test_gpio_reset(void)
 
 
 #ifdef EC_MOD1_MOD2_GPIO_CONTROL
-// Scenario: Change MOD GPIO direction from INPUT to OUTPUT via regmap
-// Expected: GPIO mode changes to OUTPUT in shared GPIO
+// Сценарий: Изменение направления MOD GPIO с INPUT на OUTPUT через regmap
+// Ожидается: Режим GPIO изменяется на OUTPUT в shared GPIO
 static void test_gpio_direction_change_input_to_output(void)
 {
     LOG_INFO("Testing GPIO direction change from INPUT to OUTPUT");
@@ -155,7 +155,7 @@ static void test_gpio_direction_change_input_to_output(void)
     gpio_init();
     gpio_reset();
 
-    // Set MOD2_RX as output
+    // Устанавливаем MOD2_RX как выход
     struct REGMAP_GPIO_DIR gpio_dir;
     gpio_dir.gpio_dir = BIT(EC_EXT_GPIO_MOD2_RX);
     regmap_set_region_data(REGMAP_REGION_GPIO_DIR, &gpio_dir, sizeof(gpio_dir));
@@ -163,13 +163,13 @@ static void test_gpio_direction_change_input_to_output(void)
 
     gpio_do_periodic_work();
 
-    // Check that MOD2_RX mode changed to OUTPUT
+    // Проверка, что режим MOD2_RX изменился на OUTPUT
     enum mod_gpio_mode mode = utest_shared_gpio_get_mode(MOD2, MOD_GPIO_RX);
     TEST_ASSERT_EQUAL_MESSAGE(MOD_GPIO_MODE_OUTPUT, mode, "MOD2_RX should be in OUTPUT mode");
 }
 
-// Scenario: Change MOD GPIO direction from OUTPUT back to INPUT via regmap
-// Expected: GPIO mode changes back to INPUT in shared GPIO
+// Сценарий: Изменение направления MOD GPIO с OUTPUT обратно на INPUT через regmap
+// Ожидается: Режим GPIO изменяется обратно на INPUT в shared GPIO
 static void test_gpio_direction_change_output_to_input(void)
 {
     LOG_INFO("Testing GPIO direction change from OUTPUT to INPUT");
@@ -177,26 +177,26 @@ static void test_gpio_direction_change_output_to_input(void)
     gpio_init();
     gpio_reset();
 
-    // First set MOD1_RTS as output
+    // Сначала устанавливаем MOD1_RTS как выход
     struct REGMAP_GPIO_DIR gpio_dir;
     gpio_dir.gpio_dir = BIT(EC_EXT_GPIO_MOD1_RTS);
     regmap_set_region_data(REGMAP_REGION_GPIO_DIR, &gpio_dir, sizeof(gpio_dir));
     utest_regmap_mark_region_changed(REGMAP_REGION_GPIO_DIR);
     gpio_do_periodic_work();
 
-    // Now change back to input
+    // Теперь изменяем обратно на вход
     gpio_dir.gpio_dir = 0;
     regmap_set_region_data(REGMAP_REGION_GPIO_DIR, &gpio_dir, sizeof(gpio_dir));
     utest_regmap_mark_region_changed(REGMAP_REGION_GPIO_DIR);
     gpio_do_periodic_work();
 
-    // Check that MOD1_RTS mode changed back to INPUT
+    // Проверка, что режим MOD1_RTS изменился обратно на INPUT
     enum mod_gpio_mode mode = utest_shared_gpio_get_mode(MOD1, MOD_GPIO_RTS);
     TEST_ASSERT_EQUAL_MESSAGE(MOD_GPIO_MODE_INPUT, mode, "MOD1_RTS should be in INPUT mode");
 }
 
-// Scenario: Set MOD GPIO as output and change its value via regmap
-// Expected: Output value changes from HIGH to LOW correctly
+// Сценарий: Установка MOD GPIO как выход и изменение его значения через regmap
+// Ожидается: Состояние на выходе правильно изменяется с HIGH на LOW
 static void test_gpio_set_output_value(void)
 {
     LOG_INFO("Testing GPIO output value setting");
@@ -204,37 +204,37 @@ static void test_gpio_set_output_value(void)
     gpio_init();
     gpio_reset();
 
-    // Set MOD2_TX as output
+    // Устанавливаем MOD2_TX как выход
     struct REGMAP_GPIO_DIR gpio_dir;
     gpio_dir.gpio_dir = BIT(EC_EXT_GPIO_MOD2_TX);
     regmap_set_region_data(REGMAP_REGION_GPIO_DIR, &gpio_dir, sizeof(gpio_dir));
     utest_regmap_mark_region_changed(REGMAP_REGION_GPIO_DIR);
     gpio_do_periodic_work();
 
-    // Set output value to HIGH
+    // Устанавливаем состояние на выходе в HIGH
     struct REGMAP_GPIO_CTRL gpio_ctrl;
-    gpio_ctrl.gpio_ctrl = BIT(EC_EXT_GPIO_MOD2_TX);  // MOD2_TX HIGH
+    gpio_ctrl.gpio_ctrl = BIT(EC_EXT_GPIO_MOD2_TX);  // MOD2_TX в HIGH
     regmap_set_region_data(REGMAP_REGION_GPIO_CTRL, &gpio_ctrl, sizeof(gpio_ctrl));
     utest_regmap_mark_region_changed(REGMAP_REGION_GPIO_CTRL);
     gpio_do_periodic_work();
 
-    // Check output value
+    // Проверка состояния на выходе
     bool value = utest_shared_gpio_get_output_value(MOD2, MOD_GPIO_TX);
     TEST_ASSERT_TRUE_MESSAGE(value, "MOD2_TX output should be HIGH");
 
-    // Set output value to LOW
+    // Устанавливаем состояния на выходе в LOW
     gpio_ctrl.gpio_ctrl = 0;
     regmap_set_region_data(REGMAP_REGION_GPIO_CTRL, &gpio_ctrl, sizeof(gpio_ctrl));
     utest_regmap_mark_region_changed(REGMAP_REGION_GPIO_CTRL);
     gpio_do_periodic_work();
 
-    // Check output value
+    // Проверка состояния на выходе
     value = utest_shared_gpio_get_output_value(MOD2, MOD_GPIO_TX);
     TEST_ASSERT_FALSE_MESSAGE(value, "MOD2_TX output should be LOW");
 }
 
-// Scenario: Read MOD GPIO input value and reflect it in regmap
-// Expected: Input state (HIGH/LOW) correctly reported in GPIO_CTRL register
+// Сценарий: Чтение состояния входа MOD GPIO и отражение его в regmap
+// Ожидается: состояние входа (HIGH/LOW) правильно отображается в регистре GPIO_CTRL
 static void test_gpio_read_input_value(void)
 {
     LOG_INFO("Testing GPIO input value reading");
@@ -242,19 +242,19 @@ static void test_gpio_read_input_value(void)
     gpio_init();
     gpio_reset();
 
-    // MOD1_RX is in INPUT mode by default after reset
-    // Set input value to HIGH
+    // MOD1_RX находится в режиме INPUT по умолчанию после сброса
+    // Установка состояния входа в HIGH
     utest_shared_gpio_set_input_value(MOD1, MOD_GPIO_RX, true);
 
     gpio_do_periodic_work();
 
-    // Read back GPIO_CTRL to check input state
+    // Читаем обратно GPIO_CTRL для проверки состояния входа
     struct REGMAP_GPIO_CTRL gpio_ctrl;
     bool result = utest_regmap_get_region_data(REGMAP_REGION_GPIO_CTRL, &gpio_ctrl, sizeof(gpio_ctrl));
     TEST_ASSERT_TRUE_MESSAGE(result, "Should be able to read GPIO_CTRL");
     TEST_ASSERT_TRUE_MESSAGE(gpio_ctrl.gpio_ctrl & BIT(EC_EXT_GPIO_MOD1_RX), "MOD1_RX input should be HIGH");
 
-    // Set input value to LOW
+    // Установка состояния входа в LOW
     utest_shared_gpio_set_input_value(MOD1, MOD_GPIO_RX, false);
     gpio_do_periodic_work();
 
@@ -263,8 +263,8 @@ static void test_gpio_read_input_value(void)
     TEST_ASSERT_FALSE_MESSAGE(gpio_ctrl.gpio_ctrl & BIT(EC_EXT_GPIO_MOD1_RX), "MOD1_RX input should be LOW");
 }
 
-// Scenario: Set MOD GPIO to UART alternate function via regmap
-// Expected: GPIO mode changes to AF_UART in shared GPIO
+// Сценарий: Установка MOD GPIO в альтернативную функцию UART через regmap
+// Ожидается: режим GPIO изменяется на AF_UART в shared GPIO
 static void test_gpio_af_mode_uart(void)
 {
     LOG_INFO("Testing GPIO AF mode - UART");
@@ -272,20 +272,20 @@ static void test_gpio_af_mode_uart(void)
     gpio_init();
     gpio_reset();
 
-    // Set MOD1_TX to UART mode
+    // Установка MOD1_TX в режим UART
     struct REGMAP_GPIO_AF gpio_af;
     gpio_af.af = GPIO_AF_SET(GPIO_AF_MOD1_TX, GPIO_REGMAP_AF_UART);
     regmap_set_region_data(REGMAP_REGION_GPIO_AF, &gpio_af, sizeof(gpio_af));
     utest_regmap_mark_region_changed(REGMAP_REGION_GPIO_AF);
     gpio_do_periodic_work();
 
-    // Check that MOD1_TX is in UART mode
+    // Проверка, что MOD1_TX в режиме UART
     enum mod_gpio_mode mode = utest_shared_gpio_get_mode(MOD1, MOD_GPIO_TX);
     TEST_ASSERT_EQUAL_MESSAGE(MOD_GPIO_MODE_AF_UART, mode, "MOD1_TX should be in UART AF mode");
 }
 
-// Scenario: Try to change direction of GPIO that is in UART AF mode
-// Expected: GPIO remains in AF_UART mode, direction change is ignored
+// Сценарий: Попытка изменить направление GPIO, находящегося в режиме AF UART
+// Ожидается: GPIO остается в режиме AF_UART, изменение направления игнорируется
 static void test_gpio_af_mode_prevents_direction_change(void)
 {
     LOG_INFO("Testing that AF mode prevents direction change");
@@ -293,27 +293,27 @@ static void test_gpio_af_mode_prevents_direction_change(void)
     gpio_init();
     gpio_reset();
 
-    // Set MOD2_RX to UART mode
+    // Установка MOD2_RX в режим UART
     struct REGMAP_GPIO_AF gpio_af;
     gpio_af.af = GPIO_AF_SET(GPIO_AF_MOD2_RX, GPIO_REGMAP_AF_UART);
     regmap_set_region_data(REGMAP_REGION_GPIO_AF, &gpio_af, sizeof(gpio_af));
     utest_regmap_mark_region_changed(REGMAP_REGION_GPIO_AF);
     gpio_do_periodic_work();
 
-    // Try to change direction to OUTPUT
+    // Попытка изменить направление на OUTPUT
     struct REGMAP_GPIO_DIR gpio_dir;
     gpio_dir.gpio_dir = BIT(EC_EXT_GPIO_MOD2_RX);
     regmap_set_region_data(REGMAP_REGION_GPIO_DIR, &gpio_dir, sizeof(gpio_dir));
     utest_regmap_mark_region_changed(REGMAP_REGION_GPIO_DIR);
     gpio_do_periodic_work();
 
-    // Mode should still be UART, not OUTPUT
+    // Режим все еще должен быть UART, а не OUTPUT
     enum mod_gpio_mode mode = utest_shared_gpio_get_mode(MOD2, MOD_GPIO_RX);
     TEST_ASSERT_EQUAL_MESSAGE(MOD_GPIO_MODE_AF_UART, mode, "MOD2_RX should remain in UART AF mode");
 }
 
-// Scenario: Set GPIO output value in regmap, then change pin direction to output
-// Expected: Output value applied when pin becomes output
+// Сценарий: Установка состояния выхода GPIO в regmap, затем изменение направления пина на выход
+// Ожидается: состояние выхода применяется, когда пин становится выходом
 static void test_gpio_output_value_preserved_on_direction_change(void)
 {
     LOG_INFO("Testing that output value is preserved when changing direction");
@@ -321,27 +321,27 @@ static void test_gpio_output_value_preserved_on_direction_change(void)
     gpio_init();
     gpio_reset();
 
-    // Step 1: Set desired output value while pin is still input
+    // Шаг 1: Установка желаемого состояния выхода, пока пин еще в режиме входа
     struct REGMAP_GPIO_CTRL gpio_ctrl;
-    gpio_ctrl.gpio_ctrl = BIT(EC_EXT_GPIO_MOD2_RTS);  // MOD2_RTS = HIGH
+    gpio_ctrl.gpio_ctrl = BIT(EC_EXT_GPIO_MOD2_RTS);  // MOD2_RTS в HIGH
     regmap_set_region_data(REGMAP_REGION_GPIO_CTRL, &gpio_ctrl, sizeof(gpio_ctrl));
     utest_regmap_mark_region_changed(REGMAP_REGION_GPIO_CTRL);
     gpio_do_periodic_work();
 
-    // Step 2: Change direction to output
+    // Шаг 2: Изменение направление на выход
     struct REGMAP_GPIO_DIR gpio_dir;
-    gpio_dir.gpio_dir = BIT(EC_EXT_GPIO_MOD2_RTS);  // MOD2_RTS = OUTPUT
+    gpio_dir.gpio_dir = BIT(EC_EXT_GPIO_MOD2_RTS);  // MOD2_RTS в OUTPUT
     regmap_set_region_data(REGMAP_REGION_GPIO_DIR, &gpio_dir, sizeof(gpio_dir));
     utest_regmap_mark_region_changed(REGMAP_REGION_GPIO_DIR);
     gpio_do_periodic_work();
 
-    // Check that output value was set to HIGH as requested
+    // Проверка, что состояние выхода было установлено в HIGH, как запрошено
     bool value = utest_shared_gpio_get_output_value(MOD2, MOD_GPIO_RTS);
     TEST_ASSERT_TRUE_MESSAGE(value, "MOD2_RTS output should be HIGH after direction change");
 }
 
-// Scenario: Change GPIO from input to output without setting gpio_ctrl
-// Expected: Current input value preserved as initial output value
+// Сценарий: Изменение GPIO с входа на выход без установки gpio_ctrl
+// Ожидается: текущее состояние входа сохраняется как начальное состояние выхода
 static void test_gpio_output_value_preserved_without_request(void)
 {
     LOG_INFO("Testing that output value is preserved without prior request");
@@ -349,25 +349,25 @@ static void test_gpio_output_value_preserved_without_request(void)
     gpio_init();
     gpio_reset();
 
-    // Set MOD1_TX as input with HIGH value
+    // Установка MOD1_TX как вход с состоянием HIGH
     utest_shared_gpio_set_input_value(MOD1, MOD_GPIO_TX, true);
     gpio_do_periodic_work();
 
-    // Now change to output WITHOUT setting gpio_ctrl first
-    // The current input value should be preserved
+    // Теперь изменяем на выход БЕЗ предварительной установки gpio_ctrl
+    // Текущее состояние входа должно быть сохранено
     struct REGMAP_GPIO_DIR gpio_dir;
     gpio_dir.gpio_dir = BIT(EC_EXT_GPIO_MOD1_TX);
     regmap_set_region_data(REGMAP_REGION_GPIO_DIR, &gpio_dir, sizeof(gpio_dir));
     utest_regmap_mark_region_changed(REGMAP_REGION_GPIO_DIR);
     gpio_do_periodic_work();
 
-    // Check that output value matches the previous input value (HIGH)
+    // Проверка, что состояние выхода соответствует предыдущему состоянию входа (HIGH)
     bool value = utest_shared_gpio_get_output_value(MOD1, MOD_GPIO_TX);
     TEST_ASSERT_TRUE_MESSAGE(value, "MOD1_TX output should preserve input HIGH value");
 }
 
-// Scenario: Set GPIO to UART AF mode and try to change direction
-// Expected: gpio_ctrl bit cleared for AF mode pin
+// Сценарий: Установка GPIO в режим AF UART и попытка изменить направление
+// Ожидается: бит gpio_ctrl очищается для пина в режиме AF
 static void test_gpio_af_mode_clears_ctrl_bit(void)
 {
     LOG_INFO("Testing that AF mode clears gpio_ctrl bit when direction changes");
@@ -375,38 +375,38 @@ static void test_gpio_af_mode_clears_ctrl_bit(void)
     gpio_init();
     gpio_reset();
 
-    // Set MOD1_RX to HIGH while in input mode
+    // Установка MOD1_RX в HIGH в режиме входа
     utest_shared_gpio_set_input_value(MOD1, MOD_GPIO_RX, true);
     gpio_do_periodic_work();
 
-    // Verify gpio_ctrl has the bit set
+    // Проверка, что gpio_ctrl имеет установленный бит
     struct REGMAP_GPIO_CTRL gpio_ctrl;
     bool result = utest_regmap_get_region_data(REGMAP_REGION_GPIO_CTRL, &gpio_ctrl, sizeof(gpio_ctrl));
     TEST_ASSERT_TRUE_MESSAGE(result, "Should be able to read GPIO_CTRL");
     TEST_ASSERT_TRUE_MESSAGE(gpio_ctrl.gpio_ctrl & BIT(EC_EXT_GPIO_MOD1_RX), "MOD1_RX bit should be set initially");
 
-    // Set MOD1_RX to UART mode
+    // Установка MOD1_RX в режим UART
     struct REGMAP_GPIO_AF gpio_af;
     gpio_af.af = GPIO_AF_SET(GPIO_AF_MOD1_RX, GPIO_REGMAP_AF_UART);
     regmap_set_region_data(REGMAP_REGION_GPIO_AF, &gpio_af, sizeof(gpio_af));
     utest_regmap_mark_region_changed(REGMAP_REGION_GPIO_AF);
     gpio_do_periodic_work();
 
-    // Try to change direction
+    // Попытка изменить направление
     struct REGMAP_GPIO_DIR gpio_dir;
     gpio_dir.gpio_dir = BIT(EC_EXT_GPIO_MOD1_RX);
     regmap_set_region_data(REGMAP_REGION_GPIO_DIR, &gpio_dir, sizeof(gpio_dir));
     utest_regmap_mark_region_changed(REGMAP_REGION_GPIO_DIR);
     gpio_do_periodic_work();
 
-    // gpio_ctrl bit should be cleared for AF mode pin
+    // Бит gpio_ctrl должен быть очищен для пина в режиме AF
     result = utest_regmap_get_region_data(REGMAP_REGION_GPIO_CTRL, &gpio_ctrl, sizeof(gpio_ctrl));
     TEST_ASSERT_TRUE_MESSAGE(result, "Should be able to read GPIO_CTRL");
     TEST_ASSERT_FALSE_MESSAGE(gpio_ctrl.gpio_ctrl & BIT(EC_EXT_GPIO_MOD1_RX), "MOD1_RX bit should be cleared in AF mode");
 }
 
-// Scenario: Attempt to change V_OUT pin direction to input via regmap
-// Expected: V_OUT always remains as output in regmap
+// Сценарий: Попытка изменить направление пина V_OUT на вход через regmap
+// Ожидается: V_OUT всегда остается выходом в regmap
 static void test_gpio_dir_preserves_v_out_as_output(void)
 {
     LOG_INFO("Testing that V_OUT always remains as output");
@@ -414,21 +414,21 @@ static void test_gpio_dir_preserves_v_out_as_output(void)
     gpio_init();
     gpio_reset();
 
-    // Try to set all GPIOs as inputs (including V_OUT)
+    // Попытка установить все GPIO как входы (включая V_OUT)
     struct REGMAP_GPIO_DIR gpio_dir;
-    gpio_dir.gpio_dir = 0;  // Try to set all as inputs
+    gpio_dir.gpio_dir = 0;
     regmap_set_region_data(REGMAP_REGION_GPIO_DIR, &gpio_dir, sizeof(gpio_dir));
     utest_regmap_mark_region_changed(REGMAP_REGION_GPIO_DIR);
     gpio_do_periodic_work();
 
-    // Read back GPIO_DIR - V_OUT bit should still be set
+    // Читаем обратно GPIO_DIR - бит V_OUT все еще должен быть установлен
     bool result = utest_regmap_get_region_data(REGMAP_REGION_GPIO_DIR, &gpio_dir, sizeof(gpio_dir));
     TEST_ASSERT_TRUE_MESSAGE(result, "Should be able to read GPIO_DIR");
     TEST_ASSERT_TRUE_MESSAGE(gpio_dir.gpio_dir & BIT(EC_EXT_GPIO_V_OUT), "V_OUT should always be output");
 }
 
-// Scenario: Set GPIO to GPIO mode (not AF) and toggle direction
-// Expected: GPIO mode switches between OUTPUT and INPUT
+// Сценарий: Установка GPIO в режим GPIO (не AF) и переключение направления
+// Ожидается: режим GPIO переключается между OUTPUT и INPUT
 static void test_gpio_af_switches_mode_based_on_direction(void)
 {
     LOG_INFO("Testing AF mode switches between INPUT/OUTPUT based on direction");
@@ -436,7 +436,7 @@ static void test_gpio_af_switches_mode_based_on_direction(void)
     gpio_init();
     gpio_reset();
 
-    // Set MOD2_TX to GPIO mode (AF = 0) and as OUTPUT
+    // Установка MOD2_TX в режим GPIO (AF = 0) и как OUTPUT
     struct REGMAP_GPIO_AF gpio_af;
     gpio_af.af = GPIO_AF_SET(GPIO_AF_MOD2_TX, GPIO_REGMAP_AF_GPIO);
     regmap_set_region_data(REGMAP_REGION_GPIO_AF, &gpio_af, sizeof(gpio_af));
@@ -448,23 +448,23 @@ static void test_gpio_af_switches_mode_based_on_direction(void)
     utest_regmap_mark_region_changed(REGMAP_REGION_GPIO_DIR);
     gpio_do_periodic_work();
 
-    // Should be OUTPUT
+    // Должен быть OUTPUT
     enum mod_gpio_mode mode = utest_shared_gpio_get_mode(MOD2, MOD_GPIO_TX);
     TEST_ASSERT_EQUAL_MESSAGE(MOD_GPIO_MODE_OUTPUT, mode, "MOD2_TX should be OUTPUT");
 
-    // Change direction to INPUT (keeping AF = GPIO)
+    // Смена направление на INPUT (сохраняя AF = GPIO)
     gpio_dir.gpio_dir = 0;
     regmap_set_region_data(REGMAP_REGION_GPIO_DIR, &gpio_dir, sizeof(gpio_dir));
     utest_regmap_mark_region_changed(REGMAP_REGION_GPIO_DIR);
     gpio_do_periodic_work();
 
-    // Should be INPUT now
+    // Теперь должен быть INPUT
     mode = utest_shared_gpio_get_mode(MOD2, MOD_GPIO_TX);
     TEST_ASSERT_EQUAL_MESSAGE(MOD_GPIO_MODE_INPUT, mode, "MOD2_TX should be INPUT");
 }
 
-// Scenario: Change output value of one GPIO while leaving another unchanged
-// Expected: Only the modified GPIO value changes, others remain as set
+// СЦенарий: Изменение состояния выхода одного GPIO оставляет другой без изменений
+// Ожидается: состояние изменяется только у измененного GPIO, остальные остаются как было установлено
 static void test_gpio_values_only_set_for_changed_pins(void)
 {
     LOG_INFO("Testing that GPIO values are only set for changed pins");
@@ -472,37 +472,37 @@ static void test_gpio_values_only_set_for_changed_pins(void)
     gpio_init();
     gpio_reset();
 
-    // Set MOD1_TX and MOD2_RX as outputs
+    // Установка MOD1_TX и MOD2_RX на выход
     struct REGMAP_GPIO_DIR gpio_dir;
     gpio_dir.gpio_dir = BIT(EC_EXT_GPIO_MOD1_TX) | BIT(EC_EXT_GPIO_MOD2_RX);
     regmap_set_region_data(REGMAP_REGION_GPIO_DIR, &gpio_dir, sizeof(gpio_dir));
     utest_regmap_mark_region_changed(REGMAP_REGION_GPIO_DIR);
     gpio_do_periodic_work();
 
-    // Set both to LOW initially
+    // Установка в LOW изначально
     struct REGMAP_GPIO_CTRL gpio_ctrl;
     gpio_ctrl.gpio_ctrl = 0;
     regmap_set_region_data(REGMAP_REGION_GPIO_CTRL, &gpio_ctrl, sizeof(gpio_ctrl));
     utest_regmap_mark_region_changed(REGMAP_REGION_GPIO_CTRL);
     gpio_do_periodic_work();
 
-    // Change only MOD1_TX to HIGH (MOD2_RX stays LOW)
+    // Изменения состояния только MOD1_TX на HIGH (MOD2_RX остается LOW)
     gpio_ctrl.gpio_ctrl = BIT(EC_EXT_GPIO_MOD1_TX);
     regmap_set_region_data(REGMAP_REGION_GPIO_CTRL, &gpio_ctrl, sizeof(gpio_ctrl));
     utest_regmap_mark_region_changed(REGMAP_REGION_GPIO_CTRL);
     gpio_do_periodic_work();
 
-    // MOD1_TX should be HIGH
+    // MOD1_TX должен быть HIGH
     bool value = utest_shared_gpio_get_output_value(MOD1, MOD_GPIO_TX);
     TEST_ASSERT_TRUE_MESSAGE(value, "MOD1_TX should be HIGH");
 
-    // MOD2_RX should still be LOW (unchanged)
+    // MOD2_RX все еще должен быть LOW (без изменений)
     value = utest_shared_gpio_get_output_value(MOD2, MOD_GPIO_RX);
     TEST_ASSERT_FALSE_MESSAGE(value, "MOD2_RX should be LOW");
 }
 
-// Scenario: Read GPIO states when some pins are outputs and some are inputs
-// Expected: Only INPUT pins are read, OUTPUT pins report their set value
+// Сценарий: Чтение состояний GPIO, когда некоторые пины - выходы, а некоторые - входы
+// Ожидается: читаются только INPUT пины, OUTPUT пины сообщают свое установленное значение
 static void test_gpio_collect_only_reads_inputs(void)
 {
     LOG_INFO("Testing that collect_gpio_states only reads INPUT pins");
@@ -510,7 +510,7 @@ static void test_gpio_collect_only_reads_inputs(void)
     gpio_init();
     gpio_reset();
 
-    // Set MOD1_TX as OUTPUT with value HIGH
+    // Установка MOD1_TX как OUTPUT со значением HIGH
     struct REGMAP_GPIO_DIR gpio_dir;
     gpio_dir.gpio_dir = BIT(EC_EXT_GPIO_MOD1_TX);
     regmap_set_region_data(REGMAP_REGION_GPIO_DIR, &gpio_dir, sizeof(gpio_dir));
@@ -522,28 +522,28 @@ static void test_gpio_collect_only_reads_inputs(void)
     utest_regmap_mark_region_changed(REGMAP_REGION_GPIO_CTRL);
     gpio_do_periodic_work();
 
-    // Set MOD1_RX as INPUT with value HIGH
+    // Установка MOD1_RX как INPUT со значением HIGH
     utest_shared_gpio_set_input_value(MOD1, MOD_GPIO_RX, true);
 
-    // Simulate physical pin state different from output value for MOD1_TX
-    // (this should be ignored since it's an output)
+    // Симуляция физического состояние пина, отличающегося от значения выхода для MOD1_TX
+    // (должно игнорироваться, поскольку это выход)
     utest_shared_gpio_set_input_value(MOD1, MOD_GPIO_TX, false);
 
     gpio_do_periodic_work();
 
-    // Read back GPIO_CTRL
+    // Читаем обратно GPIO_CTRL
     bool result = utest_regmap_get_region_data(REGMAP_REGION_GPIO_CTRL, &gpio_ctrl, sizeof(gpio_ctrl));
     TEST_ASSERT_TRUE_MESSAGE(result, "Should be able to read GPIO_CTRL");
 
-    // MOD1_RX (INPUT) should reflect input state (HIGH)
+    // MOD1_RX (INPUT) должен отражать состояние входа (HIGH)
     TEST_ASSERT_TRUE_MESSAGE(gpio_ctrl.gpio_ctrl & BIT(EC_EXT_GPIO_MOD1_RX), "MOD1_RX input should be HIGH");
 
-    // MOD1_TX (OUTPUT) should keep its output value (HIGH), not read from input
+    // MOD1_TX (OUTPUT) должен сохранить свое значение выхода (HIGH), а не читать с входа
     TEST_ASSERT_TRUE_MESSAGE(gpio_ctrl.gpio_ctrl & BIT(EC_EXT_GPIO_MOD1_TX), "MOD1_TX should keep output value HIGH");
 }
 
-// Scenario: Read GPIO states when one pin is in AF mode
-// Expected: AF mode pin's gpio_ctrl bit is cleared, not read from input
+// Сценарий: Чтение состояний GPIO, когда один пин в режиме AF
+// Ожидается: бит gpio_ctrl пина в режиме AF очищен, не читается с входа
 static void test_gpio_collect_ignores_af_pins(void)
 {
     LOG_INFO("Testing that collect_gpio_states ignores AF mode pins");
@@ -551,35 +551,35 @@ static void test_gpio_collect_ignores_af_pins(void)
     gpio_init();
     gpio_reset();
 
-    // Set MOD1_RX to UART mode
+    // Установка MOD1_RX в режим UART
     struct REGMAP_GPIO_AF gpio_af;
     gpio_af.af = GPIO_AF_SET(GPIO_AF_MOD1_RX, GPIO_REGMAP_AF_UART);
     regmap_set_region_data(REGMAP_REGION_GPIO_AF, &gpio_af, sizeof(gpio_af));
     utest_regmap_mark_region_changed(REGMAP_REGION_GPIO_AF);
     gpio_do_periodic_work();
 
-    // Set input value for MOD1_RX (should be ignored since it's in AF mode)
+    // Установка состояния входа для MOD1_RX (должно игнорироваться для режима AF)
     utest_shared_gpio_set_input_value(MOD1, MOD_GPIO_RX, true);
 
-    // Set MOD1_TX as INPUT with HIGH (should be read)
+    // Установка MOD1_TX как INPUT с HIGH (должно быть прочитано)
     utest_shared_gpio_set_input_value(MOD1, MOD_GPIO_TX, true);
 
     gpio_do_periodic_work();
 
-    // Read back GPIO_CTRL
+    // Чтение GPIO_CTRL
     struct REGMAP_GPIO_CTRL gpio_ctrl;
     bool result = utest_regmap_get_region_data(REGMAP_REGION_GPIO_CTRL, &gpio_ctrl, sizeof(gpio_ctrl));
     TEST_ASSERT_TRUE_MESSAGE(result, "Should be able to read GPIO_CTRL");
 
-    // MOD1_TX (INPUT in GPIO mode) should be HIGH
+    // MOD1_TX (INPUT в режиме GPIO) должен быть HIGH
     TEST_ASSERT_TRUE_MESSAGE(gpio_ctrl.gpio_ctrl & BIT(EC_EXT_GPIO_MOD1_TX), "MOD1_TX input should be HIGH");
 
-    // MOD1_RX (AF mode) should be cleared (not reading input)
+    // MOD1_RX (режим AF) должен быть сброшен (вход не читается)
     TEST_ASSERT_FALSE_MESSAGE(gpio_ctrl.gpio_ctrl & BIT(EC_EXT_GPIO_MOD1_RX), "MOD1_RX should be cleared in AF mode");
 }
 
-// Scenario: Set AF register to reserved values (2 or 3)
-// Expected: Reserved AF values are ignored, GPIO mode remains unchanged
+// Сценарий: Установка регистра AF на зарезервированные значения (2 или 3)
+// Ожидается: зарезервированные значения AF игнорируются, режим GPIO остается без изменений
 static void test_gpio_af_ignores_reserved_values(void)
 {
     LOG_INFO("Testing that undefined AF values (2, 3) are ignored");
@@ -587,42 +587,42 @@ static void test_gpio_af_ignores_reserved_values(void)
     gpio_init();
     gpio_reset();
 
-    // Set MOD1_TX to INPUT mode initially
+    // Установка MOD1_TX в режим INPUT изначально
     struct REGMAP_GPIO_DIR gpio_dir;
     gpio_dir.gpio_dir = 0;
     regmap_set_region_data(REGMAP_REGION_GPIO_DIR, &gpio_dir, sizeof(gpio_dir));
     utest_regmap_mark_region_changed(REGMAP_REGION_GPIO_DIR);
     gpio_do_periodic_work();
 
-    // Verify it's INPUT
+    // Проверка, что это INPUT
     enum mod_gpio_mode mode = utest_shared_gpio_get_mode(MOD1, MOD_GPIO_TX);
     TEST_ASSERT_EQUAL_MESSAGE(MOD_GPIO_MODE_INPUT, mode, "MOD1_TX should be INPUT initially");
 
-    // Set AF to reserved value 2 (neither GPIO nor UART)
+    // Установка AF в зарезервированное значение 2 (ни GPIO, ни UART)
     struct REGMAP_GPIO_AF gpio_af;
-    gpio_af.af = GPIO_AF_SET(GPIO_AF_MOD1_TX, 2);  // Reserved value
+    gpio_af.af = GPIO_AF_SET(GPIO_AF_MOD1_TX, 2);  // Зарезервированное значение
     regmap_set_region_data(REGMAP_REGION_GPIO_AF, &gpio_af, sizeof(gpio_af));
     utest_regmap_mark_region_changed(REGMAP_REGION_GPIO_AF);
     gpio_do_periodic_work();
 
-    // Mode should remain unchanged (INPUT) - reserved AF value is ignored
+    // Режим должен остаться без изменений (INPUT) - зарезервированное значение AF игнорируется
     mode = utest_shared_gpio_get_mode(MOD1, MOD_GPIO_TX);
     TEST_ASSERT_EQUAL_MESSAGE(MOD_GPIO_MODE_INPUT, mode, "MOD1_TX should remain INPUT when AF=2 (reserved)");
 
-    // Try another reserved value (3)
-    gpio_af.af = GPIO_AF_SET(GPIO_AF_MOD1_TX, 3);  // Reserved value
+    // Проверка другого зарезервированного значения (3)
+    gpio_af.af = GPIO_AF_SET(GPIO_AF_MOD1_TX, 3);  // Зарезервированное значение
     regmap_set_region_data(REGMAP_REGION_GPIO_AF, &gpio_af, sizeof(gpio_af));
     utest_regmap_mark_region_changed(REGMAP_REGION_GPIO_AF);
     gpio_do_periodic_work();
 
-    // Mode should still remain unchanged
+    // Режим все еще должен оставаться без изменений
     mode = utest_shared_gpio_get_mode(MOD1, MOD_GPIO_TX);
     TEST_ASSERT_EQUAL_MESSAGE(MOD_GPIO_MODE_INPUT, mode, "MOD1_TX should remain INPUT when AF=3 (reserved)");
 }
 #endif
 
-// Scenario: Set V_OUT ON in regmap with V_OUT voltage monitor OK
-// Expected: V_OUT GPIO is HIGH (enabled)
+// Сценарий: Установка V_OUT включенным в regmap при нормальном напряжении V_OUT
+// Ожидается: GPIO V_OUT в состоянии HIGH (включен)
 static void test_v_out_control_enabled_when_power_ok(void)
 {
     LOG_INFO("Testing V_OUT control - enabled when power OK");
@@ -630,24 +630,24 @@ static void test_v_out_control_enabled_when_power_ok(void)
     gpio_init();
     gpio_reset();
 
-    // Set V_OUT to ON in GPIO_CTRL
+    // Установка V_OUT в ON в GPIO_CTRL
     struct REGMAP_GPIO_CTRL gpio_ctrl;
     gpio_ctrl.gpio_ctrl = BIT(EC_EXT_GPIO_V_OUT);
     regmap_set_region_data(REGMAP_REGION_GPIO_CTRL, &gpio_ctrl, sizeof(gpio_ctrl));
     utest_regmap_mark_region_changed(REGMAP_REGION_GPIO_CTRL);
 
-    // Set V_OUT voltage monitor status to OK
+    // Установка статуса монитора напряжения V_OUT в OK
     utest_vmon_set_ch_status(VMON_CHANNEL_V_OUT, true);
 
     gpio_do_periodic_work();
 
-    // Check that V_OUT GPIO is HIGH
+    // Проверка, что GPIO V_OUT в состоянии HIGH
     uint32_t state = utest_gpio_get_output_state(v_out_gpio);
     TEST_ASSERT_EQUAL_UINT32_MESSAGE(1, state, "V_OUT GPIO should be HIGH when power is OK");
 }
 
-// Scenario: Set V_OUT ON in regmap but V_OUT voltage monitor is NOT OK
-// Expected: V_OUT GPIO is LOW (disabled for safety)
+// Сценарий: Установка V_OUT в ON в regmap при статусе монитора напряжения V_OUT НЕ OK
+// Ожидается: V_OUT GPIO в LOW (отключен для безопасности)
 static void test_v_out_control_disabled_when_power_not_ok(void)
 {
     LOG_INFO("Testing V_OUT control - disabled when power not OK");
@@ -655,24 +655,24 @@ static void test_v_out_control_disabled_when_power_not_ok(void)
     gpio_init();
     gpio_reset();
 
-    // Set V_OUT to ON in GPIO_CTRL
+    // Установка V_OUT в ON в GPIO_CTRL
     struct REGMAP_GPIO_CTRL gpio_ctrl;
     gpio_ctrl.gpio_ctrl = BIT(EC_EXT_GPIO_V_OUT);
     regmap_set_region_data(REGMAP_REGION_GPIO_CTRL, &gpio_ctrl, sizeof(gpio_ctrl));
     utest_regmap_mark_region_changed(REGMAP_REGION_GPIO_CTRL);
 
-    // Set V_OUT voltage monitor status to NOT OK
+    // Устанавливаем статус монитора напряжения V_OUT в НЕ OK
     utest_vmon_set_ch_status(VMON_CHANNEL_V_OUT, false);
 
     gpio_do_periodic_work();
 
-    // Check that V_OUT GPIO is LOW
+    // Проверка, что V_OUT GPIO в состоянии LOW
     uint32_t state = utest_gpio_get_output_state(v_out_gpio);
     TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, state, "V_OUT GPIO should be LOW when power is not OK");
 }
 
-// Scenario: Set V_OUT OFF in regmap even though voltage monitor is OK
-// Expected: V_OUT GPIO is LOW (respects user control)
+// Сценарий: Установка V_OUT в OFF в regmap при статусе монитора напряжения OK
+// Ожидается: V_OUT GPIO в LOW (работает управление)
 static void test_v_out_control_disabled_when_ctrl_off(void)
 {
     LOG_INFO("Testing V_OUT control - disabled when CTRL is OFF");
@@ -680,24 +680,24 @@ static void test_v_out_control_disabled_when_ctrl_off(void)
     gpio_init();
     gpio_reset();
 
-    // Set V_OUT to OFF in GPIO_CTRL
+    // Устанавливаем V_OUT в OFF в GPIO_CTRL
     struct REGMAP_GPIO_CTRL gpio_ctrl;
-    gpio_ctrl.gpio_ctrl = 0;  // V_OUT OFF
+    gpio_ctrl.gpio_ctrl = 0;  // V_OUT в OFF
     regmap_set_region_data(REGMAP_REGION_GPIO_CTRL, &gpio_ctrl, sizeof(gpio_ctrl));
     utest_regmap_mark_region_changed(REGMAP_REGION_GPIO_CTRL);
 
-    // Set V_OUT voltage monitor status to OK
+    // Устанавливаем состояние монитора напряжения V_OUT в OK
     utest_vmon_set_ch_status(VMON_CHANNEL_V_OUT, true);
 
     gpio_do_periodic_work();
 
-    // Check that V_OUT GPIO is LOW
+    // Проверка, что V_OUT GPIO в состоянии LOW
     uint32_t state = utest_gpio_get_output_state(v_out_gpio);
     TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, state, "V_OUT GPIO should be LOW when CTRL is OFF");
 }
 
-// Scenario: Test all combinations of V_OUT control and power status
-// Expected: V_OUT ON only when both ctrl_on=true AND power_ok=true
+// Сценарий: Проверка всех комбинаций управления V_OUT и статуса питания
+// Ожидается: V_OUT включен только когда ctrl_on=true И power_ok=true
 static void test_v_out_control_requires_both_conditions(void)
 {
     LOG_INFO("Testing V_OUT control - requires both power OK and CTRL ON");
@@ -705,16 +705,16 @@ static void test_v_out_control_requires_both_conditions(void)
     gpio_init();
     gpio_reset();
 
-    // Test all combinations
+    // Проверка всех комбинаций
     struct {
         bool ctrl_on;
         bool power_ok;
         uint32_t expected_state;
     } test_cases[] = {
-        { false, false, 0 },  // Both OFF -> V_OUT OFF
-        { false, true,  0 },  // CTRL OFF, power OK -> V_OUT OFF
-        { true,  false, 0 },  // CTRL ON, power NOT OK -> V_OUT OFF
-        { true,  true,  1 },  // Both ON -> V_OUT ON
+        { false, false, 0 },  // Оба OFF -> V_OUT OFF
+        { false, true,  0 },  // CTRL OFF, питание OK -> V_OUT OFF
+        { true,  false, 0 },  // CTRL ON, питание НЕ OK -> V_OUT OFF
+        { true,  true,  1 },  // Оба ON -> V_OUT ON
     };
 
     for (size_t i = 0; i < sizeof(test_cases) / sizeof(test_cases[0]); i++) {
@@ -735,8 +735,8 @@ static void test_v_out_control_requires_both_conditions(void)
 
 
 #ifdef EC_MOD1_MOD2_GPIO_CONTROL
-// Scenario: Configure multiple GPIOs with different modes and values
-// Expected: Each GPIO operates independently with correct mode and value
+// Сценарий: Конфигурация нескольких GPIO с разными режимами и значениями
+// Ожидается: Каждый GPIO работает независимо с правильным режимом и значением
 static void test_multiple_gpios_independent(void)
 {
     LOG_INFO("Testing multiple GPIOs independence");
@@ -744,7 +744,7 @@ static void test_multiple_gpios_independent(void)
     gpio_init();
     gpio_reset();
 
-    // Set MOD1_TX and MOD2_RTS as outputs, others as inputs
+    // Устанавливаем MOD1_TX и MOD2_RTS как выходы, остальные как входы
     struct REGMAP_GPIO_DIR gpio_dir;
     gpio_dir.gpio_dir = BIT(EC_EXT_GPIO_MOD1_TX) | BIT(EC_EXT_GPIO_MOD2_RTS);
     regmap_set_region_data(REGMAP_REGION_GPIO_DIR, &gpio_dir, sizeof(gpio_dir));
@@ -755,33 +755,33 @@ static void test_multiple_gpios_independent(void)
     regmap_set_region_data(REGMAP_REGION_GPIO_CTRL, &gpio_ctrl, sizeof(gpio_ctrl));
     utest_regmap_mark_region_changed(REGMAP_REGION_GPIO_CTRL);
 
-    // Set MOD1_RX and MOD2_RX inputs to HIGH
+    // Устанавливаем входы MOD1_RX и MOD2_RX в HIGH
     utest_shared_gpio_set_input_value(MOD1, MOD_GPIO_RX, true);
     utest_shared_gpio_set_input_value(MOD2, MOD_GPIO_RX, true);
 
     gpio_do_periodic_work();
 
-    // Check MOD1_TX (output HIGH)
+    // Проверка MOD1_TX (выход HIGH)
     enum mod_gpio_mode mode = utest_shared_gpio_get_mode(MOD1, MOD_GPIO_TX);
     TEST_ASSERT_EQUAL_MESSAGE(MOD_GPIO_MODE_OUTPUT, mode, "MOD1_TX should be OUTPUT");
     bool value = utest_shared_gpio_get_output_value(MOD1, MOD_GPIO_TX);
     TEST_ASSERT_TRUE_MESSAGE(value, "MOD1_TX should be HIGH");
 
-    // Check MOD2_RTS (output LOW)
+    // Проверка MOD2_RTS (выход LOW)
     mode = utest_shared_gpio_get_mode(MOD2, MOD_GPIO_RTS);
     TEST_ASSERT_EQUAL_MESSAGE(MOD_GPIO_MODE_OUTPUT, mode, "MOD2_RTS should be OUTPUT");
     value = utest_shared_gpio_get_output_value(MOD2, MOD_GPIO_RTS);
     TEST_ASSERT_FALSE_MESSAGE(value, "MOD2_RTS should be LOW");
 
-    // Check MOD1_RX (input HIGH)
+    // Проверка MOD1_RX (вход HIGH)
     mode = utest_shared_gpio_get_mode(MOD1, MOD_GPIO_RX);
     TEST_ASSERT_EQUAL_MESSAGE(MOD_GPIO_MODE_INPUT, mode, "MOD1_RX should be INPUT");
 
-    // Check MOD2_RX (input HIGH)
+    // Проверка MOD2_RX (вход HIGH)
     mode = utest_shared_gpio_get_mode(MOD2, MOD_GPIO_RX);
     TEST_ASSERT_EQUAL_MESSAGE(MOD_GPIO_MODE_INPUT, mode, "MOD2_RX should be INPUT");
 
-    // Read back GPIO_CTRL to verify inputs
+    // Чтение GPIO_CTRL для проверки входов
     bool result = utest_regmap_get_region_data(REGMAP_REGION_GPIO_CTRL, &gpio_ctrl, sizeof(gpio_ctrl));
     TEST_ASSERT_TRUE_MESSAGE(result, "Should be able to read GPIO_CTRL");
     TEST_ASSERT_TRUE_MESSAGE(gpio_ctrl.gpio_ctrl & BIT(EC_EXT_GPIO_MOD1_RX), "MOD1_RX input should be HIGH");
