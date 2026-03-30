@@ -66,7 +66,7 @@ int main(void)
 
     const enum regmap_region last_region = REGMAP_REGION_COUNT - 1;
 
-    // Check regions overlap
+    // Проверка перекрытия регионов
     printf("Testing regions for overlap...\n");
     for (int r = 0; r < last_region - 1; r++) {
         if ((region_first_reg(r) + region_reg_count(r)) > region_first_reg(r + 1)) {
@@ -75,14 +75,14 @@ int main(void)
         }
     }
 
-    // Check last region
+    // Проверка границ последнего региона
     printf("Testing last region bounds...\n");
     if ((region_first_reg(last_region) + region_reg_count(last_region)) >= REGMAP_TOTAL_REGS_COUNT) {
         printf("ERROR: Last region overlaps max address 0xFF\n");
         return -EADDRINUSE;
     }
 
-    // Write data to regions
+    // Запись тестовых данных во все регионы
     printf("Writing test data to all regions...\n");
     uint16_t autoinc = 0;
     for (int r = 0; r < REGMAP_REGION_COUNT; r++)
@@ -97,14 +97,14 @@ int main(void)
         regmap_set_region_data(r, data, r_size);
     }
 
-    // Readback data from regs throught all regmap with autoinc
+    // Считывание данных через весь regmap с автоинкрементом
     printf("Reading back data with autoinc through entire regmap...\n");
     autoinc = 0;
     regmap_ext_prepare_operation(0);
     for (int reg = 0; reg < REGMAP_TOTAL_REGS_COUNT; reg++) {
         uint16_t val = regmap_ext_read_reg_autoinc();
 
-        // Check that reg in someone region
+        // Проверка принадлежности регистра одному из регионов
         bool reg_in_region = false;
         for (int r = 0; r < REGMAP_REGION_COUNT; r++) {
             if ((reg >= region_first_reg(r)) && (reg <= region_last_reg(r))) {
@@ -128,9 +128,9 @@ int main(void)
     }
     regmap_ext_end_operation();
 
-    // Check region RO/RW
+    // Проверка защиты регионов RO/RW
     printf("Testing RO/RW region protection...\n");
-    // Write all regs with data
+    // Запись всех регистров тестовыми данными
     uint16_t autodec = UINT16_MAX;
     regmap_ext_prepare_operation(0);
     for (int reg = 0; reg < REGMAP_TOTAL_REGS_COUNT; reg++) {
@@ -139,14 +139,14 @@ int main(void)
     }
     regmap_ext_end_operation();
 
-    // Check that only RW region written
+    // Проверка того, что изменены только регионы RW
     printf("Verifying that only RW regions were modified...\n");
     autodec = UINT16_MAX;
     autoinc = 0;
     regmap_ext_prepare_operation(0);
     for (int reg = 0; reg < REGMAP_TOTAL_REGS_COUNT; reg++) {
         uint16_t val = regmap_ext_read_reg_autoinc();
-        // Find region
+        // Поиск региона
         int found_r = -1;
         for (int r = 0; r < REGMAP_REGION_COUNT; r++) {
             if ((reg >= region_first_reg(r)) && (reg <= region_last_reg(r))) {
@@ -156,7 +156,7 @@ int main(void)
         }
 
         if (found_r < 0) {
-            // No region reg, must be 0
+            // Регистр вне регионов, значение должно быть 0
             if (val != 0) {
                 printf("ERROR: Non-region reg %d value is non-zero: %d\n", reg, val);
                 return -EBADMSG;
@@ -179,7 +179,7 @@ int main(void)
     }
     regmap_ext_end_operation();
 
-    // Check is_changed flags
+    // Проверка флагов is_changed
     printf("Testing is_changed flags...\n");
     for (int r = 0; r < REGMAP_REGION_COUNT; r++) {
         if (is_region_rw(r)) {
@@ -201,11 +201,11 @@ int main(void)
         }
     }
 
-    // TEST: Check regmap_set_region_data with invalid size
+    // TEST: Проверка regmap_set_region_data с некорректным размером
     printf("Testing regmap_set_region_data with invalid size...\n");
     for (int r = 0; r < REGMAP_REGION_COUNT; r++) {
         uint16_t test_data[10] = {0};
-        size_t wrong_size = region_size(r) + 1;  // Wrong size
+        size_t wrong_size = region_size(r) + 1;  // Некорректный размер
         if (regmap_set_region_data(r, test_data, wrong_size)) {
             printf("ERROR: regmap_set_region_data accepted wrong size for region %d\n", r);
             return -EINVAL;
@@ -213,7 +213,7 @@ int main(void)
     }
     for (int r = 0; r < REGMAP_REGION_COUNT; r++) {
         uint16_t test_data[10] = {0};
-        size_t wrong_size = region_size(r) - 1;  // Wrong size
+        size_t wrong_size = region_size(r) - 1;  // Некорректный размер
         if (regmap_set_region_data(r, test_data, wrong_size)) {
             printf("ERROR: regmap_set_region_data accepted wrong size for region %d\n", r);
             return -EINVAL;
@@ -221,14 +221,14 @@ int main(void)
     }
     for (int r = 0; r < REGMAP_REGION_COUNT; r++) {
         uint16_t test_data[10] = {0};
-        size_t wrong_size = 0;  // Wrong size
+        size_t wrong_size = 0;  // Некорректный размер
         if (regmap_set_region_data(r, test_data, wrong_size)) {
             printf("ERROR: regmap_set_region_data accepted wrong size for region %d\n", r);
             return -EINVAL;
         }
     }
 
-    // TEST: Check regmap_set_region_data with invalid region index
+    // TEST: Проверка regmap_set_region_data с некорректным индексом региона
     printf("Testing regmap_set_region_data with invalid region index...\n");
     uint16_t test_data[10] = {0};
     if (regmap_set_region_data(REGMAP_REGION_COUNT, test_data, sizeof(test_data))) {
@@ -240,18 +240,18 @@ int main(void)
         return -EINVAL;
     }
 
-    // TEST: Check regmap_get_data_if_region_changed with invalid size
+    // TEST: Проверка regmap_get_data_if_region_changed с некорректным размером
     printf("Testing regmap_get_data_if_region_changed with invalid size...\n");
     for (int r = 0; r < REGMAP_REGION_COUNT; r++) {
         uint16_t test_buf[10] = {0};
-        size_t wrong_size = region_size(r) + 1;  // Wrong size
+        size_t wrong_size = region_size(r) + 1;  // Некорректный размер
         if (regmap_get_data_if_region_changed(r, test_buf, wrong_size)) {
             printf("ERROR: regmap_get_data_if_region_changed accepted wrong size for region %d\n", r);
             return -EINVAL;
         }
     }
 
-    // TEST: Check regmap_get_data_if_region_changed with invalid region index
+    // TEST: Проверка regmap_get_data_if_region_changed с некорректным индексом региона
     printf("Testing regmap_get_data_if_region_changed with invalid region index...\n");
     if (regmap_get_data_if_region_changed(REGMAP_REGION_COUNT, test_data, sizeof(test_data))) {
         printf("ERROR: regmap_get_data_if_region_changed accepted invalid region index\n");
@@ -262,7 +262,7 @@ int main(void)
         return -EINVAL;
     }
 
-    // TEST: Check that regmap_set_region_data fails when region is changed externally
+    // TEST: Проверка отказа regmap_set_region_data при внешнем изменении региона
     printf("Testing regmap_set_region_data when region changed externally...\n");
     for (int r = 0; r < REGMAP_REGION_COUNT; r++) {
         if (!is_region_rw(r)) {
@@ -273,24 +273,24 @@ int main(void)
         uint16_t * data_to_write = malloc(r_size);
         memset(data_to_write, 0xAA, r_size);
 
-        // First, write some data to the region externally
+        // Запись данных в регион снаружи
         regmap_ext_prepare_operation(region_first_reg(r));
         for (int i = 0; i < region_reg_count(r); i++) {
             regmap_ext_write_reg_autoinc(0x1234);
         }
         regmap_ext_end_operation();
 
-        // Now try to set region data from inside - should fail because region was changed externally
+        // Попытка записи данных в регион изнутри — должна завершиться отказом, т.к. регион изменён снаружи
         if (regmap_set_region_data(r, data_to_write, r_size)) {
             printf("ERROR: regmap_set_region_data succeeded when region was changed externally (region %d)\n", r);
             free(data_to_write);
             return -EBADMSG;
         }
 
-        // Clear the changed flag
+        // Сброс флага изменения
         regmap_get_data_if_region_changed(r, NULL, 0);
 
-        // Now it should succeed
+        // Теперь запись должна пройти успешно
         if (!regmap_set_region_data(r, data_to_write, r_size)) {
             printf("ERROR: regmap_set_region_data failed when region was not changed (region %d)\n", r);
             free(data_to_write);
@@ -298,20 +298,20 @@ int main(void)
         }
 
         free(data_to_write);
-        break;  // Test only one RW region
+        break;  // Проверка только одного RW-региона
     }
 
-    // TEST: Check that regmap_set_region_data fails when regmap is busy
+    // TEST: роверка отказа regmap_set_region_data при занятом regmap
     printf("Testing regmap_set_region_data when regmap is busy...\n");
     for (int r = 0; r < REGMAP_REGION_COUNT; r++) {
         size_t r_size = region_size(r);
         uint16_t * data_to_write = malloc(r_size);
         memset(data_to_write, 0xBB, r_size);
 
-        // Make regmap busy
+        // Перевод regmap в состояние занятости
         regmap_ext_prepare_operation(0);
 
-        // Try to set region data - should fail
+        // Попытка записи данных — должна завершиться отказом
         if (regmap_set_region_data(r, data_to_write, r_size)) {
             printf("ERROR: regmap_set_region_data succeeded when regmap was busy (region %d)\n", r);
             regmap_ext_end_operation();
@@ -321,10 +321,10 @@ int main(void)
 
         regmap_ext_end_operation();
         free(data_to_write);
-        break;  // Test only one region
+        break;  // Проверка только одного региона
     }
 
-    // TEST: Check that regmap_get_data_if_region_changed fails when regmap is busy
+    // TEST: Проверка отказа regmap_get_data_if_region_changed при занятом regmap
     printf("Testing regmap_get_data_if_region_changed when regmap is busy...\n");
     for (int r = 0; r < REGMAP_REGION_COUNT; r++) {
         if (!is_region_rw(r)) {
@@ -334,14 +334,14 @@ int main(void)
         size_t r_size = region_size(r);
         uint16_t * data_to_read = malloc(r_size);
 
-        // Write data externally to set changed flag
+        // Запись данных снаружи для установки флага изменения
         regmap_ext_prepare_operation(region_first_reg(r));
         for (int i = 0; i < region_reg_count(r); i++) {
             regmap_ext_write_reg_autoinc(0x5678);
         }
-        // Keep regmap busy (don't call regmap_ext_end_operation yet)
+        // Regmap остаётся занятым (вызов regmap_ext_end_operation откладывается)
 
-        // Try to get data - should fail because regmap is busy
+        // Попытка чтения данных — должна завершиться отказом, т.к. regmap занят
         if (regmap_get_data_if_region_changed(r, data_to_read, r_size)) {
             printf("ERROR: regmap_get_data_if_region_changed succeeded when regmap was busy (region %d)\n", r);
             regmap_ext_end_operation();
@@ -351,7 +351,7 @@ int main(void)
 
         regmap_ext_end_operation();
 
-        // Now it should succeed
+        // Теперь чтение должно пройти успешно
         if (!regmap_get_data_if_region_changed(r, data_to_read, r_size)) {
             printf("ERROR: regmap_get_data_if_region_changed failed after regmap became free (region %d)\n", r);
             free(data_to_read);
@@ -359,21 +359,21 @@ int main(void)
         }
 
         free(data_to_read);
-        break;  // Test only one RW region
+        break;  // Проверка только одного RW-региона
     }
 
-    // TEST: Check address wraparound for read
+    // TEST: Проверка адресного переноса при чтении
     printf("Testing address wraparound for read...\n");
     regmap_ext_prepare_operation(REGMAP_TOTAL_REGS_COUNT - 2);
     regmap_ext_read_reg_autoinc();  // REGMAP_TOTAL_REGS_COUNT - 2
     regmap_ext_read_reg_autoinc();  // REGMAP_TOTAL_REGS_COUNT - 1
-    uint16_t val_after_wrap = regmap_ext_read_reg_autoinc();  // Should wrap to 0
+    uint16_t val_after_wrap = regmap_ext_read_reg_autoinc();  // Должен произойти перенос на адрес 0
     regmap_ext_end_operation();
-    // Check that we read from address 0 (which should be in first region)
+    // Проверка чтения с адреса 0 (должен находиться в первом регионе)
     uint16_t expected_val = 0;
     for (int r = 0; r < REGMAP_REGION_COUNT; r++) {
         if ((0 >= region_first_reg(r)) && (0 <= region_last_reg(r))) {
-            // Address 0 is in this region, get expected value
+            // Адрес 0 в этом регионе, получение ожидаемого значения
             size_t r_size = region_size(r);
             uint16_t * region_data = malloc(r_size);
             memset(region_data, 0, r_size);
@@ -388,18 +388,18 @@ int main(void)
         return -EBADMSG;
     }
 
-    // TEST: Check address wraparound for write
+    // TEST: Проверка адресного переноса при записи
     printf("Testing address wraparound for write...\n");
     regmap_ext_prepare_operation(REGMAP_TOTAL_REGS_COUNT - 2);
     regmap_ext_write_reg_autoinc(0xAAAA);  // REGMAP_TOTAL_REGS_COUNT - 2
     regmap_ext_write_reg_autoinc(0xBBBB);  // REGMAP_TOTAL_REGS_COUNT - 1
-    regmap_ext_write_reg_autoinc(0xCCCC);  // Should wrap to 0
+    regmap_ext_write_reg_autoinc(0xCCCC);  // Должен произойти перенос на адрес 0
     regmap_ext_end_operation();
-    // Verify that address 0 was written (if it's in RW region)
+    // Проверка того, что по адресу 0 выполнена запись (если регион RW)
     regmap_ext_prepare_operation(0);
     uint16_t val_at_zero = regmap_ext_read_reg_autoinc();
     regmap_ext_end_operation();
-    // Check if address 0 is in RW region
+    // Проверка принадлежности адреса 0 региону RW
     bool addr_zero_is_rw = false;
     for (int r = 0; r < REGMAP_REGION_COUNT; r++) {
         if ((0 >= region_first_reg(r)) && (0 <= region_last_reg(r))) {
@@ -414,10 +414,10 @@ int main(void)
         return -EBADMSG;
     }
 
-    // TEST: Full-duplex operation (simultaneous read and write with different addresses)
+    // TEST: Проверка full-duplex режима (одновременное чтение и запись с разных адресов)
     printf("Testing full-duplex operation...\n");
 
-    // Find first RW region to test on
+    // Поиск первого RW-региона для проверки
     int test_region = -1;
     for (int r = 0; r < REGMAP_REGION_COUNT; r++) {
         if (is_region_rw(r)) {
@@ -432,28 +432,28 @@ int main(void)
         uint16_t start_addr = region_first_reg(test_region);
         uint16_t reg_count = region_reg_count(test_region);
 
-        // First, set known data through external write
+        // Установка известных данных через внешнюю запись
         regmap_ext_prepare_operation(start_addr);
         for (int i = 0; i < reg_count; i++) {
             regmap_ext_write_reg_autoinc(0x1000 + i);
         }
         regmap_ext_end_operation();
 
-        // Clear changed flag
+        // Сброс флага изменения
         regmap_get_data_if_region_changed(test_region, NULL, 0);
 
-        // Now perform full-duplex: read from region, write to the same region
-        // This simulates SPI full-duplex mode
+        // Выполнение full-duplex: чтение из региона и запись в тот же регион
+        // Эмуляция SPI full-duplex режима
         regmap_ext_prepare_operation(start_addr);
         uint16_t * read_vals = malloc(reg_count * sizeof(uint16_t));
-        int test_count = (reg_count < 5) ? reg_count : 5;  // Test up to 5 registers
+        int test_count = (reg_count < 5) ? reg_count : 5;  // Проверка не более 5 регистров
         for (int i = 0; i < test_count; i++) {
-            read_vals[i] = regmap_ext_read_reg_autoinc();  // Read increases r_address
-            regmap_ext_write_reg_autoinc(0xFD00 + i);      // Write increases w_address
+            read_vals[i] = regmap_ext_read_reg_autoinc();  // Чтение увеличивает r_address
+            regmap_ext_write_reg_autoinc(0xFD00 + i);      // Запись увеличивает w_address
         }
         regmap_ext_end_operation();
 
-        // Verify that reads returned correct values (old data before write)
+        // Проверка того, что чтение вернуло корректные значения (данные до записи)
         for (int i = 0; i < test_count; i++) {
             uint16_t expected = 0x1000 + i;
             if (read_vals[i] != expected) {
@@ -464,7 +464,7 @@ int main(void)
             }
         }
 
-        // Verify that writes were applied
+        // Проверка применения записанных данных
         regmap_ext_prepare_operation(start_addr);
         for (int i = 0; i < test_count; i++) {
             uint16_t current_val = regmap_ext_read_reg_autoinc();
