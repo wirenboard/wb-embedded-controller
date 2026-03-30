@@ -4,7 +4,7 @@
 
 #ifdef EC_MOD1_MOD2_GPIO_CONTROL
 
-// Mock functions for testing
+// Функции для тестирования
 void utest_shared_gpio_reset(void);
 void utest_shared_gpio_set_input_value(enum mod mod, enum mod_gpio mod_gpio, bool value);
 bool utest_shared_gpio_get_output_value(enum mod mod, enum mod_gpio mod_gpio);

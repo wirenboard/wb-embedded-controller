@@ -32,7 +32,7 @@ typedef struct {
     uint8_t pin;
 } gpio_pin_t;
 
-// GPIO mock function declarations
+// Декларации мок-функций GPIO
 void GPIO_S_SET(gpio_pin_t pin);
 void GPIO_S_RESET(gpio_pin_t pin);
 void GPIO_S_SET_OUTPUT(gpio_pin_t pin);

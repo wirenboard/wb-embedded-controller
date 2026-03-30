@@ -3,7 +3,7 @@
 
 #ifdef EC_MOD1_MOD2_GPIO_CONTROL
 
-// Internal state for mock
+// Внутреннее состояние мока
 static struct {
     enum mod_gpio_mode mode[MOD_COUNT][MOD_GPIO_COUNT];
     bool input_value[MOD_COUNT][MOD_GPIO_COUNT];
@@ -13,7 +13,7 @@ static struct {
 void utest_shared_gpio_reset(void)
 {
     memset(&shared_gpio_state, 0, sizeof(shared_gpio_state));
-    // Set default mode to INPUT
+    // Установка режима INPUT по умолчанию
     for (unsigned mod = 0; mod < MOD_COUNT; mod++) {
         for (unsigned gpio = 0; gpio < MOD_GPIO_COUNT; gpio++) {
             shared_gpio_state.mode[mod][gpio] = MOD_GPIO_MODE_INPUT;
@@ -44,7 +44,7 @@ enum mod_gpio_mode utest_shared_gpio_get_mode(enum mod mod, enum mod_gpio mod_gp
     return MOD_GPIO_MODE_INPUT;
 }
 
-// Mock implementations of shared-gpio API
+// Мок-реализация shared-gpio API
 void shared_gpio_init(void)
 {
     utest_shared_gpio_reset();

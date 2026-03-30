@@ -2,11 +2,11 @@
 #include "voltage-monitor.h"
 #include <stdbool.h>
 
-// Mock for resetting voltage monitor state
+// Сброс состояния voltage monitor
 void utest_vmon_reset(void);
 
-// Mock for setting voltage monitor channel status
+// Установка состояния канала voltage monitor
 void utest_vmon_set_ch_status(enum vmon_channel ch, bool status);
 
-// Mock for setting voltage monitor ready state
+// Установка состояния готовности voltage monitor
 void utest_vmon_set_ready(bool ready);

@@ -1,7 +1,7 @@
 #include "gpio.h"
 #include <string.h>
 
-// GPIO peripheral instances
+// Сущности GPIO
 GPIO_TypeDef _GPIO_instance[GPIO_INSTANCE_COUNT] = {0};
 
 void utest_gpio_reset_instances(void)
@@ -9,7 +9,7 @@ void utest_gpio_reset_instances(void)
     memset(&_GPIO_instance, 0, sizeof(_GPIO_instance));
 }
 
-// GPIO state query functions for testing
+// Функции запроса состояний GPIO для тестирования
 uint32_t utest_gpio_get_mode(const gpio_pin_t pin)
 {
     return (pin.port->MODER >> (pin.pin * 2)) & 0x3;
@@ -34,8 +34,8 @@ void utest_gpio_set_input_state(const gpio_pin_t pin, uint32_t state)
     }
 }
 
-// GPIO mock function implementations
-// These provide basic functional implementations of GPIO operations
+// Реализация мок-функиций GPIO
+// Обеспечивает базовую функциональную реализацию операций с GPIO
 
 void GPIO_S_SET(gpio_pin_t pin)
 {

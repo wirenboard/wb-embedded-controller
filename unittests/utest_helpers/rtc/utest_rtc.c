@@ -1,7 +1,7 @@
 #include "utest_rtc.h"
 #include <string.h>
 
-// Internal state for mock RTC
+// Внутреннее состояние мока RTC
 static struct {
     struct rtc_time datetime;
     struct rtc_alarm alarm;
@@ -89,7 +89,7 @@ bool utest_rtc_get_periodic_wakeup_disabled(void)
     return rtc_state.periodic_wakeup_disabled;
 }
 
-// Mock implementation of RTC API
+// Мок-реализация RTC API
 void rtc_init(void)
 {
     utest_rtc_reset();

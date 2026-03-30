@@ -1,7 +1,7 @@
 #include "utest_irq.h"
 #include <string.h>
 
-// Internal state for mock IRQ subsystem
+// Внутреннее состояние мока подсистемы IRQ
 static struct {
     irq_flags_t flags;
     irq_flags_t mask;
@@ -25,7 +25,7 @@ irq_flags_t utest_irq_get_all_flags(void)
     return irq_state.flags;
 }
 
-// Mock implementation of IRQ API
+// Мок-реализация IRQ API
 irq_flags_t irq_get_flags(void)
 {
     return irq_state.flags;
@@ -55,5 +55,5 @@ void irq_init(void)
 
 void irq_do_periodic_work(void)
 {
-    // Stub implementation
+    // Заглушка
 }
