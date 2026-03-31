@@ -3,7 +3,7 @@
 
 #define MAX_REGION_SIZE 256
 
-// Internal state for mock regmap
+// Внутреннее состояние мока regmap
 static struct {
     uint8_t data[REGMAP_REGION_COUNT][MAX_REGION_SIZE];
     size_t size[REGMAP_REGION_COUNT];
@@ -39,7 +39,7 @@ bool utest_regmap_get_region_data(enum regmap_region r, void * data, size_t size
     return true;
 }
 
-// Mock implementation of regmap API
+// Мок-реализация regmap API
 void regmap_init(void)
 {
     utest_regmap_reset();

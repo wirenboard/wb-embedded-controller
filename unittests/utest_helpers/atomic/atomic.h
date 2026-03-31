@@ -1,6 +1,6 @@
 #pragma once
 
-// Dummy atomic define for tests building
+// Заглушка для сборки тестов
 
 #define ATOMIC
 

@@ -16,7 +16,7 @@ typedef enum {
 
 void utest_gpio_reset_instances(void);
 
-// GPIO state query functions for testing
+// Функции запроса состояний GPIO для тестирования
 uint32_t utest_gpio_get_mode(const gpio_pin_t pin);
 uint32_t utest_gpio_get_output_type(const gpio_pin_t pin);
 uint32_t utest_gpio_get_output_state(const gpio_pin_t pin);

@@ -11,11 +11,11 @@
 
 void setUp(void)
 {
-    // Reset all mock states
+    // Сброс всех состояний моков
     utest_systick_set_time_ms(1000);
     utest_regmap_reset();
 
-    // Clear any pending timed_out flags
+    // Сброс флага timed_out
     wdt_handle_timed_out();
 }
 
@@ -23,11 +23,13 @@ void tearDown(void)
 {
 }
 
+// Сценарий: Установка таймаута watchdog с нормальными значениями (10 с, 120 с)
+// Ожидается: значения таймаута правильно сохранены в regmap
 static void test_wdt_set_timeout_normal(void)
 {
     LOG_INFO("Testing wdt_set_timeout with normal values");
 
-    // Test setting various normal timeout values
+    // Устанавливаем нормальное значение таймаута
     wdt_set_timeout(10);
     wdt_do_periodic_work();
 
@@ -36,6 +38,7 @@ static void test_wdt_set_timeout_normal(void)
                              "Failed to get WDT regmap data");
     TEST_ASSERT_EQUAL_UINT16_MESSAGE(10, w.timeout, "Timeout should be set to 10 seconds");
 
+    // Устанавливаем другое нормальное значение таймаута
     wdt_set_timeout(120);
     wdt_do_periodic_work();
 
@@ -44,6 +47,8 @@ static void test_wdt_set_timeout_normal(void)
     TEST_ASSERT_EQUAL_UINT16_MESSAGE(120, w.timeout, "Timeout should be set to 120 seconds");
 }
 
+// Сценарий: Установка таймаута watchdog в 0
+// Ожидается: таймаут ограничен минимальным значением 1 секунда
 static void test_wdt_set_timeout_zero(void)
 {
     LOG_INFO("Testing wdt_set_timeout with zero");
@@ -58,6 +63,8 @@ static void test_wdt_set_timeout_zero(void)
                                      "Timeout 0 should be clamped to 1 second");
 }
 
+// Сценарий: Установка таймаута watchdog в максимально разрешенное значение
+// Ожидается: таймаут установлен в WBEC_WATCHDOG_MAX_TIMEOUT_S без ограничения
 static void test_wdt_set_timeout_max(void)
 {
     LOG_INFO("Testing wdt_set_timeout with max value");
@@ -72,6 +79,8 @@ static void test_wdt_set_timeout_max(void)
                                      "Timeout should be set to max value");
 }
 
+// Сценарий: Установка таймаута watchdog выше максимально разрешенного значения
+// Ожидается: таймаут ограничен значением WBEC_WATCHDOG_MAX_TIMEOUT_S
 static void test_wdt_set_timeout_over_max(void)
 {
     LOG_INFO("Testing wdt_set_timeout with value over max");
@@ -86,34 +95,37 @@ static void test_wdt_set_timeout_over_max(void)
                                      "Timeout over max should be clamped to max value");
 }
 
+// Сценарий: Запуск watchdog, ожидание меньше таймаута, сброс, затем ожидание снова
+// Ожидается: Watchdog не срабатывает после первого периода из-за сброса;
+// срабатывает после второго периода от точки сброса
 static void test_wdt_start_reset(void)
 {
     LOG_INFO("Testing wdt_start_reset");
 
-    // Set timeout and start watchdog
+    // Установка таймаута и запуск watchdog
     wdt_set_timeout(5);
     wdt_start_reset();
     wdt_do_periodic_work();
 
-    // Advance time but not enough to trigger timeout
+    // Двигаем время, но недостаточно для срабатывания таймаута
     utest_systick_advance_time_ms(4000);
     wdt_do_periodic_work();
 
-    // Should not have timed out yet
+    // Еще не должно быть таймаута
     TEST_ASSERT_FALSE_MESSAGE(wdt_handle_timed_out(),
                               "Watchdog should not timeout before period expires");
 
-    // Reset the watchdog
+    // Сброс watchdog
     wdt_start_reset();
 
-    // Advance another 4 seconds - still should not timeout since we reset
+    // Двигаем время еще на 4 секунды - все еще не должно быть таймаута, поскольку мы сбросили watchdog
     utest_systick_advance_time_ms(4000);
     wdt_do_periodic_work();
 
     TEST_ASSERT_FALSE_MESSAGE(wdt_handle_timed_out(),
                               "Watchdog should not timeout after reset");
 
-    // Advance past timeout from the reset point
+    // Двигаем время до момента после таймаута от момента сброса watchdog
     utest_systick_advance_time_ms(2000);
     wdt_do_periodic_work();
 
@@ -121,124 +133,136 @@ static void test_wdt_start_reset(void)
                              "Watchdog should timeout after period from reset point");
 }
 
+// Сценарий: Запуск watchdog с таймаутом, остановка, затем ожидание после таймаута
+// Ожидается: Остановленный watchdog не вызывает срабатывание таймаута
 static void test_wdt_stop(void)
 {
     LOG_INFO("Testing wdt_stop");
 
-    // Set timeout and start watchdog
+    // Установка таймаута и запуск watchdog
     wdt_set_timeout(2);
     wdt_start_reset();
     wdt_do_periodic_work();
 
-    // Stop the watchdog
+    // Остановка watchdog
     wdt_stop();
 
-    // Advance time past timeout
+    // Двигаем время до момента после таймаута
     utest_systick_advance_time_ms(3000);
     wdt_do_periodic_work();
 
-    // Should not have timed out because watchdog is stopped
+    // Таймаута быть не должно, так как watchdog остановлен
     TEST_ASSERT_FALSE_MESSAGE(wdt_handle_timed_out(),
                               "Stopped watchdog should not timeout");
 }
 
+// Сценарий: Запуск watchdog и ожидание достижения таймаута
+// Ожидается: Нет таймаута непосредственно перед периодом, таймаут срабатывает после периода
 static void test_wdt_timeout_triggers(void)
 {
     LOG_INFO("Testing watchdog timeout triggers");
 
-    // Set timeout and start watchdog
+    // Установка таймаута и запуск watchdog
     wdt_set_timeout(3);
     wdt_start_reset();
     wdt_do_periodic_work();
 
-    // Advance time just before timeout
+    // Двигаем время на момент прямо перед таймаутом
     utest_systick_advance_time_ms(2999);
     wdt_do_periodic_work();
 
-    // Should not have timed out yet
+    // Таймаута быть не должно
     TEST_ASSERT_FALSE_MESSAGE(wdt_handle_timed_out(),
                               "Watchdog should not timeout before timeout period");
 
-    // Advance time to trigger timeout
+    // Двигаем время, чтобы сработал таймаут
     utest_systick_advance_time_ms(2);
     wdt_do_periodic_work();
 
-    // Should have timed out
+    // Таймаут должен сработать
     TEST_ASSERT_TRUE_MESSAGE(wdt_handle_timed_out(),
                              "Watchdog should timeout after timeout period");
 }
 
+// Сценарий: Срабатывание таймаута watchdog и двойной вызов обработчика
+// Ожидается: Первый вызов возвращает true и сбрасывает флаг, второй вызов возвращает false
 static void test_wdt_handle_timed_out_clears_flag(void)
 {
     LOG_INFO("Testing wdt_handle_timed_out clears flag");
 
-    // Set timeout and start watchdog
+    // Установка таймаута и запуск watchdog
     wdt_set_timeout(1);
     wdt_start_reset();
     wdt_do_periodic_work();
 
-    // Trigger timeout
+    // Вызываем сработку таймаута
     utest_systick_advance_time_ms(1100);
     wdt_do_periodic_work();
 
-    // First call should return true
+    // Первый вызов должен вернуть true
     TEST_ASSERT_TRUE_MESSAGE(wdt_handle_timed_out(),
                              "First call should return true for timed out flag");
 
-    // Second call should return false (flag cleared)
+    // Второй вызов должен вернуть false (флаг сброшен)
     TEST_ASSERT_FALSE_MESSAGE(wdt_handle_timed_out(),
                               "Second call should return false - flag must be cleared");
 }
 
+// Сценарий: Срабатывание таймаута watchdog дважды подряд
+// Ожидается: Watchdog автоматически сбрасывается после первого таймаута и срабатывает снова
+// после следующего периода
 static void test_wdt_timeout_auto_resets(void)
 {
     LOG_INFO("Testing watchdog auto-resets after timeout");
 
-    // Set timeout and start watchdog
+    // Устанавливаем таймаут и запускаем watchdog
     wdt_set_timeout(2);
     wdt_start_reset();
     wdt_do_periodic_work();
 
-    // Trigger first timeout
+    // Вызываем первый таймаут
     utest_systick_advance_time_ms(2100);
     wdt_do_periodic_work();
 
     TEST_ASSERT_TRUE_MESSAGE(wdt_handle_timed_out(),
                              "First timeout should be triggered");
 
-    // Watchdog should auto-reset, so advance time again
+    // Watchdog должен автоматически сброситься, поэтому продвигаем время снова
     utest_systick_advance_time_ms(2100);
     wdt_do_periodic_work();
 
-    // Should timeout again
+    // Должен сработать снова
     TEST_ASSERT_TRUE_MESSAGE(wdt_handle_timed_out(),
                              "Second timeout should be triggered after auto-reset");
 }
 
+// Сценарий: Изменение таймаута watchdog через regmap с 10с на 5с
+// Ожидается: Таймаут обновлён в regmap, watchdog сброшен, новый период таймаута
+// применяется
 static void test_wdt_regmap_timeout_change(void)
 {
     LOG_INFO("Testing watchdog timeout change via regmap");
 
-    // Start with initial timeout
+    // Начинаем с начального таймаута
     wdt_set_timeout(10);
     wdt_start_reset();
     wdt_do_periodic_work();
 
-    // Simulate timeout change from regmap
+    // Эмулируем изменение таймаута из regmap
     struct REGMAP_WDT w = {
         .timeout = 5,
         .reset = 0
     };
 
-    // Mark region as changed and write data
+    // Отмечаем регион как изменённый и записываем данные
     TEST_ASSERT_TRUE_MESSAGE(regmap_set_region_data(REGMAP_REGION_WDT, &w, sizeof(w)),
                              "Failed to set WDT regmap data");
     utest_regmap_mark_region_changed(REGMAP_REGION_WDT);
 
-    // Process periodic work
+    // Вызываем do_periodic_work
     wdt_do_periodic_work();
 
-    // Verify timeout was updated in regmap
+    // Проверяем, что таймаут был обновлён в regmap
     TEST_ASSERT_TRUE_MESSAGE(utest_regmap_get_region_data(REGMAP_REGION_WDT, &w, sizeof(w)),
                              "Failed to get WDT regmap data");
     TEST_ASSERT_EQUAL_UINT16_MESSAGE(5, w.timeout,
@@ -246,37 +270,40 @@ static void test_wdt_regmap_timeout_change(void)
     TEST_ASSERT_EQUAL_UINT16_MESSAGE(0, w.reset,
                                      "Reset flag should be cleared");
 
-    // Verify watchdog was reset (timestamp should be updated)
-    // Advance time less than new timeout
+    // Проверяем, что watchdog был сброшен (временная метка должна быть обновлена)
+    // Продвигаем время меньше нового таймаута
     utest_systick_advance_time_ms(4000);
     wdt_do_periodic_work();
     TEST_ASSERT_FALSE_MESSAGE(wdt_handle_timed_out(),
                               "Watchdog should not timeout before new timeout period");
 
-    // Advance to trigger new timeout
+    // Продвигаем, чтобы вызвать новый таймаут
     utest_systick_advance_time_ms(1100);
     wdt_do_periodic_work();
     TEST_ASSERT_TRUE_MESSAGE(wdt_handle_timed_out(),
                              "Watchdog should timeout after new timeout period");
 }
 
+// Сценарий: Изначально таймаут 10с, после 8с уменьшаем таймаут до 5с через regmap
+// Ожидается: Watchdog автоматически сбрасывается, чтобы предотвратить ложное срабатывание (8с > 5с, но не должен
+// сработать); новый таймаут 5с применяется от точки сброса
 static void test_wdt_regmap_timeout_decrease_prevents_false_trigger(void)
 {
     LOG_INFO("Testing watchdog auto-reset when timeout decreased via regmap");
 
-    // Start with large timeout (10 seconds)
+    // Начинаем с большим таймаутом (10 секунд)
     wdt_set_timeout(10);
     wdt_start_reset();
     wdt_do_periodic_work();
 
-    // Advance time significantly (8 seconds) but still less than current timeout
+    // Значительно продвигаем время (8 секунд), но всё ещё меньше текущего таймаута
     utest_systick_advance_time_ms(8000);
     wdt_do_periodic_work();
     TEST_ASSERT_FALSE_MESSAGE(wdt_handle_timed_out(),
                               "Watchdog should not timeout at 8s with 10s timeout");
 
-    // Now change timeout to smaller value (5 seconds) via regmap
-    // Without auto-reset, this would cause false trigger since 8s > 5s
+    // Теперь изменяем таймаут на меньшее значение (5 секунд) через regmap
+    // Без автоматического сброса это вызвало бы ложное срабатывание, так как 8с > 5с
     struct REGMAP_WDT w = {
         .timeout = 5,
         .reset = 0
@@ -286,47 +313,50 @@ static void test_wdt_regmap_timeout_decrease_prevents_false_trigger(void)
                              "Failed to set WDT regmap data");
     utest_regmap_mark_region_changed(REGMAP_REGION_WDT);
 
-    // Process periodic work - should automatically reset watchdog
+    // Вызываем do_periodic_work - должен автоматически сбросить watchdog
     wdt_do_periodic_work();
 
-    // Verify timeout was updated
+    // Проверяем, что таймаут был обновлён
     TEST_ASSERT_TRUE_MESSAGE(utest_regmap_get_region_data(REGMAP_REGION_WDT, &w, sizeof(w)),
                              "Failed to get WDT regmap data");
     TEST_ASSERT_EQUAL_UINT16_MESSAGE(5, w.timeout,
                                      "Timeout should be updated to 5 seconds");
 
-    // The critical check: watchdog should NOT have triggered yet
-    // because it was auto-reset when timeout was changed
+    // Критическая проверка: watchdog не должен сработать,
+    // потому что он был автоматически сброшен при изменении таймаута
     TEST_ASSERT_FALSE_MESSAGE(wdt_handle_timed_out(),
                               "Watchdog should not trigger - auto-reset prevents false trigger");
 
-    // Now advance time less than new timeout period (4 seconds)
+    // Теперь продвигаем время меньше нового периода таймаута (4 секунды)
     utest_systick_advance_time_ms(4000);
     wdt_do_periodic_work();
     TEST_ASSERT_FALSE_MESSAGE(wdt_handle_timed_out(),
                               "Watchdog should not timeout before new timeout period");
 
-    // Advance past new timeout period
+    // Продвигаем за новый период таймаута
     utest_systick_advance_time_ms(1100);
     wdt_do_periodic_work();
     TEST_ASSERT_TRUE_MESSAGE(wdt_handle_timed_out(),
                              "Watchdog should timeout after new timeout period from reset point");
 }
 
+// Сценарий: Отправка команды сброса watchdog через regmap после 4с из 5с таймаута
+// Ожидается: Флаг сброса очищен, таймер watchdog сбрасывается, ожидает ещё 5с до
+// таймаута
 static void test_wdt_regmap_reset_command(void)
 {
     LOG_INFO("Testing watchdog reset command via regmap");
 
-    // Set timeout and start
+    // Устанавливаем таймаут и запускаем
     wdt_set_timeout(5);
     wdt_start_reset();
     wdt_do_periodic_work();
 
-    // Advance time
+    // Продвигаем время
     utest_systick_advance_time_ms(4000);
     wdt_do_periodic_work();
 
-    // Send reset command via regmap
+    // Отправляем команду сброса через regmap
     struct REGMAP_WDT w = {
         .timeout = 5,
         .reset = 1
@@ -336,42 +366,45 @@ static void test_wdt_regmap_reset_command(void)
                              "Failed to set WDT regmap data");
     utest_regmap_mark_region_changed(REGMAP_REGION_WDT);
 
-    // Process periodic work (should reset watchdog)
+    // Вызываем do_periodic_work (должен сбросить watchdog)
     wdt_do_periodic_work();
 
-    // Verify reset flag is cleared in regmap
+    // Проверяем, что флаг сброса очищен в regmap
     TEST_ASSERT_TRUE_MESSAGE(utest_regmap_get_region_data(REGMAP_REGION_WDT, &w, sizeof(w)),
                              "Failed to get WDT regmap data");
     TEST_ASSERT_EQUAL_UINT16_MESSAGE(0, w.reset,
                                      "Reset flag should be cleared after processing");
 
-    // Advance time - should not timeout yet because it was reset
+    // Продвигаем время - watchdog не должен сработать, так как был сброшен
     utest_systick_advance_time_ms(4000);
     wdt_do_periodic_work();
     TEST_ASSERT_FALSE_MESSAGE(wdt_handle_timed_out(),
                               "Watchdog should not timeout - it was just reset via regmap");
 
-    // Advance to trigger timeout from reset point
+    // Продвигаем, чтобы вызвать таймаут от точки сброса
     utest_systick_advance_time_ms(1100);
     wdt_do_periodic_work();
     TEST_ASSERT_TRUE_MESSAGE(wdt_handle_timed_out(),
                              "Watchdog should timeout after period from reset");
 }
 
+// Сценарий: Изменение таймаута с 10с на 3с И установка флага сброса одновременно
+// Ожидается: Обе операции применены, таймаут обновлён до 3с, флаг сброса очищен,
+// watchdog сброшен; применяется новый период таймаута
 static void test_wdt_regmap_timeout_and_reset_simultaneous(void)
 {
     LOG_INFO("Testing simultaneous timeout change and reset flag via regmap");
 
-    // Set timeout and start
+    // Устанавливаем таймаут и запускаем
     wdt_set_timeout(10);
     wdt_start_reset();
     wdt_do_periodic_work();
 
-    // Advance time significantly
+    // Значительно продвигаем время
     utest_systick_advance_time_ms(7000);
     wdt_do_periodic_work();
 
-    // Now send both timeout change AND reset flag in one transaction
+    // Теперь отправляем одновременно изменение таймаута И флаг сброса в одной транзакции
     struct REGMAP_WDT w = {
         .timeout = 3,
         .reset = 1
@@ -381,10 +414,10 @@ static void test_wdt_regmap_timeout_and_reset_simultaneous(void)
                              "Failed to set WDT regmap data");
     utest_regmap_mark_region_changed(REGMAP_REGION_WDT);
 
-    // Process periodic work (should change timeout and reset watchdog)
+    // Вызываем do_periodic_work (должен изменить таймаут и сбросить watchdog)
     wdt_do_periodic_work();
 
-    // Verify timeout was updated and reset flag cleared
+    // Проверяем, что таймаут был обновлён и флаг сброса очищен
     TEST_ASSERT_TRUE_MESSAGE(utest_regmap_get_region_data(REGMAP_REGION_WDT, &w, sizeof(w)),
                              "Failed to get WDT regmap data");
     TEST_ASSERT_EQUAL_UINT16_MESSAGE(3, w.timeout,
@@ -392,28 +425,31 @@ static void test_wdt_regmap_timeout_and_reset_simultaneous(void)
     TEST_ASSERT_EQUAL_UINT16_MESSAGE(0, w.reset,
                                      "Reset flag should be cleared after processing");
 
-    // Verify watchdog was reset - should not timeout immediately
+    // Проверяем, что watchdog был сброшен (не должен сработать немедленно)
     TEST_ASSERT_FALSE_MESSAGE(wdt_handle_timed_out(),
                               "Watchdog should not timeout immediately after simultaneous changes");
 
-    // Advance time less than new timeout
+    // Продвигаем время меньше нового таймаута
     utest_systick_advance_time_ms(2500);
     wdt_do_periodic_work();
     TEST_ASSERT_FALSE_MESSAGE(wdt_handle_timed_out(),
                               "Watchdog should not timeout before new timeout period");
 
-    // Advance past new timeout period
+    // Продвигаем за новый период таймаута
     utest_systick_advance_time_ms(600);
     wdt_do_periodic_work();
     TEST_ASSERT_TRUE_MESSAGE(wdt_handle_timed_out(),
                              "Watchdog should timeout after new timeout period");
 }
 
+// Сценарий: Установка таймаута в 0 и значение выше максимума через regmap
+// Ожидается: Нулевой таймаут ограничивается до 1с, максимальный таймаут ограничивается
+// WBEC_WATCHDOG_MAX_TIMEOUT_S
 static void test_wdt_regmap_timeout_bounds_via_regmap(void)
 {
     LOG_INFO("Testing watchdog timeout bounds via regmap");
 
-    // Test zero timeout via regmap (should be clamped to 1)
+    // Тестируем нулевой таймаут через regmap (должен быть ограничен до 1)
     struct REGMAP_WDT w = {
         .timeout = 0,
         .reset = 0
@@ -429,7 +465,7 @@ static void test_wdt_regmap_timeout_bounds_via_regmap(void)
     TEST_ASSERT_EQUAL_UINT16_MESSAGE(1, w.timeout,
                                      "Zero timeout from regmap should be clamped to 1");
 
-    // Test over-max timeout via regmap (should be clamped to max)
+    // Тестируем таймаут выше максимума через regmap (должен быть ограничен до максимума)
     w.timeout = WBEC_WATCHDOG_MAX_TIMEOUT_S + 50;
     w.reset = 0;
 
@@ -444,25 +480,27 @@ static void test_wdt_regmap_timeout_bounds_via_regmap(void)
                                      "Over-max timeout from regmap should be clamped to max");
 }
 
+// Сценарий: Вызов функции периодической работы без отметки региона regmap как изменённого
+// Ожидается: Значения regmap остаются неизменными, флаг сброса остаётся 0
 static void test_wdt_regmap_no_change(void)
 {
     LOG_INFO("Testing watchdog when regmap has no changes");
 
-    // Set initial timeout
+    // Устанавливаем начальный таймаут
     wdt_set_timeout(10);
     wdt_start_reset();
     wdt_do_periodic_work();
 
-    // Get current regmap state
+    // Получаем текущее состояние regmap
     struct REGMAP_WDT w_before;
     TEST_ASSERT_TRUE_MESSAGE(utest_regmap_get_region_data(REGMAP_REGION_WDT, &w_before, sizeof(w_before)),
                              "Failed to get WDT regmap data");
 
-    // Call periodic work without marking region as changed
+    // Вызываем функцию периодической работы без отметки региона как изменённого
     utest_systick_advance_time_ms(1000);
     wdt_do_periodic_work();
 
-    // Regmap should remain unchanged
+    // Regmap должен остаться неизменным
     struct REGMAP_WDT w_after;
     TEST_ASSERT_TRUE_MESSAGE(utest_regmap_get_region_data(REGMAP_REGION_WDT, &w_after, sizeof(w_after)),
                              "Failed to get WDT regmap data");
@@ -472,6 +510,9 @@ static void test_wdt_regmap_no_change(void)
                                      "Reset flag should be 0");
 }
 
+// Сценарий: Сброс watchdog 5 раз до истечения таймаута
+// Ожидается: Watchdog не срабатывает при повторяющихся сбросах; срабатывает только
+// когда не происходит сброс
 static void test_wdt_multiple_resets(void)
 {
     LOG_INFO("Testing multiple watchdog resets");
@@ -480,7 +521,7 @@ static void test_wdt_multiple_resets(void)
     wdt_start_reset();
     wdt_do_periodic_work();
 
-    // Reset multiple times before timeout
+    // Сбрасываем несколько раз до истечения таймаута
     for (int i = 0; i < 5; i++) {
         utest_systick_advance_time_ms(2000);
         wdt_start_reset();
@@ -489,29 +530,32 @@ static void test_wdt_multiple_resets(void)
                                   "Watchdog should not timeout when reset before period");
     }
 
-    // Now let it timeout
+    // Теперь вызываем срабатывание по таймауту
     utest_systick_advance_time_ms(3100);
     wdt_do_periodic_work();
     TEST_ASSERT_TRUE_MESSAGE(wdt_handle_timed_out(),
                              "Watchdog should timeout when not reset");
 }
 
+// Сценарий: Установка watchdog на максимальный таймаут и ожидание срабатывания
+// Ожидается: Watchdog не срабатывает непосредственно перед максимальным таймаутом;
+// срабатывает после истечения максимального таймаута
 static void test_wdt_long_timeout(void)
 {
     LOG_INFO("Testing watchdog with long timeout period");
 
-    // Use maximum timeout
+    // Используем максимальный таймаут
     wdt_set_timeout(WBEC_WATCHDOG_MAX_TIMEOUT_S);
     wdt_start_reset();
     wdt_do_periodic_work();
 
-    // Advance time to just before timeout
+    // Продвигаем время до момента непосредственно перед таймаутом
     utest_systick_advance_time_ms(WBEC_WATCHDOG_MAX_TIMEOUT_S * 1000 - 100);
     wdt_do_periodic_work();
     TEST_ASSERT_FALSE_MESSAGE(wdt_handle_timed_out(),
                               "Watchdog should not timeout before max timeout period");
 
-    // Trigger timeout
+    // Триггерим срабатывание по таймауту
     utest_systick_advance_time_ms(200);
     wdt_do_periodic_work();
     TEST_ASSERT_TRUE_MESSAGE(wdt_handle_timed_out(),
@@ -522,22 +566,22 @@ int main(void)
 {
     UNITY_BEGIN();
 
-    // Basic functionality tests
+    // Базовые тесты функциональности
     RUN_TEST(test_wdt_set_timeout_normal);
     RUN_TEST(test_wdt_set_timeout_zero);
     RUN_TEST(test_wdt_set_timeout_max);
     RUN_TEST(test_wdt_set_timeout_over_max);
 
-    // Start/stop tests
+    // Тесты запуска/остановки
     RUN_TEST(test_wdt_start_reset);
     RUN_TEST(test_wdt_stop);
 
-    // Timeout behavior tests
+    // Тесты поведения при таймауте
     RUN_TEST(test_wdt_timeout_triggers);
     RUN_TEST(test_wdt_handle_timed_out_clears_flag);
     RUN_TEST(test_wdt_timeout_auto_resets);
 
-    // Regmap integration tests
+    // Тесты интеграции с regmap
     RUN_TEST(test_wdt_regmap_timeout_change);
     RUN_TEST(test_wdt_regmap_timeout_decrease_prevents_false_trigger);
     RUN_TEST(test_wdt_regmap_reset_command);
@@ -545,7 +589,7 @@ int main(void)
     RUN_TEST(test_wdt_regmap_timeout_bounds_via_regmap);
     RUN_TEST(test_wdt_regmap_no_change);
 
-    // Edge case tests
+    // Тесты граничных случаев
     RUN_TEST(test_wdt_multiple_resets);
     RUN_TEST(test_wdt_long_timeout);
 

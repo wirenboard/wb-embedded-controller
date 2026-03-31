@@ -2,7 +2,7 @@
 #include <stdbool.h>
 #include "hwrev.h"
 
-// Mock variables to track function calls during hwrev mismatch scenario
+// Переменные-моки для отслеживания вызовов функций в сценарии несоответствия hwrev
 static bool rcc_set_hsi_pll_64mhz_clock_called = false;
 static bool spi_slave_init_called = false;
 
@@ -16,7 +16,7 @@ void spi_slave_init(void)
     spi_slave_init_called = true;
 }
 
-// Test helper functions
+// Вспомогательные функции для тестов
 bool utest_rcc_set_hsi_pll_64mhz_clock_called(void)
 {
     return rcc_set_hsi_pll_64mhz_clock_called;

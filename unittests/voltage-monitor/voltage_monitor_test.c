@@ -11,7 +11,7 @@
 
 void setUp(void)
 {
-    // Set initial time
+    // Установка начального времени
     utest_systick_set_time_ms(1000);
 }
 
@@ -20,7 +20,9 @@ void tearDown(void)
 
 }
 
-
+// Сценарий: Инициализация подсистемы мониторинга напряжения
+// Ожидается: Состояние not ready до инициализации, not ready до истечения стартовой задержки,
+// состояние ready после истечения задержки
 static void test_vmon_init(void)
 {
     LOG_INFO("Testing initialization");
@@ -39,33 +41,34 @@ static void test_vmon_init(void)
     TEST_ASSERT_TRUE_MESSAGE(vmon_ready(), "voltage-monitor should be ready when VOLTAGE_MONITOR_START_DELAY_MS elapsed after vmon_init() call");
 }
 
-
+// Сценарий: Проверка напряжения в нормальном, низком и высоком диапазонах
+// Ожидается: true для нормального напряжения, false для значений вне диапазона
 static void test_vmon_check_voltage_bounds(void)
 {
     LOG_INFO("Testing voltage bounds checker");
 
-    // Normal voltage
+    // Нормальное напряжение
     utest_adc_set_ch_mv(ADC_CHANNEL_ADC_5V, 5000);
     bool status = vmon_check_ch_once(VMON_CHANNEL_V50);
     TEST_ASSERT_TRUE_MESSAGE(status, "vmon_check_ch_once() should return true when voltage is OK");
     status = vmon_get_ch_status(VMON_CHANNEL_V50);
     TEST_ASSERT_TRUE_MESSAGE(status, "vmon_get_ch_status() should return true when voltage is OK");
 
-    // Low voltage
+    // Низкое напряжение
     utest_adc_set_ch_mv(ADC_CHANNEL_ADC_5V, 3000);
     status = vmon_check_ch_once(VMON_CHANNEL_V50);
     TEST_ASSERT_FALSE_MESSAGE(status, "vmon_check_ch_once() should return false when voltage is below than FAIL min");
     status = vmon_get_ch_status(VMON_CHANNEL_V50);
     TEST_ASSERT_FALSE_MESSAGE(status, "vmon_get_ch_status() should return false when voltage is below than FAIL min");
 
-    // Normal voltage
+    // Нормальное напряжение
     utest_adc_set_ch_mv(ADC_CHANNEL_ADC_5V, 5000);
     status = vmon_check_ch_once(VMON_CHANNEL_V50);
     TEST_ASSERT_TRUE_MESSAGE(status, "vmon_check_ch_once() should return true when voltage is OK");
     status = vmon_get_ch_status(VMON_CHANNEL_V50);
     TEST_ASSERT_TRUE_MESSAGE(status, "vmon_get_ch_status() should return true when voltage is OK");
 
-    // High voltage
+    // Высокое напряжение
     utest_adc_set_ch_mv(ADC_CHANNEL_ADC_5V, 6500);
     status = vmon_check_ch_once(VMON_CHANNEL_V50);
     TEST_ASSERT_FALSE_MESSAGE(status, "vmon_check_ch_once() should return false when voltage is above than FAIL max");
@@ -73,26 +76,28 @@ static void test_vmon_check_voltage_bounds(void)
     TEST_ASSERT_FALSE_MESSAGE(status, "vmon_get_ch_status() should return false when voltage is above than FAIL max");
 }
 
-
+// Сценарий: Рост напряжения из OK через зону гистерезиса выше FAIL max
+// Ожидается: Статус остается OK в зоне гистерезиса (между OK max и FAIL max),
+// переход в FAIL при превышении FAIL max
 static void test_vmon_hysteresis_ok_to_fail_max(void)
 {
     LOG_INFO("Testing hysteresis: OK -> FAIL max");
 
-    // Normal voltage
+    // Нормальное напряжение
     utest_adc_set_ch_mv(ADC_CHANNEL_ADC_3V3, 3300);
     bool status = vmon_check_ch_once(VMON_CHANNEL_V33);
     TEST_ASSERT_TRUE_MESSAGE(status, "vmon_check_ch_once() should return true when voltage is OK");
     status = vmon_get_ch_status(VMON_CHANNEL_V33);
     TEST_ASSERT_TRUE_MESSAGE(status, "vmon_get_ch_status() should return true when voltage is OK");
 
-    // Voltage is between OK max and FAIL max
+    // Напряжение между OK max и FAIL max
     utest_adc_set_ch_mv(ADC_CHANNEL_ADC_3V3, 3450);
     status = vmon_check_ch_once(VMON_CHANNEL_V33);
     TEST_ASSERT_TRUE_MESSAGE(status, "Voltage status should still be OK in the hysteresis area");
     status = vmon_get_ch_status(VMON_CHANNEL_V33);
     TEST_ASSERT_TRUE_MESSAGE(status, "Voltage status should still be OK in the hysteresis area");
 
-    // Voltage is above FAIL max
+    // Напряжение выше FAIL max
     utest_adc_set_ch_mv(ADC_CHANNEL_ADC_3V3, 3600);
     status = vmon_check_ch_once(VMON_CHANNEL_V33);
     TEST_ASSERT_FALSE_MESSAGE(status, "vmon_check_ch_once() should return false when voltage is above than FAIL max");
@@ -100,25 +105,28 @@ static void test_vmon_hysteresis_ok_to_fail_max(void)
     TEST_ASSERT_FALSE_MESSAGE(status, "vmon_get_ch_status() should return false when voltage is above than FAIL max");
 }
 
+// Сценарий: Падение напряжения из OK через зону гистерезиса ниже FAIL min
+// Ожидается: Статус остается OK в зоне гистерезиса (между FAIL min и OK min),
+// переход в FAIL при падении ниже FAIL min
 static void test_vmon_hysteresis_ok_to_fail_min(void)
 {
     LOG_INFO("Testing hysteresis: OK -> FAIL min");
 
-    // Normal voltage
+    // Нормальное напряжение
     utest_adc_set_ch_mv(ADC_CHANNEL_ADC_3V3, 3300);
     bool status = vmon_check_ch_once(VMON_CHANNEL_V33);
     TEST_ASSERT_TRUE_MESSAGE(status, "vmon_check_ch_once() should return true when voltage is OK");
     status = vmon_get_ch_status(VMON_CHANNEL_V33);
     TEST_ASSERT_TRUE_MESSAGE(status, "vmon_get_ch_status() should return true when voltage is OK");
 
-    // Voltage is between FAIL min and OK min (hysteresis area)
+    // Напряжение между FAIL min и OK min (зона гистерезиса)
     utest_adc_set_ch_mv(ADC_CHANNEL_ADC_3V3, 2850);
     status = vmon_check_ch_once(VMON_CHANNEL_V33);
     TEST_ASSERT_TRUE_MESSAGE(status, "Voltage status should still be OK in the hysteresis area");
     status = vmon_get_ch_status(VMON_CHANNEL_V33);
     TEST_ASSERT_TRUE_MESSAGE(status, "Voltage status should still be OK in the hysteresis area");
 
-    // Voltage is below FAIL min
+    // Напряжение ниже FAIL min
     utest_adc_set_ch_mv(ADC_CHANNEL_ADC_3V3, 2500);
     status = vmon_check_ch_once(VMON_CHANNEL_V33);
     TEST_ASSERT_FALSE_MESSAGE(status, "vmon_check_ch_once() should return false when voltage is below than FAIL min");
@@ -126,25 +134,28 @@ static void test_vmon_hysteresis_ok_to_fail_min(void)
     TEST_ASSERT_FALSE_MESSAGE(status, "vmon_get_ch_status() should return false when voltage is below than FAIL min");
 }
 
+// Сценарий: Рост напряжения ниже FAIL min через зону гистерезиса до OK
+// Ожидается: Статус остается FAIL в зоне гистерезиса, переход в OK при превышении
+// порога OK min
 static void test_vmon_hysteresis_fail_min_to_ok(void)
 {
     LOG_INFO("Testing hysteresis: FAIL min -> OK");
 
-    // Voltage is below FAIL min
+    // Напряжение ниже FAIL min
     utest_adc_set_ch_mv(ADC_CHANNEL_ADC_3V3, 2500);
     bool status = vmon_check_ch_once(VMON_CHANNEL_V33);
     TEST_ASSERT_FALSE_MESSAGE(status, "vmon_check_ch_once() should return false when voltage is below FAIL min");
     status = vmon_get_ch_status(VMON_CHANNEL_V33);
     TEST_ASSERT_FALSE_MESSAGE(status, "vmon_get_ch_status() should return false when voltage is below FAIL min");
 
-    // Voltage is between FAIL min and OK min (hysteresis area)
+    // Напряжение между FAIL min и OK min (зона гистерезиса)
     utest_adc_set_ch_mv(ADC_CHANNEL_ADC_3V3, 2850);
     status = vmon_check_ch_once(VMON_CHANNEL_V33);
     TEST_ASSERT_FALSE_MESSAGE(status, "Voltage status should still be FAIL in the hysteresis area");
     status = vmon_get_ch_status(VMON_CHANNEL_V33);
     TEST_ASSERT_FALSE_MESSAGE(status, "Voltage status should still be FAIL in the hysteresis area");
 
-    // Normal voltage
+    // Нормальное напряжение
     utest_adc_set_ch_mv(ADC_CHANNEL_ADC_3V3, 3300);
     status = vmon_check_ch_once(VMON_CHANNEL_V33);
     TEST_ASSERT_TRUE_MESSAGE(status, "vmon_check_ch_once() should return true when voltage is OK");
@@ -152,25 +163,28 @@ static void test_vmon_hysteresis_fail_min_to_ok(void)
     TEST_ASSERT_TRUE_MESSAGE(status, "vmon_get_ch_status() should return true when voltage is OK");
 }
 
+// Сценарий: Падение напряжения выше FAIL max через зону гистерезиса до OK
+// Ожидается: Статус остается FAIL в зоне гистерезиса, переход в OK при снижении ниже
+// порога OK max
 static void test_vmon_hysteresis_fail_max_to_ok(void)
 {
     LOG_INFO("Testing hysteresis: FAIL max -> OK");
 
-    // Voltage is above FAIL max
+    // Напряжение выше FAIL max
     utest_adc_set_ch_mv(ADC_CHANNEL_ADC_3V3, 3600);
     bool status = vmon_check_ch_once(VMON_CHANNEL_V33);
     TEST_ASSERT_FALSE_MESSAGE(status, "vmon_check_ch_once() should return false when voltage is above FAIL max");
     status = vmon_get_ch_status(VMON_CHANNEL_V33);
     TEST_ASSERT_FALSE_MESSAGE(status, "vmon_get_ch_status() should return false when voltage is above FAIL max");
 
-    // Voltage is between OK max and FAIL max (hysteresis area)
+    // Напряжение между OK max и FAIL max (зона гистерезиса)
     utest_adc_set_ch_mv(ADC_CHANNEL_ADC_3V3, 3450);
     status = vmon_check_ch_once(VMON_CHANNEL_V33);
     TEST_ASSERT_FALSE_MESSAGE(status, "Voltage status should still be FAIL in the hysteresis area");
     status = vmon_get_ch_status(VMON_CHANNEL_V33);
     TEST_ASSERT_FALSE_MESSAGE(status, "Voltage status should still be FAIL in the hysteresis area");
 
-    // Normal voltage
+    // Нормальное напряжение
     utest_adc_set_ch_mv(ADC_CHANNEL_ADC_3V3, 3300);
     status = vmon_check_ch_once(VMON_CHANNEL_V33);
     TEST_ASSERT_TRUE_MESSAGE(status, "vmon_check_ch_once() should return true when voltage is OK");
@@ -178,26 +192,27 @@ static void test_vmon_hysteresis_fail_max_to_ok(void)
     TEST_ASSERT_TRUE_MESSAGE(status, "vmon_get_ch_status() should return true when voltage is OK");
 }
 
-
+// Сценарий: Периодическая обработка после стартовой задержки при корректных напряжениях
+// Ожидается: Модуль переходит в ready, все каналы в статусе OK
 static void test_vmon_do_periodic_work_after_delay(void)
 {
     LOG_INFO("Testing periodic work after start delay");
 
     vmon_init();
 
-    // Set correct voltages
+    // Установка корректных напряжений
     utest_adc_set_ch_mv(ADC_CHANNEL_ADC_V_IN, 20000);
     utest_adc_set_ch_mv(ADC_CHANNEL_ADC_3V3, 3300);
     utest_adc_set_ch_mv(ADC_CHANNEL_ADC_5V, 5000);
 
-    // Advance time past the delay
+    // Сдвиг времени за границу стартовой задержки
     utest_systick_advance_time_ms(VOLTAGE_MONITOR_START_DELAY_MS + 10);
     vmon_do_periodic_work();
 
-    // Module should be ready
+    // Проверка состояния готовности модуля
     TEST_ASSERT_TRUE_MESSAGE(vmon_ready(), "Module should be ready after start delay");
 
-    // All channels should have OK status
+    // Проверка статуса OK для всех каналов
     bool status = vmon_get_ch_status(VMON_CHANNEL_V_IN);
     TEST_ASSERT_TRUE_MESSAGE(status, "V_IN should be OK");
     status = vmon_get_ch_status(VMON_CHANNEL_V33);
@@ -206,23 +221,25 @@ static void test_vmon_do_periodic_work_after_delay(void)
     TEST_ASSERT_TRUE_MESSAGE(status, "V50 should be OK");
 }
 
-
+// Сценарий: Периодическая обработка с одним каналом вне допустимых границ
+// Ожидается: Для проблемного канала статус FAIL, остальные каналы сохраняют
+// независимый статус (OK)
 static void test_vmon_do_periodic_work_checks_all_channels(void)
 {
     LOG_INFO("Testing periodic work checks all channels");
 
     vmon_init();
 
-    // Set one channel out of limits
+    // Установка одного канала вне допустимых границ
     utest_adc_set_ch_mv(ADC_CHANNEL_ADC_V_IN, 20000);  // OK
-    utest_adc_set_ch_mv(ADC_CHANNEL_ADC_3V3, 2500);    // FAIL (below OK min)
+    utest_adc_set_ch_mv(ADC_CHANNEL_ADC_3V3, 2500);    // FAIL (ниже OK min)
     utest_adc_set_ch_mv(ADC_CHANNEL_ADC_5V, 5000);     // OK
 
-    // Advance time and run periodic work
+    // Сдвиг времени и запуск периодической обработки
     utest_systick_advance_time_ms(VOLTAGE_MONITOR_START_DELAY_MS + 10);
     vmon_do_periodic_work();
 
-    // Check status of all channels
+    // Проверка статуса всех каналов
     bool status = vmon_get_ch_status(VMON_CHANNEL_V_IN);
     TEST_ASSERT_TRUE_MESSAGE(status, "V_IN should be OK");
     status = vmon_get_ch_status(VMON_CHANNEL_V33);
@@ -231,17 +248,19 @@ static void test_vmon_do_periodic_work_checks_all_channels(void)
     TEST_ASSERT_TRUE_MESSAGE(status, "V50 should be OK");
 }
 
-
+// Сценарий: Разные уровни напряжения на разных каналах
+// Ожидается: Каждый канал возвращает свой статус (OK/FAIL) в зависимости
+// от своего уровня напряжения и не зависит от других каналов
 static void test_vmon_multiple_channels_independent(void)
 {
     LOG_INFO("Testing multiple channels independence");
 
-    // Set different voltages for different channels
+    // Установка различных напряжений для разных каналов
     utest_adc_set_ch_mv(ADC_CHANNEL_ADC_V_IN, 20000);  // OK
     utest_adc_set_ch_mv(ADC_CHANNEL_ADC_3V3, 3300);    // OK
-    utest_adc_set_ch_mv(ADC_CHANNEL_ADC_5V, 3000);     // FAIL (below OK min)
+    utest_adc_set_ch_mv(ADC_CHANNEL_ADC_5V, 3000);     // FAIL (ниже OK min)
 
-    // Check channels
+    // Проверка каналов
     bool status = vmon_check_ch_once(VMON_CHANNEL_V_IN);
     TEST_ASSERT_TRUE_MESSAGE(status, "vmon_check_ch_once() should return true for V_IN");
     status = vmon_check_ch_once(VMON_CHANNEL_V33);
@@ -249,7 +268,7 @@ static void test_vmon_multiple_channels_independent(void)
     status = vmon_check_ch_once(VMON_CHANNEL_V50);
     TEST_ASSERT_FALSE_MESSAGE(status, "vmon_check_ch_once() should return false for V50");
 
-    // Verify status independence
+    // Проверка независимости статусов
     status = vmon_get_ch_status(VMON_CHANNEL_V_IN);
     TEST_ASSERT_TRUE_MESSAGE(status, "V_IN status should be OK");
     status = vmon_get_ch_status(VMON_CHANNEL_V33);
