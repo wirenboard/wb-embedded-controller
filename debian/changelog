@@ -1,3 +1,15 @@
+wb-ec-firmware (2.1.1) stable; urgency=medium
+
+  * add environment for unittests and coverage metering
+  * gpio-subsystem: fix build error on old compiler
+  * regmap: full unittests coverage
+  * add unittests: voltage-monitor, temperature-control, gpio-subsystem, hwrev, ntc, pwrkey,
+    wdt, rtc-alarm-subsystem, wbmz-common, wbmz-subsystem, wbmz6-supercap
+  * add unittests: linux-power-control, wbec
+    co-authored-by: Ilia Skochilov <ilia.skochilov@wirenboard.com>
+
+ -- Maxim Toropov <maxim.toropov@wirenboard.com>  Wed, 01 Apr 2026 18:10:00 +0300
+
 wb-ec-firmware (2.1.0) stable; urgency=medium
 
   * add support for uart word length 7 bit

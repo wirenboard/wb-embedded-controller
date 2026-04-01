@@ -1,3 +1,7 @@
+#include "wbec.h"
+
+#include <string.h>
+
 #include "config.h"
 #include "regmap-int.h"
 #include "pwrkey.h"
@@ -16,7 +20,6 @@
 #include "mcu-pwr.h"
 #include "rcc.h"
 #include "console.h"
-#include <string.h>
 #include "hwrev.h"
 #include "buzzer.h"
 #include "temperature-control.h"
@@ -91,7 +94,7 @@ static void new_state(enum wbec_state s)
     case WBEC_STATE_TEMP_CHECK_LOOP:            system_led_blink(5,   100);     break;
     case WBEC_STATE_POWER_ON_SEQUENCE_WAIT:     system_led_blink(50,  50);      break;
     case WBEC_STATE_POWER_OFF_SEQUENCE_WAIT:    system_led_blink(50,  50);      break;
-    default:                                    system_led_enable();            break;
+    default:                                    system_led_enable();            break; // GCOVR_EXCL_LINE
 
     case WBEC_STATE_WORKING:
         system_led_blink(500, 1000);
@@ -109,7 +112,7 @@ static inline systime_t in_state_time_ms(void)
 static inline const char * get_poweron_reason_string(enum linux_poweron_reason r)
 {
     if (r >= ARRAY_SIZE(linux_power_reason_strings)) {
-        return "Unknown";
+        return "Unknown"; // GCOVR_EXCL_LINE
     }
     return linux_power_reason_strings[r];
 }
@@ -617,3 +620,10 @@ void wbec_do_periodic_work(void)
         break;
     }
 }
+
+#ifdef __unittest_env__
+    void utest_wbec_reset_state(void)
+    {
+        memset(&wbec_ctx, 0, sizeof(wbec_ctx));
+    }
+#endif

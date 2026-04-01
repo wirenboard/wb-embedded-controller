@@ -19,7 +19,7 @@ enum wbmz6_device {
 static enum wbmz6_device wbmz6_device = WBMZ6_DEVICE_NONE;
 static struct wbmz6_params wbmz6_params = {};
 static struct wbmz6_status wbmz6_status = {};
-static systime_t wbmz6_last_poll_time;
+static systime_t wbmz6_last_poll_time = 0;
 
 static enum wbmz6_device wmbz6_detect_device(void)
 {
@@ -128,3 +128,16 @@ void wbmz_subsystem_do_periodic_work(void)
     regmap_set_region_data(REGMAP_REGION_PWR_STATUS, &p, sizeof(p));
 }
 
+#ifdef __unittest_env__
+#include <string.h>
+
+void utest_wbmz_subsystem_reset_state(void)
+{
+    #ifdef WBEC_WBMZ6_SUPPORT
+        wbmz6_device = WBMZ6_DEVICE_NONE;
+        memset(&wbmz6_params, 0, sizeof(wbmz6_params));
+        memset(&wbmz6_status, 0, sizeof(wbmz6_status));
+        wbmz6_last_poll_time = 0;
+    #endif
+}
+#endif
