@@ -161,13 +161,10 @@ for FIRMWARE in $FIRMWARES_ORDER; do
     echo "I2C bus: $I2C_BUS"
 
     # Reset to bootloader
-    gpioset $GPIO_BOOT0_NUM=1
-    sleep 0.1
-    gpioset $GPIO_RESET_NUM=1
-    sleep 0.1
-    gpioset $GPIO_RESET_NUM=0
-    sleep 0.5
-    gpioset $GPIO_BOOT0_NUM=0
+    gpioset -p 100ms -t0 -c $GPIO_BOOT0_NUM=1
+    gpioset -p 100ms -t0 -c $GPIO_RESET_NUM=1
+    gpioset -p 100ms -t0 -c $GPIO_RESET_NUM=0
+    gpioset -p 500ms -t0 -c $GPIO_BOOT0_NUM=0
 
     # Check, bootloader is running
     stm32flash $I2C_BUS -a$BOOTLOADER_I2C_ADDR || {
