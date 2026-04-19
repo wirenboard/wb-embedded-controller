@@ -1,3 +1,9 @@
+wb-ec-firmware (2.1.2) stable; urgency=medium
+
+  * add VBAT charging
+
+ -- Nikolay Oleinik <nikolay.oleinik@wirenboard.com>  Sun, 19 Apr 2026 15:29:00 +0700
+
 wb-ec-firmware (2.1.1) stable; urgency=medium
 
   * add environment for unittests and coverage metering
