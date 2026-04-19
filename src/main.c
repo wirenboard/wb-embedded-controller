@@ -113,6 +113,7 @@ int main(void)
         irq_do_periodic_work();
         vmon_do_periodic_work();
         test_do_periodic_work();
+        mcu_check_vbat_do_periodic_work();
         buzzer_subsystem_do_periodic_work();
         wbmz_subsystem_do_periodic_work();
 
