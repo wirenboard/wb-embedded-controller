@@ -231,6 +231,16 @@ void adc_set_lowpass_rc(enum adc_channel channel, uint16_t rc_ms)
     adc_ctx.lowpass_factors[ch_index_in_dma_buff] = calculate_rc_factor(rc_ms);
 }
 
+// Сбрасывает lowpass фильтр канала, защёлкивая в нём текущее raw значение из DMA-буфера.
+// Используется, когда канал был временно отключён (например, через ADC_CCR_VBATEN)
+// и накопленное значение фильтра уже не актуально.
+void adc_reset_lowpass(enum adc_channel channel)
+{
+    uint8_t ch_index_in_dma_buff = ADC_CHANNEL_INDEX(channel);
+
+    adc_ctx.lowpass_values[ch_index_in_dma_buff] = fix16_from_int(adc_ctx.raw_values[ch_index_in_dma_buff]);
+}
+
 void adc_set_offset_mv(enum adc_channel channel, int16_t offset_mv)
 {
     adc_ctx.offset_mv[channel] = offset_mv;
