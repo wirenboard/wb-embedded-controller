@@ -26,7 +26,11 @@ static inline void update_regmap(void)
 {
     struct REGMAP_VBAT_STATUS r;
     r.voltage_mv = vbat_mv;
-    r.is_charging = (PWR->CR4 & PWR_CR4_VBE) ? 1 : 0;
+    if (PWR->CR4 & PWR_CR4_VBE) {
+        r.is_charging = 1;
+    } else {
+        r.is_charging = 0;
+    }
     regmap_set_region_data(REGMAP_REGION_VBAT_STATUS, &r, sizeof(r));
 }
 
@@ -66,7 +70,6 @@ void mcu_vbat_check_do_periodic_work(void)
         vbat_mv = adc_get_ch_mv(ADC_CHANNEL_ADC_INT_VBAT);
         ADC->CCR &= ~ADC_CCR_VBATEN;
         vbat_state_timestamp = systick_get_system_time_ms();
-        update_regmap();
 
         if (vbat_mv < VBAT_THRESHOLD_MV) {
             PWR->CR4 |= PWR_CR4_VBE;
@@ -84,4 +87,6 @@ void mcu_vbat_check_do_periodic_work(void)
         }
         break;
     }
+
+    update_regmap();
 }
