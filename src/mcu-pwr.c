@@ -2,14 +2,8 @@
 #include "config.h"
 #include "wbmcu_system.h"
 #include "rtc.h"
-#include "adc.h"
-#include "systick.h"
-
-#define VBAT_THRESHOLD_MV               3000
-#define VBAT_CHARGING_TIME_MS           (2*24*3600*1000) // 2 days
 
 static enum mcu_poweron_reason mcu_poweron_reason = MCU_POWERON_REASON_UNKNOWN;
-static systime_t vbat_charging_start_timestamp;
 
 // Вызывать один раз в начале main
 void mcu_init_poweron_reason(void)
@@ -30,8 +24,6 @@ void mcu_init_poweron_reason(void)
     } else {
         mcu_poweron_reason = MCU_POWERON_REASON_POWER_ON;
     }
-
-    PWR->CR4 |= PWR_CR4_VBRS; // enable 1.5 kOhm internal resistor for charging over VBAT
 }
 
 enum mcu_poweron_reason mcu_get_poweron_reason(void)
@@ -80,18 +72,4 @@ enum mcu_vcc_5v_state mcu_get_vcc_5v_last_state(void)
 void mcu_save_vcc_5v_last_state(enum mcu_vcc_5v_state state)
 {
     rtc_save_to_tamper_reg(0, state);
-}
-
-void mcu_check_vbat_do_periodic_work(void)
-{
-    if (PWR->CR4 & PWR_CR4_VBE) {
-        if (systick_get_time_since_timestamp(vbat_charging_start_timestamp) >= VBAT_CHARGING_TIME_MS) {
-            PWR->CR4 &= ~PWR_CR4_VBE;
-        }
-    } else {
-        if (adc_get_ch_mv(ADC_CHANNEL_ADC_INT_VBAT) < VBAT_THRESHOLD_MV) {
-            vbat_charging_start_timestamp = systick_get_system_time_ms();
-            PWR->CR4 |= PWR_CR4_VBE;
-        }
-    }
 }

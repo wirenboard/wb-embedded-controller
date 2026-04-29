@@ -63,6 +63,11 @@
         /* 0x49 */  uint16_t v_a4; \
     ) \
     /*     Addr     Name            RO/RW */ \
+    m(     0x50,    VBAT_STATUS,    RO, \
+        /* 0x50 */  uint16_t voltage_mv; \
+        /* 0x51 */  uint16_t is_charging : 1; \
+    ) \
+    /*     Addr     Name            RO/RW */ \
     m(     0x80,    GPIO_CTRL,      RW, \
         /* 0x80 */  uint16_t gpio_ctrl; \
     ) \
