@@ -4,6 +4,7 @@
 #include "rtc.h"
 #include "temperature-control.h"
 #include "wbmz-common.h"
+#include "mcu-vbat.h"
 
 /**
  * Выполняет разные тестовые функции, в обычной работе не участвует.
@@ -44,6 +45,16 @@ void test_do_periodic_work(void)
 
         wbmz_set_charging_force_control(test.wbmz_force_control, test.wbmz_charge_en);
         wbmz_set_stepup_force_control(test.wbmz_force_control, test.wbmz_stepup_en);
+
+        if (test.vbat_meas_en) {
+            mcu_vbat_trigger_measurement();
+            test.vbat_meas_en = 0;
+        }
+
+        if (test.vbat_charge_en) {
+            mcu_vbat_restart_charging();
+            test.vbat_charge_en = 0;
+        }
 
         regmap_set_region_data(REGMAP_REGION_TEST, &test, sizeof(test));
     }

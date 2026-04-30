@@ -63,11 +63,6 @@
         /* 0x49 */  uint16_t v_a4; \
     ) \
     /*     Addr     Name            RO/RW */ \
-    m(     0x50,    VBAT_STATUS,    RO, \
-        /* 0x50 */  uint16_t voltage_mv; \
-        /* 0x51 */  uint16_t is_charging : 1; \
-    ) \
-    /*     Addr     Name            RO/RW */ \
     m(     0x80,    GPIO_CTRL,      RW, \
         /* 0x80 */  uint16_t gpio_ctrl; \
     ) \
@@ -140,6 +135,11 @@
         /* 0xD2 */  uint16_t enabled : 1; \
     ) \
     /*     Addr     Name            RO/RW */ \
+    m(     0xE0,    VBAT_STATUS,    RO, \
+        /* 0xE0 */  uint16_t voltage_mv; \
+        /* 0xE1 */  uint16_t is_charging : 1; \
+    ) \
+    /*     Addr     Name            RO/RW */ \
     m(     0xF0,    TEST,           RW, \
         /* 0xF0 */  uint16_t send_test_message : 1; \
         /* 0xF0 */  uint16_t enable_rtc_out : 1; \
@@ -148,6 +148,8 @@
         /* 0xF0 */  uint16_t wbmz_force_control : 1; \
         /* 0xF0 */  uint16_t wbmz_stepup_en : 1; \
         /* 0xF0 */  uint16_t wbmz_charge_en : 1; \
+        /* 0xF0 */  uint16_t vbat_meas_en : 1; \
+        /* 0xF0 */  uint16_t vbat_charge_en : 1; \
     ) \
     /* UARTs */ \
     /*     Addr     Name            RO/RW */ \

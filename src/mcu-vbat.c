@@ -5,6 +5,7 @@
 #include "systick.h"
 #include "fix16.h"
 #include "regmap-int.h"
+#include <stdbool.h>
 
 #define VBAT_THRESHOLD_MV               3000
 #define VBAT_ADC_MEAS_PERIOD_MS         (1*24*3600*1000)    // 1 день между измерениями
@@ -22,11 +23,30 @@ static enum vbat_state vbat_state;
 static systime_t vbat_state_timestamp;
 static int32_t vbat_mv;
 
+static inline void start_charge(void)
+{
+    PWR->CR4 |= PWR_CR4_VBE;
+}
+
+static inline void stop_charge(void)
+{
+    PWR->CR4 &= ~PWR_CR4_VBE;
+}
+
+static inline bool is_charging(void)
+{
+    if (PWR->CR4 & PWR_CR4_VBE) {
+        return true;
+    } else {
+        return false;
+    }
+}
+
 static inline void update_regmap(void)
 {
     struct REGMAP_VBAT_STATUS r;
     r.voltage_mv = vbat_mv;
-    if (PWR->CR4 & PWR_CR4_VBE) {
+    if (is_charging()) {
         r.is_charging = 1;
     } else {
         r.is_charging = 0;
@@ -56,6 +76,8 @@ void mcu_vbat_check_do_periodic_work(void)
         // АЦП конвертит его постоянно — теперь будет писать в raw_values реальное
         // значение батарейки.
         ADC->CCR |= ADC_CCR_VBATEN;
+        // Защёлкиваем последнее raw в lowpass (иначе фильтр содержит мусор от выключенного делителя)
+        adc_reset_lowpass(ADC_CHANNEL_ADC_INT_VBAT);
         vbat_state_timestamp = systick_get_system_time_ms();
         vbat_state = VBAT_STATE_MEASURING;
         break;
@@ -64,15 +86,13 @@ void mcu_vbat_check_do_periodic_work(void)
         if (systick_get_time_since_timestamp(vbat_state_timestamp) < VBAT_MEAS_STABILIZE_MS) {
             break;
         }
-        // Защёлкиваем свежее raw в lowpass (иначе фильтр содержит мусор от
-        // выключенного делителя), читаем mV, выключаем делитель для экономии батареи.
-        adc_reset_lowpass(ADC_CHANNEL_ADC_INT_VBAT);
+        // читаем mV, выключаем делитель для экономии батареи
         vbat_mv = adc_get_ch_mv(ADC_CHANNEL_ADC_INT_VBAT);
         ADC->CCR &= ~ADC_CCR_VBATEN;
         vbat_state_timestamp = systick_get_system_time_ms();
 
         if (vbat_mv < VBAT_THRESHOLD_MV) {
-            PWR->CR4 |= PWR_CR4_VBE;
+            start_charge();
             vbat_state = VBAT_STATE_CHARGING;
         } else {
             vbat_state = VBAT_STATE_IDLE;
@@ -81,7 +101,7 @@ void mcu_vbat_check_do_periodic_work(void)
 
     case VBAT_STATE_CHARGING:
         if (systick_get_time_since_timestamp(vbat_state_timestamp) >= VBAT_CHARGING_TIME_MS) {
-            PWR->CR4 &= ~PWR_CR4_VBE;
+            stop_charge();
             vbat_state_timestamp = systick_get_system_time_ms();
             vbat_state = VBAT_STATE_IDLE;
         }
@@ -89,4 +109,21 @@ void mcu_vbat_check_do_periodic_work(void)
     }
 
     update_regmap();
+}
+
+void mcu_vbat_trigger_measurement(void)
+{
+    // Принудительно прерываем текущее состояние (в т.ч. зарядку) и запускаем
+    // измерение немедленно: переходим в IDLE с уже истекшим периодом,
+    // ближайший do_periodic_work запустит измерение.
+    stop_charge();
+    vbat_state_timestamp = systick_get_system_time_ms() - VBAT_ADC_MEAS_PERIOD_MS;
+    vbat_state = VBAT_STATE_IDLE;
+}
+
+void mcu_vbat_restart_charging(void)
+{
+    start_charge();
+    vbat_state_timestamp = systick_get_system_time_ms();
+    vbat_state = VBAT_STATE_CHARGING;
 }
