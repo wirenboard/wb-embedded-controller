@@ -25,6 +25,7 @@
 #include "software_i2c.h"
 #include "uart-regmap-subsystem.h"
 #include "wdt-stm32.h"
+#include "mcu-vbat.h"
 
 int main(void)
 {
@@ -81,6 +82,8 @@ int main(void)
     systick_init();
     adc_init(ADC_CLOCK_DIV_64, ADC_VREF_INT);
 
+    mcu_vbat_init();
+
     // Init drivers
     gpio_init();
     temperature_control_init();
@@ -123,6 +126,8 @@ int main(void)
         // Main algorithm
         linux_cpu_pwr_seq_do_periodic_work();
         wbec_do_periodic_work();
+
+        mcu_vbat_check_do_periodic_work();
 
         watchdog_reload();
     }

@@ -158,8 +158,8 @@ $(TARGET_DIR)/$(TARGET).elf: version_check $(OBJECTS) $(LD_FILES) $(TARGET_DIR)/
 	$(SZ) $@
 	@echo
 
-$(TARGET_DIR)/stack_size.ld:
-	$(shell echo "_Minimum_Stack_Size = $(STACK_SIZE);" > $@)
+$(TARGET_DIR)/stack_size.ld: | $(TARGET_DIR)
+	echo "_Minimum_Stack_Size = $(STACK_SIZE);" > $@
 
 $(TARGET_DIR)/%.hex: $(TARGET_DIR)/%.elf
 	$(HEX) $< $@
