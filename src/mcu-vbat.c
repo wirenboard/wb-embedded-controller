@@ -7,7 +7,7 @@
 #include "regmap-int.h"
 #include <stdbool.h>
 
-#define VBAT_THRESHOLD_MV               3000
+#define VBAT_THRESHOLD_MV               2700                // 2.7 В - порог, ниже которого считаем батарейку разряженной и запускаем зарядку
 #define VBAT_ADC_MEAS_PERIOD_MS         (1*24*3600*1000)    // 1 день между измерениями
 #define VBAT_CHARGING_TIME_MS           (2*24*3600*1000)    // 2 дня длительность зарядки
 // Время на стабилизацию делителя VBAT и набор свежего значения в DMA-буфере
