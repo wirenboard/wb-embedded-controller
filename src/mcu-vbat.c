@@ -11,7 +11,7 @@
 #define VBAT_ADC_MEAS_PERIOD_MS         (1*24*3600*1000)    // 1 день между измерениями
 #define VBAT_CHARGING_TIME_MS           (2*24*3600*1000)    // 2 дня длительность зарядки
 // Время на стабилизацию делителя VBAT и набор свежего значения в DMA-буфере
-#define VBAT_MEAS_STABILIZE_MS          30
+#define VBAT_MEAS_STABILIZE_MS          100
 
 enum vbat_state {
     VBAT_STATE_IDLE,        // ждём очередного периода измерения
