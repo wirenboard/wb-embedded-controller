@@ -1,1 +1,1 @@
-buildDebSbuild defaultTargets: 'bullseye-armhf'
+buildDebSbuild()
