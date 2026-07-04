@@ -32,6 +32,7 @@ enum utest_wbec_poweron_reason {
     UTEST_REASON_WATCHDOG,
     UTEST_REASON_PMIC_OFF,
     UTEST_REASON_UNKNOWN,
+    UTEST_REASON_WATCHDOG_WARM,
 };
 
 static void reset_all(void)
@@ -986,7 +987,9 @@ static void test_periodic_working_reboot_request(void)
                                      "poweron_reason must be REASON_REBOOT");
 }
 
-// Сценарий: запрос pmic_reset из Linux → reset_pmic.
+// Сценарий: запрос pmic_reset из Linux.
+// На моделях с WBEC_HAS_WARM_RESET → тёплый сброс (warm_reset),
+// на остальных → историческое поведение (reset_pmic, удержание до 2 с).
 static void test_periodic_working_pmic_reset_request(void)
 {
     drive_to_working_state();
@@ -994,14 +997,30 @@ static void test_periodic_working_pmic_reset_request(void)
     set_power_ctrl_request(false, false, true);
     wbec_do_periodic_work();
 
+#if defined(WBEC_HAS_WARM_RESET)
+    TEST_ASSERT_TRUE_MESSAGE(utest_linux_pwr_get_warm_reset_called(),
+                             "warm_reset must be called on pmic_reset request");
+#else
     TEST_ASSERT_TRUE_MESSAGE(utest_linux_pwr_get_reset_pmic_called(),
                              "reset_pmic must be called on pmic_reset request");
+    TEST_ASSERT_FALSE_MESSAGE(utest_linux_pwr_get_warm_reset_called(),
+                              "warm_reset must NOT be called on models without warm reset support");
+#endif
 
     TEST_ASSERT_EQUAL_UINT16_MESSAGE(UTEST_REASON_REBOOT, get_poweron_reason_from_regmap(),
                                      "poweron_reason must be REASON_REBOOT");
 }
 
-// Сценарий: WDT тайм-аут → hard_reset, reason=WATCHDOG.
+// Вспомогательная: возврат из POWER_ON_SEQUENCE_WAIT в WORKING после сброса
+static void drive_back_to_working_state(void)
+{
+    // POWER_ON_SEQUENCE_WAIT → WORKING (is_busy=false по умолчанию)
+    wbec_do_periodic_work();
+}
+
+// Сценарий: первый WDT тайм-аут.
+// На моделях с WBEC_HAS_WARM_RESET → warm_reset (DRAM сохраняется), reason=WATCHDOG_WARM.
+// На остальных → сразу жёсткий сброс по питанию, reason=WATCHDOG (историческое поведение).
 static void test_periodic_working_wdt_timeout(void)
 {
     drive_to_working_state();
@@ -1009,12 +1028,77 @@ static void test_periodic_working_wdt_timeout(void)
     utest_wdt_set_timed_out(true);
     wbec_do_periodic_work();
 
+#if defined(WBEC_HAS_WARM_RESET)
+    TEST_ASSERT_TRUE_MESSAGE(utest_linux_pwr_get_warm_reset_called(),
+                             "warm_reset must be called on first WDT timeout");
+    TEST_ASSERT_FALSE_MESSAGE(utest_linux_pwr_get_hard_reset_called(),
+                              "hard_reset must NOT be called on first WDT timeout");
+
+    TEST_ASSERT_EQUAL_UINT16_MESSAGE(UTEST_REASON_WATCHDOG_WARM, get_poweron_reason_from_regmap(),
+                                     "poweron_reason must be REASON_WATCHDOG_WARM");
+#else
     TEST_ASSERT_TRUE_MESSAGE(utest_linux_pwr_get_hard_reset_called(),
                              "hard_reset must be called on WDT timeout");
+    TEST_ASSERT_FALSE_MESSAGE(utest_linux_pwr_get_warm_reset_called(),
+                              "warm_reset must NOT be called on models without warm reset support");
 
     TEST_ASSERT_EQUAL_UINT16_MESSAGE(UTEST_REASON_WATCHDOG, get_poweron_reason_from_regmap(),
                                      "poweron_reason must be REASON_WATCHDOG");
+#endif
 }
+
+#if defined(WBEC_HAS_WARM_RESET)
+// Сценарий: повторный WDT тайм-аут без сброса watchdog из Linux → hard_reset, reason=WATCHDOG.
+static void test_periodic_working_wdt_timeout_second_time_hard(void)
+{
+    drive_to_working_state();
+
+    // Первый тайм-аут → warm_reset
+    utest_wdt_set_timed_out(true);
+    wbec_do_periodic_work();
+    TEST_ASSERT_TRUE_MESSAGE(utest_linux_pwr_get_warm_reset_called(),
+                             "warm_reset must be called on first WDT timeout");
+
+    // Linux не ожил: watchdog не сбрасывался, второй тайм-аут
+    drive_back_to_working_state();
+    utest_wdt_set_timed_out(true);
+    wbec_do_periodic_work();
+
+    TEST_ASSERT_TRUE_MESSAGE(utest_linux_pwr_get_hard_reset_called(),
+                             "hard_reset must be called on second WDT timeout without feed");
+    TEST_ASSERT_EQUAL_UINT16_MESSAGE(UTEST_REASON_WATCHDOG, get_poweron_reason_from_regmap(),
+                                     "poweron_reason must be REASON_WATCHDOG");
+}
+
+// Сценарий: после warm_reset Linux ожил (сбросил watchdog) → следующий тайм-аут снова warm_reset.
+static void test_periodic_working_wdt_feed_resets_escalation(void)
+{
+    drive_to_working_state();
+
+    // Первый тайм-аут → warm_reset
+    utest_wdt_set_timed_out(true);
+    wbec_do_periodic_work();
+    TEST_ASSERT_TRUE_MESSAGE(utest_linux_pwr_get_warm_reset_called(),
+                             "warm_reset must be called on first WDT timeout");
+    utest_linux_pwr_clear_warm_reset_called();
+
+    // Linux ожил и сбросил watchdog
+    drive_back_to_working_state();
+    utest_wdt_set_fed(true);
+    wbec_do_periodic_work();
+
+    // Новый тайм-аут → снова warm_reset, эскалация сброшена
+    utest_wdt_set_timed_out(true);
+    wbec_do_periodic_work();
+
+    TEST_ASSERT_TRUE_MESSAGE(utest_linux_pwr_get_warm_reset_called(),
+                             "warm_reset must be called again after watchdog was fed");
+    TEST_ASSERT_FALSE_MESSAGE(utest_linux_pwr_get_hard_reset_called(),
+                              "hard_reset must NOT be called after watchdog was fed");
+    TEST_ASSERT_EQUAL_UINT16_MESSAGE(UTEST_REASON_WATCHDOG_WARM, get_poweron_reason_from_regmap(),
+                                     "poweron_reason must be REASON_WATCHDOG_WARM");
+}
+#endif // WBEC_HAS_WARM_RESET
 
 // Сценарий: пропало 3.3В и 5В одновременно → hard_off (питание выдернуто).
 static void test_periodic_working_v33_and_v50_lost(void)
@@ -1235,6 +1319,10 @@ int main(void)
     RUN_TEST(test_periodic_working_reboot_request);
     RUN_TEST(test_periodic_working_pmic_reset_request);
     RUN_TEST(test_periodic_working_wdt_timeout);
+#if defined(WBEC_HAS_WARM_RESET)
+    RUN_TEST(test_periodic_working_wdt_timeout_second_time_hard);
+    RUN_TEST(test_periodic_working_wdt_feed_resets_escalation);
+#endif
     RUN_TEST(test_periodic_working_v33_and_v50_lost);
     RUN_TEST(test_periodic_working_v33_lost_wbmz_vbat_low);
     RUN_TEST(test_periodic_working_v33_lost_wbmz_vbat_ok_uses_generic_path);

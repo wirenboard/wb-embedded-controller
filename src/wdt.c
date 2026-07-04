@@ -20,6 +20,7 @@ struct wdt_ctx {
     systime_t timestamp;
     bool run;
     bool timed_out;
+    bool fed;
 };
 
 static struct wdt_ctx wdt_ctx = {
@@ -56,6 +57,17 @@ bool wdt_handle_timed_out(void)
     return ret;
 }
 
+// Возвращает true, если Linux сбрасывал watchdog через regmap
+// с момента предыдущего вызова. Признак того, что система жива.
+bool wdt_handle_fed(void)
+{
+    bool ret = wdt_ctx.fed;
+    if (ret) {
+        wdt_ctx.fed = 0;
+    }
+    return ret;
+}
+
 void wdt_do_periodic_work(void)
 {
     if (wdt_ctx.run) {
@@ -78,6 +90,7 @@ void wdt_do_periodic_work(void)
         }
         if (w.reset) {
             wdt_start_reset();
+            wdt_ctx.fed = 1;
         }
     }
 

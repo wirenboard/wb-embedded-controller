@@ -35,6 +35,8 @@
     m(REASON_WATCHDOG,        "Watchdog"                     ) \
     m(REASON_PMIC_OFF,        "PMIC is unexpectedly off"     ) \
     m(REASON_UNKNOWN,         "Unknown"                      ) \
+    /* Новые значения добавлять только в конец: значения - часть ABI regmap */ \
+    m(REASON_WATCHDOG_WARM,   "Watchdog (warm reset)"        ) \
 
 #define __LINUX_POWERON_REASON_NAME(name, string)           name,
 #define __LINUX_POWERON_REASON_STRING(name, string)         string,
@@ -77,6 +79,11 @@ struct wbec_ctx {
     unsigned power_loss_cnt;
     systime_t power_loss_timestamp;
     enum linux_poweron_reason poweron_reason;
+    // Была ли уже попытка тёплого сброса по watchdog.
+    // Сбрасывается, когда Linux сбрасывает watchdog (система жива).
+    // Если после тёплого сброса Linux так и не начал сбрасывать watchdog,
+    // следующий таймаут приведёт к жёсткому сбросу по питанию
+    bool wd_warm_reset_attempted;
 };
 
 static struct wbec_ctx wbec_ctx;
@@ -546,13 +553,51 @@ void wbec_do_periodic_work(void)
             linux_cpu_pwr_seq_hard_reset();
             new_state(WBEC_STATE_POWER_ON_SEQUENCE_WAIT);
         } else if (linux_powerctrl_req == LINUX_POWERCTRL_PMIC_RESET) {
+#if defined(WBEC_HAS_WARM_RESET)
+            // Тёплый сброс SoC по запросу из Linux: короткий импульс на линии
+            // PWROK/RESET. Питание PMIC (и DRAM) не отключается, поэтому
+            // сохранённые в DRAM логи (ramoops) переживают перезагрузку
+            wbec_ctx.poweron_reason = REASON_REBOOT;
+            console_print("\r\n\n");
+            console_print_w_prefix("Warm reset request, pulse PMIC RESET (PWROK) line now\r\n\n");
+            linux_cpu_pwr_seq_warm_reset();
+            new_state(WBEC_STATE_POWER_ON_SEQUENCE_WAIT);
+#else
+            // Историческое поведение: сброс PMIC через линию RESET (до 2 с)
             wbec_ctx.poweron_reason = REASON_REBOOT;
             console_print("\r\n\n");
             console_print_w_prefix("PMIC reset request, activate PMIC RESET line now\r\n\n");
             linux_cpu_pwr_seq_reset_pmic();
             new_state(WBEC_STATE_POWER_ON_SEQUENCE_WAIT);
+#endif
         }
 
+#if defined(WBEC_HAS_WARM_RESET)
+        // Если Linux сбрасывает watchdog - система жива,
+        // разрешаем следующую попытку тёплого сброса
+        if (wdt_handle_fed()) {
+            wbec_ctx.wd_warm_reset_attempted = false;
+        }
+
+        // Если сработал WDT - сначала пробуем тёплый сброс (DRAM сохраняется,
+        // логи ramoops можно будет прочитать после перезагрузки).
+        // Если после тёплого сброса система не ожила (Linux не сбросил
+        // watchdog до следующего таймаута) - жёсткий сброс по питанию
+        if (wdt_handle_timed_out()) {
+            console_print("\r\n\n");
+            if (!wbec_ctx.wd_warm_reset_attempted) {
+                wbec_ctx.wd_warm_reset_attempted = true;
+                wbec_ctx.poweron_reason = REASON_WATCHDOG_WARM;
+                console_print_w_prefix("Watchdog is timed out, try warm reset first (DRAM is preserved).\r\n");
+                linux_cpu_pwr_seq_warm_reset();
+            } else {
+                wbec_ctx.poweron_reason = REASON_WATCHDOG;
+                console_print_w_prefix("Watchdog is timed out again, reset power.\r\n");
+                linux_cpu_pwr_seq_hard_reset();
+            }
+            new_state(WBEC_STATE_POWER_ON_SEQUENCE_WAIT);
+        }
+#else
         // Если сработал WDT - перезагружаемся по питанию
         if (wdt_handle_timed_out()) {
             wbec_ctx.poweron_reason = REASON_WATCHDOG;
@@ -561,6 +606,7 @@ void wbec_do_periodic_work(void)
             linux_cpu_pwr_seq_hard_reset();
             new_state(WBEC_STATE_POWER_ON_SEQUENCE_WAIT);
         }
+#endif
 
         // Если пропало 3.3В - пробуем перезапустить питание, но не более N раз за M минут
         // Если питание пропадает слишком часто - выключаемся

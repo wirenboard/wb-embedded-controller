@@ -31,6 +31,7 @@ enum pwr_state {
 
     PS_RESET_5V_WAIT,                   // Нужно при перезаргрузке - выключаем 5В и ждём разрядку линий
     PS_RESET_PMIC_WAIT,                 // Сброс PMIC через PMIC_RESET_PWROK. Ждём, пока пропадёт 3.3В
+    PS_WARM_RESET_PULSE,                // Тёплый сброс SoC: короткий импульс на PMIC_RESET_PWROK
 };
 
 struct pwr_ctx {
@@ -174,6 +175,22 @@ void linux_cpu_pwr_seq_reset_pmic(void)
 }
 
 /**
+ * @brief Тёплый сброс SoC коротким импульсом на линии PMIC_RESET_PWROK.
+ * Линия одновременно заведена на PWROK PMIC и RESET процессора T507.
+ * Если в PMIC отключен рестарт по PWROK (AXP REG32[4]=0, значение по
+ * умолчанию), PMIC игнорирует импульс и все его выходы, включая питание
+ * DRAM, остаются включёнными — сбрасывается только SoC, содержимое DRAM
+ * сохраняется (это позволяет ramoops пережить сброс).
+ * Если же PMIC настроен на рестарт по PWROK, пропадёт 3.3В и штатная
+ * логика включения (PS_ON_STEP1_WAIT_3V3) выполнит полный цикл включения.
+ */
+void linux_cpu_pwr_seq_warm_reset(void)
+{
+    pmic_reset_gpio_on();
+    new_state(PS_WARM_RESET_PULSE);
+}
+
+/**
  * @brief Статус работы алгоритма управления питанием
  *
  * @return true Питание включено или выключено, алгоритм завершён
@@ -290,6 +307,17 @@ void linux_cpu_pwr_seq_do_periodic_work(void)
     case PS_RESET_5V_WAIT:
         if (in_state_time_ms() > WBEC_POWER_RESET_TIME_MS) {
             linux_cpu_pwr_5v_gpio_on();
+            new_state(PS_ON_STEP1_WAIT_3V3);
+        }
+        break;
+
+    // Тёплый сброс SoC: отпускаем линию RESET после короткого импульса.
+    // Если PMIC проигнорировал импульс, 3.3В на месте и включение
+    // завершится сразу; если PMIC перезапустился - штатное включение
+    case PS_WARM_RESET_PULSE:
+        if (in_state_time_ms() > WBEC_WARM_RESET_PULSE_MS) {
+            pmic_reset_gpio_off();
+            pmic_pwron_gpio_off();
             new_state(PS_ON_STEP1_WAIT_3V3);
         }
         break;

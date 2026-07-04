@@ -1,3 +1,18 @@
+wb-ec-firmware (2.4.0) stable; urgency=medium
+
+  * WB85: warm SoC reset via short PWROK/RESET pulse — PMIC rails and DRAM
+    stay powered, so pstore/ramoops panic logs survive the reboot
+  * WB85: two-stage watchdog — first timeout does a warm reset
+    (new poweron reason 8 "Watchdog (warm reset)"); if Linux does not feed
+    the watchdog before the next timeout, a hard power cycle follows
+    (reason 5 "Watchdog"). Consumers detecting watchdog resets must treat
+    both 5 and 8 as watchdog
+  * WB85: reset_pmic request (POWER_CTRL bit 2) now performs the short warm
+    pulse instead of the 2 s PMIC RESET hold
+  * WB74: behavior unchanged (no warm reset support)
+
+ -- Wiren Board Robot <info@wirenboard.com>  Fri, 04 Jul 2026 14:00:00 +0300
+
 wb-ec-firmware (2.3.0) stable; urgency=medium
 
   * Port for Debian 13

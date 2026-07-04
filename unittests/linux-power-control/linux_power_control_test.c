@@ -699,6 +699,76 @@ static void test_periodic_reset_pmic_completes_when_v33_is_lost(void)
     );
 }
 
+// Сценарий: тёплый сброс - короткий импульс на PMIC RESET (PWROK), 5В не отключается.
+// До действия: питание включено, 3.3В есть.
+// После действия: RESET удерживается WBEC_WARM_RESET_PULSE_MS, затем отпускается,
+// при живом 3.3В последовательность сразу завершается (PMIC проигнорировал импульс).
+static void test_periodic_warm_reset_pulses_reset_line_and_completes(void)
+{
+    linux_cpu_pwr_seq_init(true);
+    prepare_periodic_runtime(true, true);
+    linux_cpu_pwr_seq_do_periodic_work();
+    TEST_ASSERT_FALSE_MESSAGE(linux_cpu_pwr_seq_is_busy(), "Power sequence must be idle before warm reset");
+
+    linux_cpu_pwr_seq_warm_reset();
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(
+        1, utest_gpio_get_output_state(pmic_reset_gpio), "PMIC RESET GPIO must be asserted right after warm reset"
+    );
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(
+        1, utest_gpio_get_output_state(linux_power_gpio), "Linux power (5V) GPIO must stay high during warm reset"
+    );
+    TEST_ASSERT_TRUE_MESSAGE(linux_cpu_pwr_seq_is_busy(), "Power sequence must be busy during warm reset pulse");
+
+    // До истечения импульса линия удерживается
+    utest_systick_advance_time_ms(WBEC_WARM_RESET_PULSE_MS);
+    linux_cpu_pwr_seq_do_periodic_work();
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(
+        1, utest_gpio_get_output_state(pmic_reset_gpio), "PMIC RESET GPIO must stay high at exact pulse length"
+    );
+
+    // После истечения импульса линия отпущена, 5В осталось включено
+    utest_systick_advance_time_ms(1);
+    linux_cpu_pwr_seq_do_periodic_work();
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(
+        0, utest_gpio_get_output_state(pmic_reset_gpio), "PMIC RESET GPIO must be low after pulse"
+    );
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(
+        1, utest_gpio_get_output_state(linux_power_gpio), "Linux power (5V) GPIO must stay high after warm reset"
+    );
+
+    // 3.3В на месте → последовательность завершена
+    linux_cpu_pwr_seq_do_periodic_work();
+    TEST_ASSERT_FALSE_MESSAGE(linux_cpu_pwr_seq_is_busy(), "Power sequence must complete when 3.3V is alive");
+}
+
+// Сценарий: тёплый сброс, но PMIC перезапустился (3.3В пропало после импульса).
+// После действия: штатная логика включения пробует PMIC PWRON после 1с ожидания 3.3В.
+static void test_periodic_warm_reset_falls_back_to_power_on_when_v33_lost(void)
+{
+    linux_cpu_pwr_seq_init(true);
+    prepare_periodic_runtime(true, true);
+    linux_cpu_pwr_seq_do_periodic_work();
+
+    linux_cpu_pwr_seq_warm_reset();
+
+    // PMIC перезапустился: 3.3В пропало
+    utest_vmon_set_ch_status(VMON_CHANNEL_V33, false);
+
+    utest_systick_advance_time_ms(WBEC_WARM_RESET_PULSE_MS + 1);
+    linux_cpu_pwr_seq_do_periodic_work();
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(
+        0, utest_gpio_get_output_state(pmic_reset_gpio), "PMIC RESET GPIO must be low after pulse"
+    );
+    TEST_ASSERT_TRUE_MESSAGE(linux_cpu_pwr_seq_is_busy(), "Power sequence must stay busy waiting for 3.3V");
+
+    // Через 1с без 3.3В - попытка включить PMIC через PWRON (штатная логика)
+    utest_systick_advance_time_ms(1001);
+    linux_cpu_pwr_seq_do_periodic_work();
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(
+        1, utest_gpio_get_output_state(pmic_pwron_gpio), "PMIC PWRON GPIO must be asserted when 3.3V did not return"
+    );
+}
+
 // Сценарий: вызов linux_cpu_pwr_seq_reset_pmic и сохранение 3.3V.
 // До действия: RESET отпущен.
 // После действия: по таймауту >2000мс RESET завершается даже при наличии 3.3V.
@@ -978,6 +1048,8 @@ int main(void)
     RUN_TEST(test_periodic_off_complete_disables_stepup_when_enabled);
     RUN_TEST(test_periodic_v50_loss_goes_to_standby_with_saved_off_state);
 
+    RUN_TEST(test_periodic_warm_reset_pulses_reset_line_and_completes);
+    RUN_TEST(test_periodic_warm_reset_falls_back_to_power_on_when_v33_lost);
     RUN_TEST(test_periodic_reset_pmic_completes_when_v33_is_lost);
     RUN_TEST(test_periodic_reset_pmic_completes_by_timeout);
     RUN_TEST(test_periodic_reset_pmic_timeout_switches_state_only_after_2000ms);

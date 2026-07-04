@@ -17,6 +17,8 @@ bool utest_linux_pwr_get_pwr_on_called(void);
 bool utest_linux_pwr_get_hard_off_called(void);
 bool utest_linux_pwr_get_hard_reset_called(void);
 bool utest_linux_pwr_get_reset_pmic_called(void);
+bool utest_linux_pwr_get_warm_reset_called(void);
+void utest_linux_pwr_clear_warm_reset_called(void);
 void utest_temp_set_ready(bool ready);
 void utest_rtc_alarm_reset(void);
 void utest_rtc_alarm_set_enabled(bool enabled);
