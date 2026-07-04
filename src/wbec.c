@@ -572,6 +572,18 @@ void wbec_do_periodic_work(void)
 #endif
         }
 
+        // За один проход разрешено только одно действие с питанием.
+        // Если запрос из Linux уже начал смену состояния, проверки ниже
+        // (watchdog, контроль 3.3В) выполнять нельзя: их обработчики
+        // запускают свои последовательности поверх уже начатой и могут
+        // прервать её (например, оставить линию PMIC RESET (PWROK)
+        // взведённой навсегда - SoC заклинит в сбросе).
+        // Взведённые флаги watchdog не теряются: они будут обработаны
+        // после завершения начатой последовательности
+        if (wbec_ctx.state != WBEC_STATE_WORKING) {
+            break;
+        }
+
 #if defined(WBEC_HAS_WARM_RESET)
         // Если Linux сбрасывает watchdog - система жива,
         // разрешаем следующую попытку тёплого сброса
@@ -594,6 +606,11 @@ void wbec_do_periodic_work(void)
                 wbec_ctx.poweron_reason = REASON_WATCHDOG;
                 console_print_w_prefix("Watchdog is timed out again, reset power.\r\n");
                 linux_cpu_pwr_seq_hard_reset();
+                // Жёсткий сброс - последняя ступень эскалации. После него
+                // начинается новый цикл загрузки, и первое зависание в нём
+                // снова заслуживает тёплого сброса (с сохранением DRAM/ramoops),
+                // поэтому эскалация начинается заново
+                wbec_ctx.wd_warm_reset_attempted = false;
             }
             new_state(WBEC_STATE_POWER_ON_SEQUENCE_WAIT);
         }
@@ -607,6 +624,13 @@ void wbec_do_periodic_work(void)
             new_state(WBEC_STATE_POWER_ON_SEQUENCE_WAIT);
         }
 #endif
+
+        // Сработал watchdog - сброс уже начат. Контроль 3.3В в этом проходе
+        // пропускаем, чтобы не запустить вторую последовательность поверх
+        // начатой (см. комментарий выше)
+        if (wbec_ctx.state != WBEC_STATE_WORKING) {
+            break;
+        }
 
         // Если пропало 3.3В - пробуем перезапустить питание, но не более N раз за M минут
         // Если питание пропадает слишком часто - выключаемся

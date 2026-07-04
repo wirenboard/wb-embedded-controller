@@ -137,6 +137,10 @@ void linux_cpu_pwr_seq_on(void)
         return;
     }
 
+    // Линия PMIC RESET (PWROK) не должна достаться последовательности
+    // включения взведённой (например, от прерванного тёплого сброса) -
+    // иначе SoC останется заклиненным в сбросе
+    pmic_reset_gpio_off();
     linux_cpu_pwr_5v_gpio_on();
     new_state(PS_ON_STEP1_WAIT_3V3);
 }
@@ -149,6 +153,9 @@ void linux_cpu_pwr_seq_hard_off(void)
 {
     linux_cpu_pwr_5v_gpio_off();
     pmic_pwron_gpio_off();
+    // Отпускаем линию сброса: никакая последовательность не должна
+    // оставлять её взведённой после своего завершения или прерывания
+    pmic_reset_gpio_off();
     new_state(PS_OFF_COMPLETE);
 }
 
@@ -160,6 +167,10 @@ void linux_cpu_pwr_seq_hard_reset()
 {
     linux_cpu_pwr_5v_gpio_off();
     pmic_pwron_gpio_off();
+    // Отпускаем линию сброса: если жёсткий сброс прервал тёплый сброс
+    // или сброс PMIC, линия не должна остаться взведённой - иначе после
+    // подачи 5В SoC навсегда останется в сбросе
+    pmic_reset_gpio_off();
     new_state(PS_RESET_5V_WAIT);
 }
 
@@ -318,6 +329,10 @@ void linux_cpu_pwr_seq_do_periodic_work(void)
         if (in_state_time_ms() > WBEC_WARM_RESET_PULSE_MS) {
             pmic_reset_gpio_off();
             pmic_pwron_gpio_off();
+            // Тёплый сброс всегда заканчивается последовательностью включения.
+            // Гарантируем ей 5В: если тёплый сброс был запрошен, когда 5В
+            // оказалось снятым, ожидание 3.3В без 5В бессмысленно
+            linux_cpu_pwr_5v_gpio_on();
             new_state(PS_ON_STEP1_WAIT_3V3);
         }
         break;

@@ -68,6 +68,16 @@ bool wdt_handle_fed(void)
     return ret;
 }
 
+#ifdef __unittest_env__
+    #include <string.h>
+
+    void utest_wdt_module_reset_state(void)
+    {
+        memset(&wdt_ctx, 0, sizeof(wdt_ctx));
+        wdt_ctx.timeout_s = WBEC_WATCHDOG_INITIAL_TIMEOUT_S;
+    }
+#endif
+
 void wdt_do_periodic_work(void)
 {
     if (wdt_ctx.run) {
