@@ -124,8 +124,16 @@ void linux_poweron_handler(void)
 // ==================== Локальные заглушки wbec ====================
 
 static bool alarm_enabled;
+static bool alarm_fired;
 
 bool rtc_alarm_is_alarm_enabled(void) { return alarm_enabled; }
+
+bool rtc_alarm_take_fired(void)
+{
+    bool ret = alarm_fired;
+    alarm_fired = false;
+    return ret;
+}
 
 bool temperature_control_is_temperature_ready(void) { return true; }
 int16_t temperature_control_get_temperature_c_x100(void) { return 2500; }

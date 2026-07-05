@@ -163,6 +163,15 @@ void utest_rtc_alarm_set_enabled(bool enabled)
     alarm_enabled = enabled;
 }
 
+bool rtc_alarm_take_fired(void)
+{
+    return false;
+}
+
+void linux_cpu_pwr_seq_wakeup(void)
+{
+}
+
 bool rtc_alarm_is_alarm_enabled(void)
 {
     return alarm_enabled;

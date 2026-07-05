@@ -10,10 +10,20 @@
  */
 
 static bool alarm_enabled = 0;
+static bool alarm_fired_latch = 0;
 
 bool rtc_alarm_is_alarm_enabled(void)
 {
     return alarm_enabled;
+}
+
+// Возвращает true один раз после срабатывания будильника.
+// Используется режимом suspend-to-off для пробуждения PMIC.
+bool rtc_alarm_take_fired(void)
+{
+    bool ret = alarm_fired_latch;
+    alarm_fired_latch = false;
+    return ret;
 }
 
 void rtc_alarm_do_periodic_work(void)
@@ -46,6 +56,7 @@ void rtc_alarm_do_periodic_work(void)
         regmap_set_region_data(REGMAP_REGION_RTC_CFG, &cfg, sizeof(cfg));
 
         if (rtc_alarm.flag) {
+            alarm_fired_latch = true;
             irq_set_flag(IRQ_ALARM);
             rtc_clear_alarm_flag();
             // После сработки будильника нужно его выключить

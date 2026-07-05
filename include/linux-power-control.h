@@ -5,6 +5,7 @@
 void linux_cpu_pwr_seq_init(bool on);
 void linux_cpu_pwr_seq_off_and_goto_standby(uint16_t wakeup_after_s);
 void linux_cpu_pwr_seq_on(void);
+void linux_cpu_pwr_seq_wakeup(void);
 void linux_cpu_pwr_seq_hard_off(void);
 void linux_cpu_pwr_seq_hard_reset(void);
 void linux_cpu_pwr_seq_reset_pmic(void);

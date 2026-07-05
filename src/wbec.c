@@ -95,6 +95,10 @@ struct wbec_ctx {
     // между записью в SUSPEND_CTRL и заморозкой системы демон
     // watchdog продолжает кормить ещё ~1-2 секунды.
     bool suspend_started;
+    // Режим suspend-to-off: BL31 усыпляет PMIC целиком (остаётся
+    // только питание DRAM). Пробуждение делает EC: по будильнику
+    // (или дедлайну/кнопке) перезапускает PMIC импульсом PWRON.
+    bool suspend_off_mode;
 };
 
 static struct wbec_ctx wbec_ctx;
@@ -512,10 +516,15 @@ void wbec_do_periodic_work(void)
                 if (s.timeout_s > 0) {
                     wbec_ctx.suspend_mode = true;
                     wbec_ctx.suspend_started = false;
+                    wbec_ctx.suspend_off_mode = s.off_mode;
                     wbec_ctx.suspend_entry_timestamp = systick_get_system_time_ms();
                     // Запас 10 с поверх запрошенной длительности
                     wbec_ctx.suspend_timeout_ms = (uint32_t)s.timeout_s * 1000 + 10000;
-                    console_print_w_prefix("Suspend mode: on\r\n");
+                    if (wbec_ctx.suspend_off_mode) {
+                        console_print_w_prefix("Suspend mode: on (power-off, wake by alarm)\r\n");
+                    } else {
+                        console_print_w_prefix("Suspend mode: on\r\n");
+                    }
                 } else if (wbec_ctx.suspend_mode) {
                     wbec_ctx.suspend_mode = false;
                     console_print_w_prefix("Suspend mode: off (request)\r\n");
@@ -611,6 +620,40 @@ void wbec_do_periodic_work(void)
         // Взведённые флаги watchdog не теряются: они будут обработаны
         // после завершения начатой последовательности
         if (wbec_ctx.state != WBEC_STATE_WORKING) {
+            break;
+        }
+
+        // Suspend-to-off: питание SoC выключено самим PMIC (кроме
+        // DRAM), Linux заморожен в самообновляющейся памяти. Будим
+        // PMIC по будильнику, дедлайну или кнопке: перезапуск
+        // последовательности включения "нажимает" PWRON, PMIC
+        // восстанавливает записанную конфигурацию питания.
+        if (wbec_ctx.suspend_mode && wbec_ctx.suspend_off_mode &&
+            wbec_ctx.suspend_started) {
+            bool alarm = rtc_alarm_take_fired();
+            bool deadline = systick_get_time_since_timestamp(
+                wbec_ctx.suspend_entry_timestamp) > wbec_ctx.suspend_timeout_ms;
+            bool button = pwrkey_handle_short_press();
+
+            if (alarm || deadline || button) {
+                wbec_ctx.suspend_mode = false;
+                wbec_ctx.suspend_off_mode = false;
+                if (alarm) {
+                    wbec_ctx.poweron_reason = REASON_RTC_ALARM;
+                } else if (button) {
+                    wbec_ctx.poweron_reason = REASON_POWER_KEY;
+                } else {
+                    wbec_ctx.poweron_reason = REASON_WATCHDOG;
+                }
+                console_print("\r\n\n");
+                console_print_w_prefix("Suspend-to-off: wake up, restart PMIC via PWRON\r\n");
+                linux_cpu_pwr_seq_wakeup();
+                new_state(WBEC_STATE_POWER_ON_SEQUENCE_WAIT);
+                break;
+            }
+            // Кормления watchdog в этом режиме невозможны (Linux
+            // выключен) - потребляем возможный таймаут вхолостую
+            (void)wdt_handle_timed_out();
             break;
         }
 
