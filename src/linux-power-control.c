@@ -35,6 +35,10 @@ enum pwr_state {
 };
 
 struct pwr_ctx {
+    // Пробуждение из suspend-to-off: после появления 3.3В нужен
+    // импульс на PWROK - PMIC при выходе из сна восстанавливает
+    // питание, но не выдаёт сброс, и SoC сам не стартует
+    bool wake_pending;
     enum pwr_state state;
     systime_t timestamp;
     unsigned attempt;
@@ -157,6 +161,7 @@ void linux_cpu_pwr_seq_on(void)
  */
 void linux_cpu_pwr_seq_wakeup(void)
 {
+    pwr_ctx.wake_pending = true;
     pmic_reset_gpio_off();
     linux_cpu_pwr_5v_gpio_on();
     new_state(PS_ON_STEP1_WAIT_3V3);
@@ -284,6 +289,14 @@ void linux_cpu_pwr_seq_do_periodic_work(void)
     // Первый шаг включения питания: проверка, что 3.3В появилось, после того как подали 5В
     case PS_ON_STEP1_WAIT_3V3:
         if (vmon_get_ch_status(VMON_CHANNEL_V33)) {
+            if (pwr_ctx.wake_pending) {
+                // Питание восстановлено после сна PMIC: SoC ещё в
+                // сбросе, толкаем его импульсом на PWROK
+                pwr_ctx.wake_pending = false;
+                pmic_reset_gpio_on();
+                new_state(PS_WARM_RESET_PULSE);
+                break;
+            }
             // Если 3.3В появилось, то считаем что питание включено
             new_state(PS_ON_COMPLETE);
         }
@@ -302,8 +315,13 @@ void linux_cpu_pwr_seq_do_periodic_work(void)
     // PMIC должен включаться сам после подачи 5В
     case PS_ON_STEP2_PMIC_PWRON:
         if (vmon_get_ch_status(VMON_CHANNEL_V33)) {
-            // Если 3.3В
             pmic_pwron_gpio_off();
+            if (pwr_ctx.wake_pending) {
+                pwr_ctx.wake_pending = false;
+                pmic_reset_gpio_on();
+                new_state(PS_WARM_RESET_PULSE);
+                break;
+            }
             new_state(PS_ON_COMPLETE);
         }
         if (in_state_time_ms() > 1500) {
