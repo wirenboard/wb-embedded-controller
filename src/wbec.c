@@ -90,6 +90,11 @@ struct wbec_ctx {
     bool suspend_mode;
     systime_t suspend_entry_timestamp;
     uint32_t suspend_timeout_ms;
+    // Взводится, когда во время suspend реально пропало 3.3В.
+    // До этого момента кормления watchdog НЕ завершают режим:
+    // между записью в SUSPEND_CTRL и заморозкой системы демон
+    // watchdog продолжает кормить ещё ~1-2 секунды.
+    bool suspend_started;
 };
 
 static struct wbec_ctx wbec_ctx;
@@ -506,6 +511,7 @@ void wbec_do_periodic_work(void)
             if (regmap_get_data_if_region_changed(REGMAP_REGION_SUSPEND_CTRL, &s, sizeof(s))) {
                 if (s.timeout_s > 0) {
                     wbec_ctx.suspend_mode = true;
+                    wbec_ctx.suspend_started = false;
                     wbec_ctx.suspend_entry_timestamp = systick_get_system_time_ms();
                     // Запас 10 с поверх запрошенной длительности
                     wbec_ctx.suspend_timeout_ms = (uint32_t)s.timeout_s * 1000 + 10000;
@@ -615,7 +621,10 @@ void wbec_do_periodic_work(void)
         // Linux первым делом снова начинает кормить watchdog.
         if (wdt_handle_fed()) {
             wbec_ctx.wd_warm_reset_attempted = false;
-            if (wbec_ctx.suspend_mode) {
+            // Кормление завершает режим suspend только после того, как
+            // сон реально начался (3.3В пропадало): до заморозки системы
+            // демон watchdog продолжает кормить.
+            if (wbec_ctx.suspend_mode && wbec_ctx.suspend_started) {
                 wbec_ctx.suspend_mode = false;
                 console_print_w_prefix("Suspend mode: off (watchdog fed)\r\n");
             }
@@ -663,8 +672,9 @@ void wbec_do_periodic_work(void)
             new_state(WBEC_STATE_POWER_ON_SEQUENCE_WAIT);
         }
 #else
-        // Завершение режима suspend по первому кормлению watchdog
-        if (wdt_handle_fed() && wbec_ctx.suspend_mode) {
+        // Завершение режима suspend по первому кормлению watchdog -
+        // только после реального начала сна (3.3В пропадало)
+        if (wdt_handle_fed() && wbec_ctx.suspend_mode && wbec_ctx.suspend_started) {
             wbec_ctx.suspend_mode = false;
             console_print_w_prefix("Suspend mode: off (watchdog fed)\r\n");
         }
@@ -707,7 +717,11 @@ void wbec_do_periodic_work(void)
         // В результате PMIC выключается, но питание на линии 5В остаётся.
         // Ограничение по числу попыток нужно, чтобы избежать циклического перезапуска.
         // В режиме suspend потеря 3.3В ожидаема: BL31 отключает DCDC1
-        // на время сна - проверку пропускаем.
+        // на время сна - проверку пропускаем, но запоминаем факт
+        // пропадания: с этого момента сон действительно начался.
+        if (wbec_ctx.suspend_mode && !vmon_get_ch_status(VMON_CHANNEL_V33)) {
+            wbec_ctx.suspend_started = true;
+        }
         if (!wbec_ctx.suspend_mode && !vmon_get_ch_status(VMON_CHANNEL_V33)) {
             console_print_w_prefix("3.3V is lost\r\n");
 
