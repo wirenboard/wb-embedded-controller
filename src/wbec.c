@@ -682,6 +682,13 @@ void wbec_do_periodic_work(void)
             if (systick_get_time_since_timestamp(wbec_ctx.suspend_entry_timestamp) >
                 wbec_ctx.suspend_timeout_ms) {
                 wbec_ctx.suspend_mode = false;
+                if (!wbec_ctx.suspend_started) {
+                    // Сон так и не начался (suspend отменён или не
+                    // дошёл до отключения питания) - система живёт,
+                    // просто тихо выходим из режима
+                    console_print_w_prefix("Suspend mode: off (never started)\r\n");
+                    break;
+                }
                 wbec_ctx.wd_warm_reset_attempted = true;
                 wbec_ctx.poweron_reason = REASON_WATCHDOG_WARM;
                 console_print("\r\n\n");
@@ -729,6 +736,10 @@ void wbec_do_periodic_work(void)
             if (systick_get_time_since_timestamp(wbec_ctx.suspend_entry_timestamp) >
                 wbec_ctx.suspend_timeout_ms) {
                 wbec_ctx.suspend_mode = false;
+                if (!wbec_ctx.suspend_started) {
+                    console_print_w_prefix("Suspend mode: off (never started)\r\n");
+                    break;
+                }
                 wbec_ctx.poweron_reason = REASON_WATCHDOG;
                 console_print("\r\n\n");
                 console_print_w_prefix("Suspend deadline passed, system did not wake up - reset power.\r\n");
