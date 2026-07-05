@@ -37,6 +37,7 @@
     m(REASON_UNKNOWN,         "Unknown"                      ) \
     /* Новые значения добавлять только в конец: значения - часть ABI regmap */ \
     m(REASON_WATCHDOG_WARM,   "Watchdog (warm reset)"        ) \
+    m(REASON_FULL_CYCLE,      "Full power cycle request"     ) \
 
 #define __LINUX_POWERON_REASON_NAME(name, string)           name,
 #define __LINUX_POWERON_REASON_STRING(name, string)         string,
@@ -57,6 +58,7 @@ enum linux_powerctrl_req {
     LINUX_POWERCTRL_OFF,
     LINUX_POWERCTRL_REBOOT,
     LINUX_POWERCTRL_PMIC_RESET,
+    LINUX_POWERCTRL_FULL_CYCLE,
 };
 
 // Состояние алгоритма EC
@@ -166,6 +168,12 @@ static inline enum linux_powerctrl_req get_linux_powerctrl_req(void)
         if (p.off) {
             p.off = 0;
             ret = LINUX_POWERCTRL_OFF;
+        } else if (p.full_cycle) {
+            // Проверяется раньше reboot: загрузчик может выставить оба бита
+            // сразу (совместимость со старыми прошивками, где full_cycle
+            // не существует, а reboot и так делает полный цикл питания)
+            p.full_cycle = 0;
+            ret = LINUX_POWERCTRL_FULL_CYCLE;
         } else if (p.reboot) {
             p.reboot = 0;
             ret = LINUX_POWERCTRL_REBOOT;
@@ -550,6 +558,16 @@ void wbec_do_periodic_work(void)
             wbec_ctx.poweron_reason = REASON_REBOOT;
             console_print("\r\n\n");
             console_print_w_prefix("Reboot request, reset power.\r\n");
+            linux_cpu_pwr_seq_hard_reset();
+            new_state(WBEC_STATE_POWER_ON_SEQUENCE_WAIT);
+        } else if (linux_powerctrl_req == LINUX_POWERCTRL_FULL_CYCLE) {
+            // Явный запрос полного цикла питания 5В (например, из U-Boot
+            // после сохранения ramoops-логов на eMMC - "pstore shuttle").
+            // Отдельная причина включения позволяет отличить его от
+            // обычной перезагрузки при диагностике
+            wbec_ctx.poweron_reason = REASON_FULL_CYCLE;
+            console_print("\r\n\n");
+            console_print_w_prefix("Full power cycle request, reset power.\r\n");
             linux_cpu_pwr_seq_hard_reset();
             new_state(WBEC_STATE_POWER_ON_SEQUENCE_WAIT);
         } else if (linux_powerctrl_req == LINUX_POWERCTRL_PMIC_RESET) {

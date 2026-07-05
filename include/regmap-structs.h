@@ -95,6 +95,7 @@
         /* 0xA0 */  uint16_t off : 1; \
         /* -//- */  uint16_t reboot : 1; \
         /* -//- */  uint16_t reset_pmic : 1; \
+        /* -//- */  uint16_t full_cycle : 1; \
     ) \
     /*     Addr     Name            RO/RW */ \
     m(     0xB0,    IRQ_FLAGS,      RO, \
