@@ -97,6 +97,10 @@
         /* -//- */  uint16_t reset_pmic : 1; \
     ) \
     /*     Addr     Name            RO/RW */ \
+    m(     0xA4,    SUSPEND_CTRL,   RW, \
+        /* 0xA4 */  uint16_t timeout_s; \
+    ) \
+    /*     Addr     Name            RO/RW */ \
     m(     0xB0,    IRQ_FLAGS,      RO, \
         /* 0xB0 */  uint16_t irqs; \
     ) \
