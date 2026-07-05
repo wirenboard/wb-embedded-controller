@@ -33,6 +33,7 @@ enum utest_wbec_poweron_reason {
     UTEST_REASON_PMIC_OFF,
     UTEST_REASON_UNKNOWN,
     UTEST_REASON_WATCHDOG_WARM,
+    UTEST_REASON_FULL_CYCLE,
 };
 
 static void reset_all(void)
@@ -422,6 +423,18 @@ static void set_power_ctrl_request(bool off, bool reboot, bool reset_pmic)
         .off = off ? 1 : 0,
         .reboot = reboot ? 1 : 0,
         .reset_pmic = reset_pmic ? 1 : 0,
+    };
+    regmap_set_region_data(REGMAP_REGION_POWER_CTRL, &p, sizeof(p));
+    utest_regmap_mark_region_changed(REGMAP_REGION_POWER_CTRL);
+}
+
+// Вспомогательная: запись POWER_CTRL с битом full_cycle (отдельно, чтобы
+// не менять сигнатуру set_power_ctrl_request во всех существующих тестах)
+static void set_power_ctrl_full_cycle_request(bool with_reboot)
+{
+    struct REGMAP_POWER_CTRL p = {
+        .reboot = with_reboot ? 1 : 0,
+        .full_cycle = 1,
     };
     regmap_set_region_data(REGMAP_REGION_POWER_CTRL, &p, sizeof(p));
     utest_regmap_mark_region_changed(REGMAP_REGION_POWER_CTRL);
@@ -987,6 +1000,43 @@ static void test_periodic_working_reboot_request(void)
                                      "poweron_reason must be REASON_REBOOT");
 }
 
+// Сценарий: запрос full_cycle из Linux → hard_reset с причиной FULL_CYCLE.
+static void test_periodic_working_full_cycle_request(void)
+{
+    drive_to_working_state();
+
+    set_power_ctrl_full_cycle_request(false);
+    wbec_do_periodic_work();
+
+    TEST_ASSERT_TRUE_MESSAGE(utest_linux_pwr_get_hard_reset_called(),
+                             "hard_reset must be called on full_cycle request");
+
+    TEST_ASSERT_EQUAL_UINT16_MESSAGE(UTEST_REASON_FULL_CYCLE, get_poweron_reason_from_regmap(),
+                                     "poweron_reason must be REASON_FULL_CYCLE");
+}
+
+// Сценарий (контракт с загрузчиком): reboot и full_cycle выставлены одним
+// кадром - full_cycle обязан победить, причина FULL_CYCLE, оба бита сброшены.
+static void test_periodic_working_full_cycle_wins_over_reboot(void)
+{
+    struct REGMAP_POWER_CTRL p;
+
+    drive_to_working_state();
+
+    set_power_ctrl_full_cycle_request(true);
+    wbec_do_periodic_work();
+
+    TEST_ASSERT_TRUE_MESSAGE(utest_linux_pwr_get_hard_reset_called(),
+                             "hard_reset must be called on reboot|full_cycle request");
+
+    TEST_ASSERT_EQUAL_UINT16_MESSAGE(UTEST_REASON_FULL_CYCLE, get_poweron_reason_from_regmap(),
+                                     "poweron_reason must be REASON_FULL_CYCLE, not REBOOT");
+
+    TEST_ASSERT_TRUE(utest_regmap_get_region_data(REGMAP_REGION_POWER_CTRL, &p, sizeof(p)));
+    TEST_ASSERT_EQUAL_UINT16_MESSAGE(0, p.full_cycle, "full_cycle bit must be consumed");
+    TEST_ASSERT_EQUAL_UINT16_MESSAGE(0, p.reboot, "companion reboot bit must be consumed too");
+}
+
 // Сценарий: запрос pmic_reset из Linux.
 // На моделях с WBEC_HAS_WARM_RESET → тёплый сброс (warm_reset),
 // на остальных → историческое поведение (reset_pmic, удержание до 2 с).
@@ -1448,6 +1498,8 @@ int main(void)
     RUN_TEST(test_periodic_working_poweroff_with_button);
     RUN_TEST(test_periodic_working_poweroff_without_conditions_reboots);
     RUN_TEST(test_periodic_working_reboot_request);
+    RUN_TEST(test_periodic_working_full_cycle_request);
+    RUN_TEST(test_periodic_working_full_cycle_wins_over_reboot);
     RUN_TEST(test_periodic_working_pmic_reset_request);
     RUN_TEST(test_periodic_working_wdt_timeout);
 #if defined(WBEC_HAS_WARM_RESET)

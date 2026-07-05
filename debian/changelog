@@ -10,6 +10,10 @@ wb-ec-firmware (2.4.0) stable; urgency=medium
   * WB85: reset_pmic request (POWER_CTRL bit 2) now performs the short warm
     pulse instead of the 2 s PMIC RESET hold
   * WB74: behavior unchanged (no warm reset support)
+  * POWER_CTRL bit 3 "full_cycle": explicit full 5V power cycle request
+    with distinct poweron reason 9 "Full power cycle request" (used by
+    the U-Boot pstore shuttle; decoded before reboot so a combined
+    reboot|full_cycle write from bootloaders reports the right reason)
   * Fix state-machine wedge: a watchdog timeout racing a 3.3V loss or a
     reset_pmic request in the same main loop pass started a second power
     sequence on top of the warm reset (or PMIC reset) already in flight,

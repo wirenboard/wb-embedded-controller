@@ -171,8 +171,11 @@ static inline enum linux_powerctrl_req get_linux_powerctrl_req(void)
         } else if (p.full_cycle) {
             // Проверяется раньше reboot: загрузчик может выставить оба бита
             // сразу (совместимость со старыми прошивками, где full_cycle
-            // не существует, а reboot и так делает полный цикл питания)
+            // не существует, а reboot и так делает полный цикл питания).
+            // Сбрасываем оба бита, чтобы reboot не остался взведённым в
+            // regmap и не сработал у будущего read-modify-write клиента
             p.full_cycle = 0;
+            p.reboot = 0;
             ret = LINUX_POWERCTRL_FULL_CYCLE;
         } else if (p.reboot) {
             p.reboot = 0;
@@ -569,6 +572,11 @@ void wbec_do_periodic_work(void)
             console_print("\r\n\n");
             console_print_w_prefix("Full power cycle request, reset power.\r\n");
             linux_cpu_pwr_seq_hard_reset();
+#if defined(WBEC_HAS_WARM_RESET)
+            // Полный цикл питания - как и жёсткий сброс по watchdog -
+            // даёт новой загрузке право на свежую попытку тёплого сброса
+            wbec_ctx.wd_warm_reset_attempted = false;
+#endif
             new_state(WBEC_STATE_POWER_ON_SEQUENCE_WAIT);
         } else if (linux_powerctrl_req == LINUX_POWERCTRL_PMIC_RESET) {
 #if defined(WBEC_HAS_WARM_RESET)
