@@ -523,6 +523,18 @@ void wbec_do_periodic_work(void)
                     // Запас 10 с поверх запрошенной длительности
                     wbec_ctx.suspend_timeout_ms = (uint32_t)s.timeout_s * 1000 + 10000;
                     if (wbec_ctx.suspend_off_mode) {
+                        // Сбрасываем возможное залипшее событие будильника перед
+                        // входом в off-mode. Флаг ALRAF в RTC (домен резервного
+                        // питания) и программная защёлка alarm_fired_latch
+                        // переживают сброс/пропадание питания и не сбрасываются
+                        // нигде, кроме off-mode. Будильник, разбудивший плату в
+                        // прошлый раз, оставляет их взведёнными; без сброса первый
+                        // же опрос off-mode прочитает это как свежее срабатывание и
+                        // разбудит плату немедленно (~220 мс) вместо запрошенного
+                        // времени. Сбрасываем обе защёлки, чтобы разбудил только
+                        // свежий будильник (или дедлайн/кнопка).
+                        rtc_alarm_take_fired();
+                        rtc_clear_alarm_flag();
                         console_print_w_prefix("Suspend mode: on (power-off, wake by alarm)\r\n");
                     } else {
                         console_print_w_prefix("Suspend mode: on\r\n");

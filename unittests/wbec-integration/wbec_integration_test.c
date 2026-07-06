@@ -561,6 +561,78 @@ static void test_escalation_alternates_warm_and_hard(void)
 }
 #endif
 
+// Объявление окна suspend-to-off из Linux через регион SUSPEND_CTRL.
+static void sim_announce_off_mode(uint16_t timeout_s)
+{
+    struct REGMAP_SUSPEND_CTRL s = { .timeout_s = timeout_s, .off_mode = 1 };
+    regmap_set_region_data(REGMAP_REGION_SUSPEND_CTRL, &s, sizeof(s));
+    utest_regmap_mark_region_changed(REGMAP_REGION_SUSPEND_CTRL);
+}
+
+// Регрессия (rtcwake -m mem): устаревшая защёлка будильника, оставшаяся от
+// прошлого пробуждения (ALRAF в домене резервного питания + программный
+// alarm_fired_latch), НЕ должна будить плату сразу при входе в off-mode.
+// До фикста первый же опрос off-mode читал это как свежее срабатывание и
+// будил плату через ~220 мс вместо запрошенного времени сна.
+static void test_suspend_off_stale_alarm_does_not_wake_immediately(void)
+{
+    sim.check_invariants = false;   // off-mode: плата намеренно "не стартует"
+    sim.soc_feeds = true;
+    sim_boot_to_working();
+
+    uint32_t boots_before = sim.soc_boot_count;
+
+    // Устаревшее событие будильника от прошлого пробуждения
+    alarm_fired = true;
+
+    // Linux объявляет окно suspend-to-off (заведомо длинный дедлайн)
+    sim_announce_off_mode(3600);
+    sim_tick();     // вход в off-mode должен дренажировать защёлку
+
+    TEST_ASSERT_FALSE_MESSAGE(alarm_fired,
+        "Off-mode entry must drain the stale software alarm-fired latch");
+    TEST_ASSERT_TRUE_MESSAGE(utest_rtc_was_alarm_flag_cleared(),
+        "Off-mode entry must clear the hardware ALRAF flag");
+
+    // BL31 гасит 3.3В (в модели - как зависший PMIC: 3.3В пропало и не
+    // вернётся, пока EC не перезапустит PMIC пробуждением)
+    sim.pmic_crashed = true;
+
+    // 5 секунд сна - без свежего будильника плата НЕ должна проснуться
+    sim_run_ms(5000);
+
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(boots_before, sim.soc_boot_count,
+        "Stale alarm latch must NOT wake the board immediately");
+}
+
+// Регрессия: свежий будильник, сработавший уже во время off-mode, обязан
+// разбудить плату (тем же путём linux_cpu_pwr_seq_wakeup) - фикс не должен
+// подавлять реальное пробуждение по будильнику.
+static void test_suspend_off_fresh_alarm_wakes(void)
+{
+    sim.check_invariants = false;
+    sim.soc_feeds = true;
+    sim_boot_to_working();
+
+    uint32_t boots_before = sim.soc_boot_count;
+
+    sim_announce_off_mode(3600);
+    sim_tick();
+    sim.pmic_crashed = true;    // BL31 снял 3.3В
+    sim_run_ms(2000);
+
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(boots_before, sim.soc_boot_count,
+        "Board must be asleep before a fresh alarm fires");
+
+    // Свежий будильник; PMIC при пробуждении восстанавливает 3.3В
+    alarm_fired = true;
+    sim.pmic_crashed = false;
+    sim_run_ms(3000);           // время на последовательность пробуждения
+
+    TEST_ASSERT_TRUE_MESSAGE(sim.soc_boot_count > boots_before,
+        "A fresh off-mode alarm must wake the board");
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -572,6 +644,8 @@ int main(void)
     RUN_TEST(test_pmic_reset_request_racing_wdt_timeout_does_not_latch);
     RUN_TEST(test_pmic_crash_timing_sweep_never_wedges);
     RUN_TEST(test_poweroff_request_racing_wdt_timeout_stays_off);
+    RUN_TEST(test_suspend_off_stale_alarm_does_not_wake_immediately);
+    RUN_TEST(test_suspend_off_fresh_alarm_wakes);
 #if defined(WBEC_HAS_WARM_RESET)
     RUN_TEST(test_escalation_alternates_warm_and_hard);
 #endif
