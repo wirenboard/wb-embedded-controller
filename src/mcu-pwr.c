@@ -2,6 +2,7 @@
 #include "config.h"
 #include "wbmcu_system.h"
 #include "rtc.h"
+#include "mcu-vbat.h"
 
 static enum mcu_poweron_reason mcu_poweron_reason = MCU_POWERON_REASON_UNKNOWN;
 
@@ -37,6 +38,10 @@ void mcu_goto_standby(uint16_t wakeup_after_s)
         wakeup_after_s = 1;
     }
     rtc_set_periodic_wakeup(wakeup_after_s);
+
+    // Бит VBE сохраняется в standby: явно останавливаем зарядку батарейки,
+    // чтобы она не продолжалась бесконтрольно всё время сна
+    mcu_vbat_stop_charging();
 
     // Подробнее про особенности перехода в standby тут:
     // https://community.st.com/t5/stm32-mcus-embedded-software/how-to-enter-standby-or-shutdown-mode-on-stm32/td-p/145849

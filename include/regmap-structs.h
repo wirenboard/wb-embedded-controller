@@ -138,6 +138,8 @@
     m(     0xE0,    VBAT_STATUS,    RO, \
         /* 0xE0 */  uint16_t voltage_mv; \
         /* 0xE1 */  uint16_t is_charging : 1; \
+        /* 0xE1 */  uint16_t battery_absent : 1; \
+        /* 0xE2 */  uint16_t delta_mv; \
     ) \
     /*     Addr     Name            RO/RW */ \
     m(     0xF0,    TEST,           RW, \

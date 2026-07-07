@@ -11,3 +11,6 @@ void utest_adc_set_ch_raw(enum adc_channel channel, fix16_t raw_value);
 
 // Получить последнее установленное смещение канала АЦП в мВ
 int16_t utest_adc_get_offset_mv(enum adc_channel channel);
+
+// Проверить состояние встроенного делителя VBAT/3
+bool utest_adc_is_int_vbat_divider_enabled(void);

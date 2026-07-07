@@ -41,7 +41,20 @@ void adc_set_offset_mv(enum adc_channel channel, int16_t offset_mv)
     adc_offsets_mv[channel] = offset_mv;
 }
 
+static bool int_vbat_divider_enabled = false;
+
+void adc_int_vbat_divider_enable(bool enable)
+{
+    int_vbat_divider_enabled = enable;
+}
+
+bool utest_adc_is_int_vbat_divider_enabled(void)
+{
+    return int_vbat_divider_enabled;
+}
+
 void adc_init(enum adc_clock clock_divider, enum adc_vref vref) {}
 void adc_set_lowpass_rc(enum adc_channel channel, uint16_t rc_ms) {}
+void adc_reset_lowpass(enum adc_channel channel) { (void)channel; }
 bool adc_get_ready(void) { return true; }
 void adc_do_periodic_work(void) {}

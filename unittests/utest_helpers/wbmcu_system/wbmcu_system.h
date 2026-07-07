@@ -40,3 +40,7 @@ extern PWR_TypeDef _PWR_instance;
 
 // Бит применения конфигурации pull-up/pull-down.
 #define PWR_CR3_APC (1UL << 10)
+
+// Биты управления зарядкой батарейки VBAT (регистр PWR_CR4)
+#define PWR_CR4_VBE (1UL << 8)
+#define PWR_CR4_VBRS (1UL << 9)

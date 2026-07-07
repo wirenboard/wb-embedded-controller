@@ -241,6 +241,24 @@ void adc_reset_lowpass(enum adc_channel channel)
     adc_ctx.lowpass_values[ch_index_in_dma_buff] = fix16_from_int(adc_ctx.raw_values[ch_index_in_dma_buff]);
 }
 
+// Включает/выключает встроенный делитель VBAT/3.
+// Канал ADC_INT_VBAT постоянно сидит в DMA-списке и конвертится всегда,
+// но осмысленные значения он показывает только при включённом делителе.
+// При включении защёлкивает текущее raw в lowpass, чтобы фильтр не тянул
+// мусор от выключенного делителя. После включения нужно выждать
+// время стабилизации, прежде чем читать значение.
+// Делитель потребляет ток из узла VBAT, поэтому в дежурном режиме его
+// следует держать выключенным.
+void adc_int_vbat_divider_enable(bool enable)
+{
+    if (enable) {
+        ADC->CCR |= ADC_CCR_VBATEN;
+        adc_reset_lowpass(ADC_CHANNEL_ADC_INT_VBAT);
+    } else {
+        ADC->CCR &= ~ADC_CCR_VBATEN;
+    }
+}
+
 void adc_set_offset_mv(enum adc_channel channel, int16_t offset_mv)
 {
     adc_ctx.offset_mv[channel] = offset_mv;
