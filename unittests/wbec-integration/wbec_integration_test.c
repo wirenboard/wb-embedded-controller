@@ -262,7 +262,11 @@ static void sim_tick(void)
     utest_vmon_set_ch_status(VMON_CHANNEL_V33, sim.v33);
     utest_vmon_set_ch_status(VMON_CHANNEL_V_IN, true);
 
-    // Периодические задачи в порядке main loop
+    // Периодические задачи в порядке main loop. pwrkey_do_periodic_work идёт
+    // первым, как в main.c: с включённой моделью антидребезга (по умолчанию
+    // выключена) он превращает удержание кнопки в подтверждённое короткое
+    // нажатие по системному времени — так же, как на железе.
+    pwrkey_do_periodic_work();
     wdt_do_periodic_work();
     linux_cpu_pwr_seq_do_periodic_work();
     wbec_do_periodic_work();
@@ -806,22 +810,38 @@ static void test_stop_window_arms_safe_and_wakes_on_fresh_alarm(void)
 // штатным антидребезгом (500 мс) в бодрствующем супер-цикле, а не самим
 // фронтом — так сохраняется фильтр случайных касаний. Подтверждённое нажатие
 // будит плату с REASON_POWER_KEY.
+//
+// Нажатие прогоняется END-TO-END через реальный фильтр 500 мс: раз включена
+// модель антидребезга, удержание кнопки (utest_set_pwrkey_pressed) превращается
+// в короткое нажатие только после > PWRKEY_DEBOUNCE_MS удержания и последующего
+// отпускания, по системному времени через pwrkey_do_periodic_work — а не
+// инъекцией готового short-press на границе мока.
 static void test_stop_wake_by_button_edge_then_debounced_press(void)
 {
+    // Модель антидребезга включена с самого начала — как на железе, где pwrkey
+    // крутится всё время и удерживает базовое состояние logic=RELEASED.
+    utest_pwrkey_enable_debounce_model(true);
     sim_enter_off_mode_sleep(60);
     uint32_t boots_before = sim.soc_boot_count;
 
-    utest_mcu_stop_set_button_wake(true);   // фронт кнопки: пробудил Stop
-    sim_run_ms(50);                         // остаёмся бодрствовать, не спим
+    // Фронт кнопки будит Stop; одновременно кнопка физически удерживается.
+    utest_mcu_stop_set_button_wake(true);
+    utest_set_pwrkey_pressed(true);
+    // Держим дольше антидребезга: нажатие подтверждается (press begin), но
+    // короткое нажатие ещё НЕ зафиксировано (нужно отпускание). Плата не будится.
+    sim_run_ms(PWRKEY_DEBOUNCE_MS + 50);
     TEST_ASSERT_EQUAL_UINT32_MESSAGE(boots_before, sim.soc_boot_count,
-        "an unconfirmed button edge must not wake the board yet");
+        "a held-but-not-released press must not wake the board yet");
 
-    utest_pwrkey_set_short_press(true);     // антидребезг подтвердил нажатие
+    // Отпускание; PMIC при пробуждении восстановит 3.3В. Через > PWRKEY_DEBOUNCE_MS
+    // антидребезг подтверждает отпускание -> короткое нажатие (всё ещё в пределах
+    // окна ожидания debounce+grace) -> плата будится.
+    utest_set_pwrkey_pressed(false);
     sim.pmic_crashed = false;
-    sim_run_ms(3000);
+    sim_run_ms(PWRKEY_DEBOUNCE_MS + 3000);
 
     TEST_ASSERT_TRUE_MESSAGE(sim.soc_boot_count > boots_before,
-        "a confirmed short press must wake the board");
+        "a debounced short press must wake the board");
     TEST_ASSERT_EQUAL_UINT16_MESSAGE(UTEST_REASON_POWER_KEY, get_poweron_reason_from_regmap(),
         "button wake must report REASON_POWER_KEY");
 }
