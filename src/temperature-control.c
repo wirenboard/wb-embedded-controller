@@ -24,6 +24,11 @@ static inline fix16_t get_temperature(void)
     struct heater_ctx {
         bool enabled;
         bool force_enabled;
+        // suspend-to-off: во время окна сна нагреватель держим выключенным.
+        // NTC в Stop не измеряется, термостат не работает, а защёлка GPIO
+        // сохраняется — оставленный включённым нагреватель грелся бы без
+        // контроля и разрушал бы бюджет по питанию.
+        bool suspend_off;
     };
 
     static struct heater_ctx heater_ctx;
@@ -42,6 +47,14 @@ static inline fix16_t get_temperature(void)
 
     static void heater_control(void)
     {
+        if (heater_ctx.suspend_off) {
+            // Окно suspend-to-off: держим нагреватель выключенным.
+            if (heater_ctx.enabled) {
+                heater_disable();
+            }
+            return;
+        }
+
         if (heater_ctx.force_enabled) {
             // Нагреватель включили через regmap принудительно
             return;
@@ -84,6 +97,18 @@ void temperature_control_do_periodic_work(void)
 {
     #if defined EC_GPIO_HEATER
         heater_control();
+    #endif
+}
+
+void temperature_control_suspend(bool on)
+{
+    #if defined EC_GPIO_HEATER
+        heater_ctx.suspend_off = on;
+        if (on) {
+            heater_disable();
+        }
+    #else
+        (void)on;
     #endif
 }
 

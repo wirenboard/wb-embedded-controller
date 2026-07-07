@@ -2,6 +2,11 @@
 #include "config.h"
 #include "wbmcu_system.h"
 #include "rtc.h"
+#include "rcc.h"
+#include "systick.h"
+#include "adc.h"
+#include "voltage-monitor.h"
+#include "wdt-stm32.h"
 
 static enum mcu_poweron_reason mcu_poweron_reason = MCU_POWERON_REASON_UNKNOWN;
 
@@ -59,6 +64,125 @@ void mcu_goto_standby(uint16_t wakeup_after_s)
         __DSB();
         __WFI();
     };
+}
+
+// --- suspend-to-off: окно сна в режиме STM32 Stop 1 ---
+
+// Причины пробуждения из Stop, взводимые ISR и потребляемые главным циклом.
+// В Stop, в отличие от Standby, ISR РЕАЛЬНО выполняется при выходе из WFI,
+// поэтому обработчики должны снимать линию EXTI, НЕ разрушая защёлку ALRAF,
+// которую опрашивает rtc_alarm_do_periodic_work.
+static volatile bool stop_wut_tick_pending;
+static volatile bool stop_button_wake_pending;
+
+// EXTI-линия 19 (RTC) — ПРЯМАЯ: в RPR1/FPR1 нет бита для неё, линия снимается
+// только действием на флаги/IE самого RTC.
+static void mcu_stop_rtc_irq_handler(void)
+{
+    if (RTC->SR & RTC_SR_WUTF) {
+        // Периодический тик: чистим WUTF (снимает линию), автоперезагрузка WUT
+        // сама выстрелит в следующем периоде. Классификатор WUTF не читает.
+        RTC->SCR = RTC_SCR_CWUTF;
+        stop_wut_tick_pending = true;
+    }
+    if (RTC->SR & RTC_SR_ALRAF) {
+        // Будильник: маскируем ALRAIE (снимает прямую линию), но ALRAF НЕ чистим
+        // — его защёлку читает опросчик rtc_alarm_do_periodic_work в главном
+        // цикле. Будильник одноразовый и завершает suspend, поэтому оставить
+        // ALRAIE замаскированным до конца окна корректно.
+        RTC->CR &= ~RTC_CR_ALRAIE;
+    }
+}
+
+// EXTI-линия 0 (кнопка PA0) — конфигурируемая: FPR1 чистится напрямую.
+static void mcu_stop_exti0_1_irq_handler(void)
+{
+    if (EXTI->FPR1 & EXTI_FPR1_FPIF0) {
+        EXTI->FPR1 = EXTI_FPR1_FPIF0;
+        stop_button_wake_pending = true;
+    }
+}
+
+void mcu_stop_window_prepare(void)
+{
+    stop_wut_tick_pending = false;
+    stop_button_wake_pending = false;
+
+    // RTC (Alarm A + WUT) — линия EXTI 19. Биты IE (WUTIE/ALRAIE) уже ставят
+    // rtc_set_periodic_wakeup()/rtc_set_alarm(); не хватает только размаскировки
+    // EXTI19 и NVIC — самая частая причина «RTC не будит из Stop» на G0.
+    NVIC_SetHandler(RTC_TAMP_IRQn, mcu_stop_rtc_irq_handler);
+    EXTI->IMR1 |= EXTI_IMR1_IM19;
+    NVIC_EnableIRQ(RTC_TAMP_IRQn);
+
+    // Кнопка PWRON (PA0, активна низким): фронт вниз = нажатие. PA0 по сбросу
+    // уже замаплен на порт A в EXTICR, запись в EXTICR не нужна.
+    NVIC_SetHandler(EXTI0_1_IRQn, mcu_stop_exti0_1_irq_handler);
+    EXTI->FTSR1 |= EXTI_FTSR1_FT0;
+    EXTI->IMR1 |= EXTI_IMR1_IM0;
+    NVIC_EnableIRQ(EXTI0_1_IRQn);
+
+    // Маскируем EXTI9 (SoC-CS/SPI2, оставлен размаскированным spi_slave_init):
+    // SoC во время сна тёмный, ложное пробуждение по CS не нужно. Снимаем маску
+    // только на выходе по реальному пробуждению (mcu_stop_window_finish).
+    EXTI->IMR1 &= ~EXTI_IMR1_IM9;
+}
+
+void mcu_stop_window_finish(void)
+{
+    EXTI->IMR1 |= EXTI_IMR1_IM9;
+}
+
+bool mcu_stop_take_wut_tick(void)
+{
+    bool ret = stop_wut_tick_pending;
+    stop_wut_tick_pending = false;
+    return ret;
+}
+
+bool mcu_stop_take_button_wake(void)
+{
+    bool ret = stop_button_wake_pending;
+    stop_button_wake_pending = false;
+    return ret;
+}
+
+void mcu_stop_enter(void)
+{
+    // E1: кормим IWDG прямо перед сном — максимальный запас до 10 с.
+    watchdog_reload();
+
+    // E2: сбрасываем ТОЛЬКО устаревшие не-будильниковые pending, чтобы не
+    // провалиться мгновенно. НИКОГДА не CALRAF: реальный будильник обязан
+    // разбудить (его защёлку читает опросчик, а не ISR).
+    RTC->SCR = RTC_SCR_CWUTF;
+    EXTI->FPR1 = EXTI_FPR1_FPIF0;
+    PWR->SCR = PWR_SCR_CWUF;
+    NVIC_ClearPendingIRQ(EXTI0_1_IRQn);
+
+    // E3: Stop 1 (LPMS = 001)
+    PWR->CR1 = (PWR->CR1 & ~PWR_CR1_LPMS_Msk) | PWR_CR1_LPMS_0;
+    // E4: SLEEPDEEP
+    SCB->SCR |= SCB_SCR_SLEEPDEEP_Msk;
+    // E5: барьер + сон
+    (void)PWR->CR1;
+    __DSB();
+    __WFI();
+    // ---- Пробуждение: cause-aware ISR (тик WUT / будильник / кнопка) уже отработал ----
+
+    // W1: сразу снова кормим IWDG.
+    watchdog_reload();
+    // W2: возвращаем обычный сон для следующего WFI.
+    SCB->SCR &= ~SCB_SCR_SLEEPDEEP_Msk;
+    // W3: после Stop PLL выключен, SYSCLK = HSISYS 16 МГц — перезапираем 64 МГц.
+    rcc_set_hsi_pll_64mhz_clock();
+    // W4: LOAD systick рассчитан на 64 МГц — пересчитываем.
+    systick_init();
+    // W5: тактирование АЦП было остановлено — включаем и калибруем заново.
+    adc_init(ADC_CLOCK_DIV_64, ADC_VREF_INT);
+    // W6: перевзводим 100 мс окно «устаканивания» vmon, чтобы одиночный
+    // несглаженный отсчёт V50 не увёл последовательность пробуждения в Standby.
+    vmon_suspend_rearm_settle();
 }
 
 enum mcu_vcc_5v_state mcu_get_vcc_5v_last_state(void)

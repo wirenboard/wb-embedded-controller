@@ -138,6 +138,14 @@ bool rtc_alarm_take_fired(void)
 bool temperature_control_is_temperature_ready(void) { return true; }
 int16_t temperature_control_get_temperature_c_x100(void) { return 2500; }
 
+// Управляемые супер-циклом выходы, переводимые в безопасное состояние на окно
+// suspend-to-off. Отслеживаем текущее состояние заморозки для проверок.
+static bool heater_suspend_off;
+static bool v_out_suspend_off;
+
+void temperature_control_suspend(bool on) { heater_suspend_off = on; }
+void gpio_suspend(bool on) { v_out_suspend_off = on; }
+
 void usart_tx_buf_blocking(const void * buf, size_t size) { (void)buf; (void)size; }
 void buzzer_beep(uint16_t freq, uint16_t duration_ms) { (void)freq; (void)duration_ms; }
 

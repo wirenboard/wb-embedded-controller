@@ -63,6 +63,10 @@ struct gpio_ctx {
     uint16_t gpio_ctrl;
     uint16_t gpio_dir;
     uint16_t gpio_af;
+    // suspend-to-off: во время окна сна V_OUT держим выключенным. V_IN в Stop
+    // не измеряется, защита по перенапряжению (> 28 В) работать не может, а
+    // защёлка GPIO сохраняется — безопасное состояние — OFF.
+    bool suspend_off;
 };
 
 static struct gpio_ctx gpio_ctx = {
@@ -161,9 +165,23 @@ static void set_mod_gpio_af(void)
 
 static void control_v_out(void)
 {
+    if (gpio_ctx.suspend_off) {
+        // Окно suspend-to-off: держим V_OUT выключенным (защита по V_IN не
+        // может работать в Stop), не трогая пользовательский бит gpio_ctrl.
+        set_v_out_state(false);
+        return;
+    }
     bool v_in_is_in_proper_range = vmon_get_ch_status(VMON_CHANNEL_V_OUT);
     bool v_out_ctrl = gpio_ctx.gpio_ctrl & BIT(EC_EXT_GPIO_V_OUT);
     set_v_out_state(v_in_is_in_proper_range && v_out_ctrl);
+}
+
+void gpio_suspend(bool on)
+{
+    gpio_ctx.suspend_off = on;
+    if (on) {
+        set_v_out_state(false);
+    }
 }
 
 static void set_mod_gpio_values(uint16_t new_ctrl)

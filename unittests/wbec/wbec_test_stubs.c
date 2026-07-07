@@ -151,6 +151,10 @@ int16_t temperature_control_get_temperature_c_x100(void)
     return temp_ctrl_state.temperature_c_x100;
 }
 
+// suspend-to-off: перевод управляемых выходов в безопасное состояние на окно сна
+void temperature_control_suspend(bool on) { (void)on; }
+void gpio_suspend(bool on) { (void)on; }
+
 static bool alarm_enabled = false;
 
 void utest_rtc_alarm_reset(void)

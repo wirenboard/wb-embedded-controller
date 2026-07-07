@@ -23,6 +23,7 @@
 #include "hwrev.h"
 #include "buzzer.h"
 #include "temperature-control.h"
+#include "gpio-subsystem.h"
 #include "wbmz-common.h"
 #include "wdt-stm32.h"
 
@@ -99,6 +100,18 @@ struct wbec_ctx {
     // только питание DRAM). Пробуждение делает EC: по будильнику
     // (или дедлайну/кнопке) перезапускает PMIC импульсом PWRON.
     bool suspend_off_mode;
+    // suspend-to-off Stop 1: окно сна вооружено (EXTI-источники заведены,
+    // выходы переведены в безопасное состояние, WUT арм-нут один раз).
+    // Живёт в SRAM через Stop (сброса нет); разоружается на выходе.
+    bool stop_armed;
+    // Счётчик истёкших периодов WUT за окно (systick в Stop заморожен, поэтому
+    // дедлайн считаем по тикам WUT, а не по systick). Сбрасывается при арме.
+    uint32_t suspend_wut_ticks;
+    // Проснулись по фронту кнопки, короткое нажатие ещё не подтверждено
+    // антидребезгом: остаёмся бодрствовать (не уходим в Stop), пока pwrkey
+    // не разберёт нажатие или не истечёт окно ожидания.
+    bool stop_button_wake;
+    systime_t stop_button_wake_ts;
     // Взводится при пробуждении из suspend-to-off, чтобы подавить
     // звуковой сигнал включения на этом входе в WBEC_STATE_WORKING.
     // ПОЧЕМУ это критично: resume из suspend-to-off — это ре-инициализация
@@ -658,30 +671,59 @@ void wbec_do_periodic_work(void)
             break;
         }
 
-        // Suspend-to-off: питание SoC выключено самим PMIC (кроме
-        // DRAM), Linux заморожен в самообновляющейся памяти. Будим
-        // PMIC по будильнику, дедлайну или кнопке: перезапуск
-        // последовательности включения "нажимает" PWRON, PMIC
-        // восстанавливает записанную конфигурацию питания.
+        // Suspend-to-off: питание SoC выключено самим PMIC (кроме DRAM), Linux
+        // заморожен в самообновляющейся памяти. Как только сон реально начался
+        // (3.3В пропало -> suspend_started), EC уходит в STM32 Stop 1 между
+        // пробуждениями, вместо того чтобы жечь ток на 64 МГц весь сон. Stop
+        // сохраняет SRAM и защёлки GPIO и просыпается на месте (сброса НЕТ),
+        // поэтому провала на линиях PMIC, погубившего Standby-подход, здесь нет
+        // по построению. Пробуждаемся по будильнику (запрос Linux), дедлайну
+        // (бэкстоп через тики RTC WUT) или кнопке (фронт EXTI). Классификация —
+        // в начале блока: потребляем защёлки, которые драйверы супер-цикла
+        // (pwrkey/rtc-alarm) успели выставить в этом же проходе. WFI — в самом
+        // низу; после пробуждения возвращаемся в супер-цикл. См.
+        // ec-stop-mode-brief.md.
         if (wbec_ctx.suspend_mode && wbec_ctx.suspend_off_mode &&
             wbec_ctx.suspend_started) {
-            bool alarm = rtc_alarm_take_fired();
-            bool deadline = systick_get_time_since_timestamp(
-                wbec_ctx.suspend_entry_timestamp) > wbec_ctx.suspend_timeout_ms;
-            bool button = pwrkey_handle_short_press();
+            // Однократное вооружение окна при первом входе (идемпотентно).
+            if (!wbec_ctx.stop_armed) {
+                // Управляемые супер-циклом выходы — в безопасное состояние на
+                // всё окно: их мониторинг (NTC, V_IN) в Stop заморожен, а
+                // защёлки GPIO сохраняются (см. brief §6).
+                temperature_control_suspend(true);     // PD2: нагреватель off
+                gpio_suspend(true);                    // PD0: V_OUT off
+                // WUT арм-нут ОДИН раз: он кормит IWDG (< 10 с) и служит тиком
+                // дедлайна. Повторный арм каждый цикл входил бы в INIT-режим
+                // RTC и останавливал календарь — единственную базу времени Stop.
+                rtc_set_periodic_wakeup(WBEC_SUSPEND_STOP_FEED_PERIOD_S);
+                mcu_stop_window_prepare();             // EXTI/NVIC + маска SoC-CS
+                wbec_ctx.suspend_wut_ticks = 0;
+                wbec_ctx.stop_button_wake = false;
+                wbec_ctx.stop_armed = true;
+            }
 
-            if (alarm || deadline || button) {
+            // Классификация пробуждения.
+            bool alarm = rtc_alarm_take_fired();
+            bool button = pwrkey_handle_short_press();
+            // Дедлайн — по накопленным тикам WUT, НЕ по systick (в Stop мёртв):
+            // suspend_timeout_ms уже с запасом +10 с (см. запись SUSPEND_CTRL).
+            bool deadline = ((uint64_t)wbec_ctx.suspend_wut_ticks *
+                             WBEC_SUSPEND_STOP_FEED_PERIOD_S * 1000) >=
+                            wbec_ctx.suspend_timeout_ms;
+
+            if (alarm || button || deadline) {
                 wbec_ctx.suspend_mode = false;
                 wbec_ctx.suspend_off_mode = false;
-                // Разоружаем «сон начался»: пробуждение по будильнику - это
-                // resume того же ядра, ЕС не перезапускается, поэтому без
-                // сброса флаг остаётся взведён и на следующем цикле первое
-                // же кормление watchdog завершит suspend немедленно.
+                // Разоружаем «сон начался»: пробуждение - это resume того же
+                // ядра, ЕС не перезапускается, поэтому без сброса флаг остался
+                // бы взведён и на следующем цикле первое же кормление watchdog
+                // завершило бы suspend немедленно.
                 wbec_ctx.suspend_started = false;
-                // Это resume того же ядра (DRAM в самообновлении): бип на
-                // входе в WORKING сорвёт ре-инициализацию DRAM и уронит плату
-                // в cold-boot. Подавляем сигнал включения именно для этого
-                // пробуждения (см. suspend_resume_no_beep в new_state()).
+                wbec_ctx.stop_armed = false;
+                wbec_ctx.stop_button_wake = false;
+                // Это resume того же ядра (DRAM в самообновлении): бип на входе
+                // в WORKING сорвёт ре-инициализацию DRAM и уронит плату в
+                // cold-boot. Подавляем сигнал включения (см. new_state()).
                 wbec_ctx.suspend_resume_no_beep = true;
                 if (alarm) {
                     wbec_ctx.poweron_reason = REASON_RTC_ALARM;
@@ -690,15 +732,47 @@ void wbec_do_periodic_work(void)
                 } else {
                     wbec_ctx.poweron_reason = REASON_WATCHDOG;
                 }
+                // Возвращаем выходы под штатное управление и снимаем маску
+                // SoC-CS EXTI; резервный WUT-дедлайн больше не нужен.
+                temperature_control_suspend(false);
+                gpio_suspend(false);
+                mcu_stop_window_finish();
+                rtc_disable_periodic_wakeup();
                 console_print("\r\n\n");
                 console_print_w_prefix("Suspend-to-off: wake up, restart PMIC via PWRON\r\n");
                 linux_cpu_pwr_seq_wakeup();
                 new_state(WBEC_STATE_POWER_ON_SEQUENCE_WAIT);
                 break;
             }
-            // Кормления watchdog в этом режиме невозможны (Linux
-            // выключен) - потребляем возможный таймаут вхолостую
+
+            // Пробуждение было фронтом кнопки, но короткое нажатие ещё не прошло
+            // антидребезг (500 мс, нужен непрерывный systick). Остаёмся в
+            // бодрствующем супер-цикле, чтобы pwrkey_do_periodic_work разобрал
+            // нажатие штатно, и НЕ уходим в Stop, пока не истечёт окно ожидания.
+            // Так сохраняется фильтр случайных касаний (в отличие от «будим по
+            // самому фронту»), ценой ~1 с бодрствования на событие.
+            if (mcu_stop_take_button_wake()) {
+                wbec_ctx.stop_button_wake = true;
+                wbec_ctx.stop_button_wake_ts = systick_get_system_time_ms();
+            }
+            if (wbec_ctx.stop_button_wake) {
+                if (systick_get_time_since_timestamp(wbec_ctx.stop_button_wake_ts) <
+                    (PWRKEY_DEBOUNCE_MS + WBEC_SUSPEND_STOP_BUTTON_GRACE_MS)) {
+                    break;      // остаёмся бодрствовать, ждём разбор нажатия
+                }
+                // Нажатие не подтвердилось за окно ожидания — снова спим.
+                wbec_ctx.stop_button_wake = false;
+            }
+
+            // Реальной причины нет: кормим IWDG и уходим в Stop до следующего
+            // тика WUT / будильника / кнопки. Кормления soft-WDT (Linux
+            // выключен) потребляем вхолостую.
             (void)wdt_handle_timed_out();
+            watchdog_reload();                      // E1: кормим IWDG перед сном
+            mcu_stop_enter();                       // E2-E5 + восстановление
+            if (mcu_stop_take_wut_tick()) {
+                wbec_ctx.suspend_wut_ticks++;       // W7: тик дедлайна
+            }
             break;
         }
 
