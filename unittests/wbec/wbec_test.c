@@ -1279,6 +1279,48 @@ static void test_periodic_working_wdt_third_timeout_warm_again(void)
     TEST_ASSERT_EQUAL_UINT16_MESSAGE(UTEST_REASON_WATCHDOG_WARM, get_poweron_reason_from_regmap(),
                                      "poweron_reason must be REASON_WATCHDOG_WARM again");
 }
+
+// Сценарий: полный цикл питания (full_cycle) переармирует эскалацию тёплого
+// сброса. Первый таймаут WDT взводит эскалацию (тёплый сброс, следующий был бы
+// жёстким). Затем приходит запрос full_cycle - его ветка обязана снять взвод
+// (wd_warm_reset_attempted = false), как и жёсткий сброс по watchdog: после
+// полного цикла начинается новая загрузка, и её первое зависание снова
+// заслуживает тёплого сброса (сохранение DRAM/ramoops на WB85).
+// Без переармирования в ветке full_cycle следующий таймаут дал бы жёсткий сброс.
+static void test_periodic_working_full_cycle_rearms_warm_reset(void)
+{
+    drive_to_working_state();
+
+    // Первый таймаут → тёплый сброс, эскалация взведена
+    utest_wdt_set_timed_out(true);
+    wbec_do_periodic_work();
+    TEST_ASSERT_TRUE_MESSAGE(utest_linux_pwr_get_warm_reset_called(),
+                             "warm_reset must be called on first WDT timeout");
+
+    // Запрос full_cycle → полный цикл питания (жёсткий сброс, reason FULL_CYCLE).
+    // Именно здесь отрабатывает переармирование эскалации тёплого сброса.
+    drive_back_to_working_state();
+    set_power_ctrl_full_cycle_request(false);
+    wbec_do_periodic_work();
+    TEST_ASSERT_TRUE_MESSAGE(utest_linux_pwr_get_hard_reset_called(),
+                             "hard_reset must be called on full_cycle request");
+    TEST_ASSERT_EQUAL_UINT16_MESSAGE(UTEST_REASON_FULL_CYCLE, get_poweron_reason_from_regmap(),
+                                     "poweron_reason must be REASON_FULL_CYCLE");
+
+    // Новый таймаут после full_cycle → снова тёплый сброс (эскалация начата
+    // заново). Без переармирования в ветке full_cycle здесь был бы жёсткий сброс.
+    utest_linux_pwr_reset();
+    drive_back_to_working_state();
+    utest_wdt_set_timed_out(true);
+    wbec_do_periodic_work();
+
+    TEST_ASSERT_TRUE_MESSAGE(utest_linux_pwr_get_warm_reset_called(),
+                             "warm_reset must be called again on the timeout after full_cycle");
+    TEST_ASSERT_FALSE_MESSAGE(utest_linux_pwr_get_hard_reset_called(),
+                              "hard_reset must NOT be called on the timeout after full_cycle");
+    TEST_ASSERT_EQUAL_UINT16_MESSAGE(UTEST_REASON_WATCHDOG_WARM, get_poweron_reason_from_regmap(),
+                                     "poweron_reason must be REASON_WATCHDOG_WARM again");
+}
 #endif // WBEC_HAS_WARM_RESET
 
 // Сценарий: пропало 3.3В и 5В одновременно → hard_off (питание выдернуто).
@@ -1506,6 +1548,7 @@ int main(void)
     RUN_TEST(test_periodic_working_wdt_timeout_second_time_hard);
     RUN_TEST(test_periodic_working_wdt_feed_resets_escalation);
     RUN_TEST(test_periodic_working_wdt_third_timeout_warm_again);
+    RUN_TEST(test_periodic_working_full_cycle_rearms_warm_reset);
 #endif
     // Гонки в одном проходе: только одно действие с питанием за проход
     RUN_TEST(test_periodic_working_wdt_timeout_and_v33_loss_single_action);
