@@ -120,9 +120,7 @@ static void new_state(enum wbec_state s)
 
     case WBEC_STATE_WORKING:
         system_led_blink(500, 1000);
-        // Временно отключено на время отладки suspend-to-off:
-        // каждый цикл восстановления пищит
-        // buzzer_beep(EC_BUZZER_BEEP_FREQ, EC_BUZZER_BEEP_POWERON_MS);
+        buzzer_beep(EC_BUZZER_BEEP_FREQ, EC_BUZZER_BEEP_POWERON_MS);
         linux_poweron_handler();
         break;
     }
