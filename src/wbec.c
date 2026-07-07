@@ -99,6 +99,17 @@ struct wbec_ctx {
     // только питание DRAM). Пробуждение делает EC: по будильнику
     // (или дедлайну/кнопке) перезапускает PMIC импульсом PWRON.
     bool suspend_off_mode;
+    // Взводится при пробуждении из suspend-to-off, чтобы подавить
+    // звуковой сигнал включения на этом входе в WBEC_STATE_WORKING.
+    // ПОЧЕМУ это критично: resume из suspend-to-off — это ре-инициализация
+    // DRAM поверх самообновления (содержимое памяти сохраняется), процесс
+    // очень чувствителен к возмущениям по питанию/таймингу. Пищалка,
+    // сработавшая в этот момент, срывает resume, и плата уходит в
+    // холодную перезагрузку вместо пробуждения (проверено на железе
+    // 2026-07-07: включённый бип на resume → cold-boot; выключенный → ок).
+    // Обычное включение (холодный старт/перезагрузка) инициализирует DRAM
+    // с нуля и к сигналу не чувствительно — там бип нужен и безопасен.
+    bool suspend_resume_no_beep;
 };
 
 static struct wbec_ctx wbec_ctx;
@@ -120,7 +131,14 @@ static void new_state(enum wbec_state s)
 
     case WBEC_STATE_WORKING:
         system_led_blink(500, 1000);
-        buzzer_beep(EC_BUZZER_BEEP_FREQ, EC_BUZZER_BEEP_POWERON_MS);
+        // Сигнал включения — на РЕАЛЬНОМ включении (холодный старт/перезагрузка),
+        // но НЕ на resume из suspend-to-off: там пищалка возмущает ре-инициализацию
+        // DRAM поверх самообновления и плата уходит в cold-boot вместо пробуждения
+        // (проверено на железе). Флаг взводится на пути пробуждения suspend-to-off.
+        if (!wbec_ctx.suspend_resume_no_beep) {
+            buzzer_beep(EC_BUZZER_BEEP_FREQ, EC_BUZZER_BEEP_POWERON_MS);
+        }
+        wbec_ctx.suspend_resume_no_beep = false;
         linux_poweron_handler();
         break;
     }
@@ -660,6 +678,11 @@ void wbec_do_periodic_work(void)
                 // сброса флаг остаётся взведён и на следующем цикле первое
                 // же кормление watchdog завершит suspend немедленно.
                 wbec_ctx.suspend_started = false;
+                // Это resume того же ядра (DRAM в самообновлении): бип на
+                // входе в WORKING сорвёт ре-инициализацию DRAM и уронит плату
+                // в cold-boot. Подавляем сигнал включения именно для этого
+                // пробуждения (см. suspend_resume_no_beep в new_state()).
+                wbec_ctx.suspend_resume_no_beep = true;
                 if (alarm) {
                     wbec_ctx.poweron_reason = REASON_RTC_ALARM;
                 } else if (button) {
