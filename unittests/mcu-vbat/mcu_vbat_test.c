@@ -1,4 +1,5 @@
 #include "unity.h"
+#include <stddef.h>
 #include "config.h"
 #include "mcu-vbat.h"
 #include "regmap-int.h"
@@ -84,6 +85,17 @@ void setUp(void)
 }
 
 void tearDown(void) {}
+
+void test_regmap_vbat_status_layout(void)
+{
+    // Структуры regmap упакованы (packed), и битфилды в них занимают
+    // минимум байтов: если не добить слово с флагами до 16 бит анонимным
+    // битфилдом, все последующие поля сдвинутся относительно регистровой
+    // сетки (регистры 16-битные)
+    TEST_ASSERT_EQUAL(6, sizeof(struct REGMAP_VBAT_STATUS));
+    TEST_ASSERT_EQUAL(0, offsetof(struct REGMAP_VBAT_STATUS, voltage_mv));
+    TEST_ASSERT_EQUAL(4, offsetof(struct REGMAP_VBAT_STATUS, delta_mv));
+}
 
 void test_init_selects_1k5_charging_resistor(void)
 {
@@ -273,6 +285,7 @@ int main(void)
 {
     UNITY_BEGIN();
 
+    RUN_TEST(test_regmap_vbat_status_layout);
     RUN_TEST(test_init_selects_1k5_charging_resistor);
     RUN_TEST(test_full_battery_does_not_start_charging);
     RUN_TEST(test_next_deltav_test_starts_after_period);

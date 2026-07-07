@@ -142,11 +142,12 @@ static inline void set_state(enum vbat_state s)
 
 static inline void update_regmap(void)
 {
-    struct REGMAP_VBAT_STATUS r;
+    struct REGMAP_VBAT_STATUS r = {};
     r.voltage_mv = vbat_ctx.vbat_mv;
     r.delta_mv = vbat_ctx.deltav_mv;
     r.is_charging = is_charging() ? 1 : 0;
     r.battery_absent = vbat_ctx.battery_absent ? 1 : 0;
+    r.state = vbat_ctx.state;
     regmap_set_region_data(REGMAP_REGION_VBAT_STATUS, &r, sizeof(r));
 }
 
