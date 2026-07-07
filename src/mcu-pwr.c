@@ -130,7 +130,15 @@ void mcu_stop_window_prepare(void)
 
 void mcu_stop_window_finish(void)
 {
+    // Возвращаем прерывания к состоянию до окна сна, чтобы штатная работа шла
+    // байт-в-байт как раньше: снимаем EXTI-источники пробуждения Stop
+    // (кнопка EXTI0 и RTC EXTI19) и восстанавливаем маску SoC-CS EXTI9.
+    EXTI->IMR1 &= ~(EXTI_IMR1_IM0 | EXTI_IMR1_IM19);
+    NVIC_DisableIRQ(EXTI0_1_IRQn);
+    NVIC_DisableIRQ(RTC_TAMP_IRQn);
     EXTI->IMR1 |= EXTI_IMR1_IM9;
+    stop_wut_tick_pending = false;
+    stop_button_wake_pending = false;
 }
 
 bool mcu_stop_take_wut_tick(void)
