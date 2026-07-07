@@ -541,6 +541,11 @@ void wbec_do_periodic_work(void)
                     }
                 } else if (wbec_ctx.suspend_mode) {
                     wbec_ctx.suspend_mode = false;
+                    // Разоружаем «сон начался» при выходе из режима, чтобы на
+                    // следующем цикле кормление watchdog не завершило suspend
+                    // немедленно (флаг живёт в ЕС между циклами - тёплый сброс
+                    // и пробуждение по будильнику не перезапускают ЕС).
+                    wbec_ctx.suspend_started = false;
                     console_print_w_prefix("Suspend mode: off (request)\r\n");
                 }
             }
@@ -652,6 +657,11 @@ void wbec_do_periodic_work(void)
             if (alarm || deadline || button) {
                 wbec_ctx.suspend_mode = false;
                 wbec_ctx.suspend_off_mode = false;
+                // Разоружаем «сон начался»: пробуждение по будильнику - это
+                // resume того же ядра, ЕС не перезапускается, поэтому без
+                // сброса флаг остаётся взведён и на следующем цикле первое
+                // же кормление watchdog завершит suspend немедленно.
+                wbec_ctx.suspend_started = false;
                 if (alarm) {
                     wbec_ctx.poweron_reason = REASON_RTC_ALARM;
                 } else if (button) {
@@ -683,6 +693,7 @@ void wbec_do_periodic_work(void)
             // демон watchdog продолжает кормить.
             if (wbec_ctx.suspend_mode && wbec_ctx.suspend_started) {
                 wbec_ctx.suspend_mode = false;
+                wbec_ctx.suspend_started = false;
                 console_print_w_prefix("Suspend mode: off (watchdog fed)\r\n");
             }
         }
@@ -703,6 +714,7 @@ void wbec_do_periodic_work(void)
                     console_print_w_prefix("Suspend mode: off (never started)\r\n");
                     break;
                 }
+                wbec_ctx.suspend_started = false;
                 wbec_ctx.wd_warm_reset_attempted = true;
                 wbec_ctx.poweron_reason = REASON_WATCHDOG_WARM;
                 console_print("\r\n\n");
@@ -740,6 +752,7 @@ void wbec_do_periodic_work(void)
         // только после реального начала сна (3.3В пропадало)
         if (wdt_handle_fed() && wbec_ctx.suspend_mode && wbec_ctx.suspend_started) {
             wbec_ctx.suspend_mode = false;
+            wbec_ctx.suspend_started = false;
             console_print_w_prefix("Suspend mode: off (watchdog fed)\r\n");
         }
 
@@ -754,6 +767,7 @@ void wbec_do_periodic_work(void)
                     console_print_w_prefix("Suspend mode: off (never started)\r\n");
                     break;
                 }
+                wbec_ctx.suspend_started = false;
                 wbec_ctx.poweron_reason = REASON_WATCHDOG;
                 console_print("\r\n\n");
                 console_print_w_prefix("Suspend deadline passed, system did not wake up - reset power.\r\n");
@@ -848,5 +862,12 @@ void wbec_do_periodic_work(void)
     void utest_wbec_reset_state(void)
     {
         memset(&wbec_ctx, 0, sizeof(wbec_ctx));
+    }
+
+    // «Сон начался» / разрешение выхода из suspend по кормлению watchdog.
+    // Должен возвращаться в исходное (false) состояние после выхода из режима.
+    bool utest_wbec_get_suspend_started(void)
+    {
+        return wbec_ctx.suspend_started;
     }
 #endif

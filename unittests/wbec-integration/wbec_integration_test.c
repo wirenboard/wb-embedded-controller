@@ -311,6 +311,7 @@ static void sim_run_ms(uint32_t duration_ms)
 // ==================== Подготовка сценариев ====================
 
 void utest_wbec_reset_state(void);
+bool utest_wbec_get_suspend_started(void);
 void utest_linux_power_control_reset_state(void);
 void utest_wdt_module_reset_state(void);
 
@@ -633,6 +634,77 @@ static void test_suspend_off_fresh_alarm_wakes(void)
         "A fresh off-mode alarm must wake the board");
 }
 
+// Один цикл off-mode: объявление, пропадание 3.3В (сон начался),
+// пробуждение по свежему будильнику (resume того же ядра), возврат в WORKING.
+static void sim_off_mode_cycle(void)
+{
+    sim_announce_off_mode(60);
+    sim_tick();
+    sim.pmic_crashed = true;         // BL31 снял 3.3В -> arm взводится
+    sim_run_ms(500);
+    alarm_fired = true;              // будильник будит
+    sim.pmic_crashed = false;
+    sim_run_ms(3000);                // последовательность пробуждения -> WORKING
+}
+
+// Регрессия (fail-without-fix): после выхода из off-mode по будильнику (resume
+// того же ядра - ЕС не перезапускается) флаг «сон начался» / разрешение выхода
+// из suspend по кормлению watchdog ОБЯЗАН вернуться в исходное (disarmed)
+// состояние. Иначе на следующем цикле первое же кормление watchdog завершит
+// suspend немедленно (на стенде: RF2+ [EC] Suspend mode: off (request)).
+static void test_suspend_off_exit_disarms_feed_exit(void)
+{
+    sim.check_invariants = false;
+    sim.soc_feeds = true;
+    sim_boot_to_working();
+
+    sim_announce_off_mode(60);
+    sim_tick();
+    sim.pmic_crashed = true;          // 3.3В пропало -> arm взводится
+    sim_run_ms(500);
+    TEST_ASSERT_TRUE_MESSAGE(utest_wbec_get_suspend_started(),
+        "feed-exit arm must be set once the EC has seen the 3.3V drop");
+
+    alarm_fired = true;               // будильник будит, resume того же ядра
+    sim.pmic_crashed = false;
+    sim_run_ms(3000);
+
+    TEST_ASSERT_FALSE_MESSAGE(utest_wbec_get_suspend_started(),
+        "suspend-mode exit must disarm the feed-exit / seen-3.3V-drop flag");
+}
+
+// Регрессия многоцикловая: цикл 1 взводит arm и выходит по будильнику; на
+// цикле 2 (watchdog работает и кормит во время входа) плата обязана так же
+// уснуть и проснуться по будильнику, а не выйти из suspend по кормлению.
+static void test_suspend_off_second_cycle_sleeps_with_watchdog(void)
+{
+    sim.check_invariants = false;
+    sim.soc_feeds = true;
+    sim_boot_to_working();
+
+    sim_off_mode_cycle();                       // цикл 1
+    uint32_t boots_after_c1 = sim.soc_boot_count;
+
+    // Цикл 2: объявляем и кормим watchdog во время входа (до и после 3.3В)
+    sim_announce_off_mode(60);
+    sim_tick();
+    soc_feed_watchdog();
+    sim_run_ms(150);
+    sim.pmic_crashed = true;                    // 3.3В пропало
+    sim_run_ms(300);
+    soc_feed_watchdog();                        // кормление при взведённом arm
+    sim_run_ms(1000);
+
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(boots_after_c1, sim.soc_boot_count,
+        "cycle 2 must stay asleep, not exit suspend on a watchdog feed");
+
+    alarm_fired = true;                         // свежий будильник
+    sim.pmic_crashed = false;
+    sim_run_ms(3000);
+    TEST_ASSERT_TRUE_MESSAGE(sim.soc_boot_count > boots_after_c1,
+        "cycle 2 must still wake on a fresh alarm");
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -646,6 +718,8 @@ int main(void)
     RUN_TEST(test_poweroff_request_racing_wdt_timeout_stays_off);
     RUN_TEST(test_suspend_off_stale_alarm_does_not_wake_immediately);
     RUN_TEST(test_suspend_off_fresh_alarm_wakes);
+    RUN_TEST(test_suspend_off_exit_disarms_feed_exit);
+    RUN_TEST(test_suspend_off_second_cycle_sleeps_with_watchdog);
 #if defined(WBEC_HAS_WARM_RESET)
     RUN_TEST(test_escalation_alternates_warm_and_hard);
 #endif
