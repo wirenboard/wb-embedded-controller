@@ -20,6 +20,7 @@
 #include "utest_voltage_monitor.h"
 #include "utest_wbmz_common.h"
 #include "utest_irq.h"
+#include "utest_wdt_stm32.h"
 
 /**
  * Интеграционный тест: реальные wbec.c + linux-power-control.c + wdt.c
@@ -344,6 +345,29 @@ void setUp(void)
     utest_pwrkey_reset();
     utest_rtc_reset();
     utest_irq_reset();
+    heater_suspend_off = false;
+    v_out_suspend_off = false;
+}
+
+// Причины включения из wbec.c (порядок enum linux_poweron_reason)
+enum utest_wbec_poweron_reason {
+    UTEST_REASON_POWER_ON,
+    UTEST_REASON_POWER_KEY,
+    UTEST_REASON_RTC_ALARM,
+    UTEST_REASON_REBOOT,
+    UTEST_REASON_REBOOT_NO_ALARM,
+    UTEST_REASON_WATCHDOG,
+    UTEST_REASON_PMIC_OFF,
+    UTEST_REASON_UNKNOWN,
+    UTEST_REASON_WATCHDOG_WARM,
+};
+
+// poweron_reason пишется в regmap на каждом wbec_do_periodic_work.
+static uint16_t get_poweron_reason_from_regmap(void)
+{
+    struct REGMAP_POWERON_REASON pr;
+    TEST_ASSERT_TRUE(utest_regmap_get_region_data(REGMAP_REGION_POWERON_REASON, &pr, sizeof(pr)));
+    return pr.poweron_reason;
 }
 
 void tearDown(void)
@@ -713,6 +737,175 @@ static void test_suspend_off_second_cycle_sleeps_with_watchdog(void)
         "cycle 2 must still wake on a fresh alarm");
 }
 
+// ==================== Stop 1: окно сна suspend-to-off ====================
+
+// Доводит плату до состояния «спит в окне suspend-to-off»: объявлен off-mode,
+// 3.3В пропало (BL31), EC ушёл в STM32 Stop. Инварианты выключены: плата
+// намеренно не стартует, пока не разбудят.
+static void sim_enter_off_mode_sleep(uint16_t timeout_s)
+{
+    sim.check_invariants = false;
+    sim.soc_feeds = true;
+    sim_boot_to_working();
+    // Как на реальной плате, suspend объявляется, когда Linux уже загружен:
+    // до этого момента короткое нажатие кнопки трактуется как немедленное
+    // выключение (ветка !linux_booted), а не как выход из suspend.
+    sim_run_ms(WBEC_LINUX_BOOT_TIME_MS + 1000);
+    sim_announce_off_mode(timeout_s);
+    sim_tick();
+    sim.pmic_crashed = true;         // BL31 снял 3.3В -> взводится suspend_started
+    sim_run_ms(500);
+}
+
+// Вход в окно должен: завести источники пробуждения Stop, арм-нуть WUT ровно
+// с периодом кормления, принудительно выключить нагреватель (PD2) и V_OUT
+// (PD0), реально уснуть и НИ разу не уйти в Standby. Свежий будильник (запрос
+// Linux) обязан разбудить тем же путём linux_cpu_pwr_seq_wakeup, вернуть
+// выходы под управление, снять маску SoC-CS и выключить WUT-дедлайн.
+static void test_stop_window_arms_safe_and_wakes_on_fresh_alarm(void)
+{
+    sim_enter_off_mode_sleep(60);
+
+    TEST_ASSERT_TRUE_MESSAGE(utest_wbec_get_suspend_started(),
+        "3.3V drop must arm the sleep");
+    TEST_ASSERT_TRUE_MESSAGE(utest_mcu_stop_get_window_prepared(),
+        "Stop window wake sources (RTC/​button EXTI) must be armed");
+    uint16_t wut_period = 0;
+    TEST_ASSERT_TRUE_MESSAGE(utest_rtc_get_periodic_wakeup_set(&wut_period),
+        "the feed/​deadline WUT must be armed");
+    TEST_ASSERT_EQUAL_UINT16_MESSAGE(WBEC_SUSPEND_STOP_FEED_PERIOD_S, wut_period,
+        "WUT must be armed with the feed period");
+    TEST_ASSERT_TRUE_MESSAGE(heater_suspend_off, "heater (PD2) must be forced off at Stop entry");
+    TEST_ASSERT_TRUE_MESSAGE(v_out_suspend_off, "V_OUT (PD0) must be forced off at Stop entry");
+    TEST_ASSERT_TRUE_MESSAGE(utest_mcu_stop_get_enter_count() > 0,
+        "EC must actually enter Stop while asleep");
+    TEST_ASSERT_EQUAL_UINT16_MESSAGE(0, utest_mcu_get_standby_wakeup_time(),
+        "the Stop window must never request Standby");
+
+    uint32_t boots_before = sim.soc_boot_count;
+
+    alarm_fired = true;              // свежий будильник; PMIC восстановит 3.3В
+    sim.pmic_crashed = false;
+    sim_run_ms(3000);
+
+    TEST_ASSERT_TRUE_MESSAGE(sim.soc_boot_count > boots_before,
+        "a fresh alarm must wake the board");
+    TEST_ASSERT_EQUAL_UINT16_MESSAGE(UTEST_REASON_RTC_ALARM, get_poweron_reason_from_regmap(),
+        "alarm wake must report REASON_RTC_ALARM");
+    TEST_ASSERT_TRUE_MESSAGE(utest_mcu_stop_get_window_finished(),
+        "real wake must restore the SoC-CS EXTI mask (window finish)");
+    TEST_ASSERT_TRUE_MESSAGE(utest_rtc_get_periodic_wakeup_disabled(),
+        "real wake must disable the WUT deadline");
+    TEST_ASSERT_FALSE_MESSAGE(heater_suspend_off, "heater control must be restored on wake");
+    TEST_ASSERT_FALSE_MESSAGE(v_out_suspend_off, "V_OUT control must be restored on wake");
+    TEST_ASSERT_EQUAL_UINT16_MESSAGE(0, utest_mcu_get_standby_wakeup_time(),
+        "no Standby must be requested across the whole window");
+}
+
+// Кнопка PWRON: фронт EXTI0 будит ядро, но короткое нажатие подтверждается
+// штатным антидребезгом (500 мс) в бодрствующем супер-цикле, а не самим
+// фронтом — так сохраняется фильтр случайных касаний. Подтверждённое нажатие
+// будит плату с REASON_POWER_KEY.
+static void test_stop_wake_by_button_edge_then_debounced_press(void)
+{
+    sim_enter_off_mode_sleep(60);
+    uint32_t boots_before = sim.soc_boot_count;
+
+    utest_mcu_stop_set_button_wake(true);   // фронт кнопки: пробудил Stop
+    sim_run_ms(50);                         // остаёмся бодрствовать, не спим
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(boots_before, sim.soc_boot_count,
+        "an unconfirmed button edge must not wake the board yet");
+
+    utest_pwrkey_set_short_press(true);     // антидребезг подтвердил нажатие
+    sim.pmic_crashed = false;
+    sim_run_ms(3000);
+
+    TEST_ASSERT_TRUE_MESSAGE(sim.soc_boot_count > boots_before,
+        "a confirmed short press must wake the board");
+    TEST_ASSERT_EQUAL_UINT16_MESSAGE(UTEST_REASON_POWER_KEY, get_poweron_reason_from_regmap(),
+        "button wake must report REASON_POWER_KEY");
+}
+
+// Отрицательный случай: касание, которое так и не прошло антидребезг, после
+// окна ожидания должно вернуть EC в Stop (а не разбудить плату).
+static void test_stop_button_brush_reenters_stop(void)
+{
+    sim_enter_off_mode_sleep(60);
+    uint32_t boots_before = sim.soc_boot_count;
+
+    utest_mcu_stop_set_button_wake(true);
+    sim_run_ms(50);
+    uint32_t enters_awake = utest_mcu_stop_get_enter_count();
+
+    // Ждём дольше окна ожидания (debounce + grace) без подтверждённого нажатия.
+    sim_run_ms(PWRKEY_DEBOUNCE_MS + WBEC_SUSPEND_STOP_BUTTON_GRACE_MS + 200);
+
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(boots_before, sim.soc_boot_count,
+        "a button brush that never debounces must not wake the board");
+    TEST_ASSERT_TRUE_MESSAGE(utest_mcu_stop_get_enter_count() > enters_awake,
+        "after the grace window the EC must go back to sleep (re-enter Stop)");
+}
+
+// Дедлайн-бэкстоп: считается по накопленным тикам RTC WUT (systick в Stop
+// заморожен). После timeout_ms / (feed_period*1000) тиков WUT плата будится с
+// REASON_WATCHDOG. Регрессия: раньше дедлайн жил на systick, который в Stop
+// не идёт.
+static void test_stop_deadline_fires_via_wut_ticks(void)
+{
+    sim_enter_off_mode_sleep(60);       // timeout = 60 c + 10 c запас = 70 c
+
+    // Каждый уход в Stop моделирует один истёкший период WUT.
+    utest_mcu_stop_set_auto_wut_tick(true);
+    sim_run_ms(500);                    // >> 70000/4000 = 18 тиков; PMIC не оживляем
+
+    TEST_ASSERT_FALSE_MESSAGE(utest_wbec_get_suspend_started(),
+        "the WUT-tick deadline must end the suspend window");
+    TEST_ASSERT_EQUAL_UINT16_MESSAGE(UTEST_REASON_WATCHDOG, get_poweron_reason_from_regmap(),
+        "deadline wake must report REASON_WATCHDOG");
+    TEST_ASSERT_TRUE_MESSAGE(utest_mcu_stop_get_window_finished(),
+        "deadline wake must finish the Stop window");
+    TEST_ASSERT_TRUE_MESSAGE(utest_rtc_get_periodic_wakeup_disabled(),
+        "deadline wake must disable the WUT");
+}
+
+// Зеркальная регрессия: сам по себе идущий systick (без тиков WUT) НЕ должен
+// сработать дедлайн — иначе доказательства, что база времени переехала на WUT,
+// нет. Плата обязана спать сколь угодно долго.
+static void test_stop_frozen_wut_never_fires_on_systick_alone(void)
+{
+    sim_enter_off_mode_sleep(60);
+    uint32_t boots_before = sim.soc_boot_count;
+    uint32_t enters_before = utest_mcu_stop_get_enter_count();
+
+    // auto_wut_tick выключен: тиков WUT нет, но сим-время (systick) идёт.
+    sim_run_ms(120000);                 // сильно больше timeout (70 c)
+
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(boots_before, sim.soc_boot_count,
+        "a frozen WUT accumulator must never fire the deadline on systick alone");
+    TEST_ASSERT_TRUE_MESSAGE(utest_wbec_get_suspend_started(),
+        "board must still be asleep in the Stop window");
+    TEST_ASSERT_TRUE_MESSAGE(utest_mcu_stop_get_enter_count() > enters_before,
+        "the EC must keep sleeping in Stop across the window");
+}
+
+// Инвариант IWDG (прямая регрессия на причину отказа Standby): аппаратный
+// watchdog кормится не реже одного раза на каждый уход в Stop (E1, перед сном),
+// поэтому за окно сна он никогда не досчитает до ~10 с.
+static void test_stop_feeds_iwdg_on_every_feed_tick(void)
+{
+    sim_enter_off_mode_sleep(60);
+
+    uint32_t reloads_before = utest_watchdog_get_reload_count();
+    uint32_t enters_before = utest_mcu_stop_get_enter_count();
+    sim_run_ms(1000);
+    uint32_t reloads = utest_watchdog_get_reload_count() - reloads_before;
+    uint32_t enters = utest_mcu_stop_get_enter_count() - enters_before;
+
+    TEST_ASSERT_TRUE_MESSAGE(enters > 0, "EC must keep entering Stop");
+    TEST_ASSERT_TRUE_MESSAGE(reloads >= enters,
+        "the IWDG must be fed at least once per Stop feed-tick");
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -728,6 +921,14 @@ int main(void)
     RUN_TEST(test_suspend_off_fresh_alarm_wakes);
     RUN_TEST(test_suspend_off_exit_disarms_feed_exit);
     RUN_TEST(test_suspend_off_second_cycle_sleeps_with_watchdog);
+
+    // Stop 1: окно сна suspend-to-off
+    RUN_TEST(test_stop_window_arms_safe_and_wakes_on_fresh_alarm);
+    RUN_TEST(test_stop_wake_by_button_edge_then_debounced_press);
+    RUN_TEST(test_stop_button_brush_reenters_stop);
+    RUN_TEST(test_stop_deadline_fires_via_wut_ticks);
+    RUN_TEST(test_stop_frozen_wut_never_fires_on_systick_alone);
+    RUN_TEST(test_stop_feeds_iwdg_on_every_feed_tick);
 #if defined(WBEC_HAS_WARM_RESET)
     RUN_TEST(test_escalation_alternates_warm_and_hard);
 #endif
