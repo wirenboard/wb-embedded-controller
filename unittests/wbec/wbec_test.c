@@ -327,6 +327,211 @@ static void test_init_periodic_wakeup_no_5v_was_off_no_extra_save(void)
                               "VCC 5V state must stay OFF without rewrite");
 }
 
+// ==================== wbec_init: окно suspend-to-off (Standby) ====================
+// Во время окна suspend-to-off EC спит в Standby; каждое пробуждение - сброс,
+// и wbec_init разбирает его по метке в backup-домене (mcu_suspend_take_resume).
+
+// Сценарий: пробуждение по будильнику RTC (запрошенное Linux'ом) со взведённой
+// меткой suspend-to-off.
+// Ожидание: НЕ холодная загрузка и НЕ standby, а ветка resume:
+//   - linux_cpu_pwr_seq_resume_init() вызвана (5В перехвачено, PWROK разбудит SoC),
+//   - heartbeat-WUT выключен,
+//   - переход в POWER_ON_SEQUENCE_WAIT (LED blink 50/50),
+//   - poweron_reason = RTC_ALARM.
+static void test_init_suspend_resume_from_alarm(void)
+{
+    utest_mcu_set_suspend_resume(true);
+    utest_mcu_set_suspend_remaining_s(60);
+    utest_mcu_set_poweron_reason(MCU_POWERON_REASON_RTC_ALARM);
+
+    wbec_init();
+
+    TEST_ASSERT_TRUE_MESSAGE(utest_linux_pwr_get_resume_init_called(),
+        "resume from suspend Standby must call linux_cpu_pwr_seq_resume_init");
+    TEST_ASSERT_TRUE_MESSAGE(utest_rtc_get_periodic_wakeup_disabled(),
+        "resume must disable the heartbeat WUT");
+    TEST_ASSERT_FALSE_MESSAGE(utest_linux_pwr_get_suspend_standby_called(),
+        "alarm resume must NOT go back to Standby");
+    TEST_ASSERT_FALSE_MESSAGE(utest_linux_pwr_get_standby_called(),
+        "alarm resume must NOT go to poweroff-standby");
+    TEST_ASSERT_FALSE_MESSAGE(utest_linux_pwr_get_init_called(),
+        "resume must NOT run the cold-boot power-on init");
+
+    uint16_t on_ms, off_ms;
+    utest_system_led_get_blink_params(&on_ms, &off_ms);
+    TEST_ASSERT_EQUAL_UINT16_MESSAGE(50, on_ms,
+        "resume must land in POWER_ON_SEQUENCE_WAIT (LED 50/50)");
+
+    // poweron_reason пишется в regmap на первом periodic work; остаёмся в
+    // POWER_ON_SEQUENCE_WAIT (busy), чтобы не уехать в WORKING.
+    utest_linux_pwr_set_busy(true);
+    wbec_do_periodic_work();
+    TEST_ASSERT_EQUAL_UINT16_MESSAGE(UTEST_REASON_RTC_ALARM, get_poweron_reason_from_regmap(),
+        "resume by alarm must report REASON_RTC_ALARM");
+}
+
+// Сценарий: heartbeat-пробуждение (RTC WUT) в середине окна - остаток дедлайна
+// велик, 3.3В отсутствует (SoC спит).
+// Ожидание: EC продвигает остаток на heartbeat и возвращается в Standby через
+// suspend_to_standby (5В сохраняется); resume НЕ выполняется; poweroff-standby
+// НЕ вызывается.
+static void test_init_suspend_heartbeat_reenters_standby(void)
+{
+    utest_mcu_set_suspend_resume(true);
+    utest_mcu_set_suspend_remaining_s(60);
+    utest_mcu_set_poweron_reason(MCU_POWERON_REASON_RTC_PERIODIC_WAKEUP);
+    utest_vmon_set_ch_status(VMON_CHANNEL_V33, false);
+
+    wbec_init();
+
+    TEST_ASSERT_TRUE_MESSAGE(utest_linux_pwr_get_suspend_standby_called(),
+        "heartbeat must re-enter suspend Standby");
+    TEST_ASSERT_EQUAL_UINT16_MESSAGE(WBEC_SUSPEND_STANDBY_HEARTBEAT_S,
+        utest_linux_pwr_get_suspend_standby_wakeup_s(),
+        "heartbeat sleep interval must be the heartbeat period");
+    TEST_ASSERT_TRUE_MESSAGE(utest_mcu_was_suspend_armed(),
+        "heartbeat must re-arm the suspend marker before sleeping");
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(60 - WBEC_SUSPEND_STANDBY_HEARTBEAT_S,
+        utest_mcu_get_suspend_remaining_s(),
+        "heartbeat must advance the deadline remainder by one heartbeat");
+    TEST_ASSERT_FALSE_MESSAGE(utest_linux_pwr_get_resume_init_called(),
+        "heartbeat must NOT resume");
+    TEST_ASSERT_FALSE_MESSAGE(utest_linux_pwr_get_standby_called(),
+        "heartbeat must NOT go to poweroff-standby (it would cut 5V and kill DRAM)");
+    TEST_ASSERT_FALSE_MESSAGE(utest_linux_pwr_get_init_called(),
+        "heartbeat must NOT run the cold-boot power-on init");
+}
+
+// Сценарий-регрессия корня провала ec0bef4: окно сна НИКОГДА не длиннее
+// heartbeat, даже при огромном остатке дедлайна. IWDG считает и в Standby
+// (период 10 с, wdt-stm32.h), кормит его только сброс-пробуждение - значит
+// сон обязан быть короче 10 с.
+static void test_init_suspend_sleep_never_exceeds_iwdg_margin(void)
+{
+    TEST_ASSERT_LESS_THAN_MESSAGE(10, WBEC_SUSPEND_STANDBY_HEARTBEAT_S,
+        "heartbeat must be shorter than the 10 s IWDG period");
+
+    utest_mcu_set_suspend_resume(true);
+    utest_mcu_set_suspend_remaining_s(0xFFFFFFFFu);
+    utest_mcu_set_poweron_reason(MCU_POWERON_REASON_RTC_PERIODIC_WAKEUP);
+    utest_vmon_set_ch_status(VMON_CHANNEL_V33, false);
+
+    wbec_init();
+
+    TEST_ASSERT_TRUE(utest_linux_pwr_get_suspend_standby_called());
+    TEST_ASSERT_EQUAL_UINT16_MESSAGE(WBEC_SUSPEND_STANDBY_HEARTBEAT_S,
+        utest_linux_pwr_get_suspend_standby_wakeup_s(),
+        "sleep interval must never exceed the heartbeat (IWDG envelope)");
+}
+
+// Сценарий: heartbeat-пробуждение, остаток дедлайна исчерпан (система не
+// проснулась к сроку сама).
+// Ожидание: resume с причиной WATCHDOG - EC будит SoC сам.
+static void test_init_suspend_deadline_resumes_reason_watchdog(void)
+{
+    utest_mcu_set_suspend_resume(true);
+    utest_mcu_set_suspend_remaining_s(WBEC_SUSPEND_STANDBY_HEARTBEAT_S);
+    utest_mcu_set_poweron_reason(MCU_POWERON_REASON_RTC_PERIODIC_WAKEUP);
+    utest_vmon_set_ch_status(VMON_CHANNEL_V33, false);
+
+    wbec_init();
+
+    TEST_ASSERT_TRUE_MESSAGE(utest_linux_pwr_get_resume_init_called(),
+        "deadline must resume via resume_init");
+    TEST_ASSERT_FALSE_MESSAGE(utest_linux_pwr_get_suspend_standby_called(),
+        "deadline must NOT go back to sleep");
+
+    utest_linux_pwr_set_busy(true);
+    wbec_do_periodic_work();
+    TEST_ASSERT_EQUAL_UINT16_MESSAGE(UTEST_REASON_WATCHDOG, get_poweron_reason_from_regmap(),
+        "deadline resume must report REASON_WATCHDOG");
+}
+
+// Сценарий: heartbeat-пробуждение, но 3.3В присутствует - SoC сам отказался от
+// suspend уже после ухода EC в сон (поздний abort).
+// Ожидание: не спать дальше, а возобновиться немедленно (максимум через один
+// heartbeat после возврата 3.3В) - последовательность пробуждения увидит
+// готовое 3.3В.
+static void test_init_suspend_heartbeat_soc_alive_resumes(void)
+{
+    utest_mcu_set_suspend_resume(true);
+    utest_mcu_set_suspend_remaining_s(60);
+    utest_mcu_set_poweron_reason(MCU_POWERON_REASON_RTC_PERIODIC_WAKEUP);
+    utest_vmon_set_ch_status(VMON_CHANNEL_V33, true);
+
+    wbec_init();
+
+    TEST_ASSERT_TRUE_MESSAGE(utest_linux_pwr_get_resume_init_called(),
+        "SoC alive mid-window (late suspend abort) must resume immediately");
+    TEST_ASSERT_FALSE_MESSAGE(utest_linux_pwr_get_suspend_standby_called(),
+        "SoC alive mid-window must NOT re-enter Standby");
+}
+
+// Сценарий: пробуждение по кнопке, нажатие подтверждено антидребезгом.
+// Ожидание: resume с причиной POWER_KEY.
+static void test_init_suspend_button_press_resumes(void)
+{
+    utest_mcu_set_suspend_resume(true);
+    utest_mcu_set_suspend_remaining_s(60);
+    utest_mcu_set_poweron_reason(MCU_POWERON_REASON_POWER_KEY);
+    utest_set_pwrkey_pressed(true);
+
+    wbec_init();
+
+    TEST_ASSERT_TRUE_MESSAGE(utest_linux_pwr_get_resume_init_called(),
+        "confirmed button press must resume");
+
+    utest_linux_pwr_set_busy(true);
+    wbec_do_periodic_work();
+    TEST_ASSERT_EQUAL_UINT16_MESSAGE(UTEST_REASON_POWER_KEY, get_poweron_reason_from_regmap(),
+        "button resume must report REASON_POWER_KEY");
+}
+
+// Сценарий: пробуждение по кнопке, но нажатие НЕ подтвердилось (случайное
+// касание / дребезг).
+// Ожидание: EC спит дальше, остаток дедлайна не изменён (фильтр случайных
+// касаний, как в poweroff).
+static void test_init_suspend_button_brush_reenters_standby(void)
+{
+    utest_mcu_set_suspend_resume(true);
+    utest_mcu_set_suspend_remaining_s(60);
+    utest_mcu_set_poweron_reason(MCU_POWERON_REASON_POWER_KEY);
+    utest_set_pwrkey_pressed(false);
+
+    wbec_init();
+
+    TEST_ASSERT_TRUE_MESSAGE(utest_linux_pwr_get_suspend_standby_called(),
+        "unconfirmed button brush must re-enter suspend Standby");
+    TEST_ASSERT_FALSE_MESSAGE(utest_linux_pwr_get_resume_init_called(),
+        "unconfirmed button brush must NOT resume");
+    TEST_ASSERT_TRUE(utest_mcu_was_suspend_armed());
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(60, utest_mcu_get_suspend_remaining_s(),
+        "button brush must NOT advance the deadline remainder");
+}
+
+// Сценарий: сброс со взведённой меткой, но неожиданной причиной (например,
+// IWDG-сброс прямо в Standby - heartbeat такого не допускает, но защищаемся).
+// Ожидание: единственное безопасное действие - разбудить SoC (resume,
+// причина WATCHDOG), а не спать дальше и не делать холодную загрузку.
+static void test_init_suspend_unexpected_reason_resumes(void)
+{
+    utest_mcu_set_suspend_resume(true);
+    utest_mcu_set_suspend_remaining_s(60);
+    utest_mcu_set_poweron_reason(MCU_POWERON_REASON_UNKNOWN);
+
+    wbec_init();
+
+    TEST_ASSERT_TRUE_MESSAGE(utest_linux_pwr_get_resume_init_called(),
+        "unexpected reset with the suspend marker must resume (safe action)");
+    TEST_ASSERT_FALSE_MESSAGE(utest_linux_pwr_get_suspend_standby_called(),
+        "unexpected reset must NOT blindly re-enter Standby");
+
+    utest_linux_pwr_set_busy(true);
+    wbec_do_periodic_work();
+    TEST_ASSERT_EQUAL_UINT16_MESSAGE(UTEST_REASON_WATCHDOG, get_poweron_reason_from_regmap(),
+        "unexpected-reset resume must report REASON_WATCHDOG");
+}
+
 // ======================== wbec_init: общие проверки ========================
 
 // Сценарий: при отсутствии +5В после любого штатного включения должен включаться wbmz stepup.
@@ -1409,6 +1614,16 @@ int main(void)
     RUN_TEST(test_init_periodic_wakeup_no_5v_was_on_saves_state);
     RUN_TEST(test_init_periodic_wakeup_no_5v_was_off_goes_to_standby);
     RUN_TEST(test_init_periodic_wakeup_no_5v_was_off_no_extra_save);
+
+    // Окно suspend-to-off (Standby): разбор пробуждений в wbec_init
+    RUN_TEST(test_init_suspend_resume_from_alarm);
+    RUN_TEST(test_init_suspend_heartbeat_reenters_standby);
+    RUN_TEST(test_init_suspend_sleep_never_exceeds_iwdg_margin);
+    RUN_TEST(test_init_suspend_deadline_resumes_reason_watchdog);
+    RUN_TEST(test_init_suspend_heartbeat_soc_alive_resumes);
+    RUN_TEST(test_init_suspend_button_press_resumes);
+    RUN_TEST(test_init_suspend_button_brush_reenters_standby);
+    RUN_TEST(test_init_suspend_unexpected_reason_resumes);
 
     // Общие проверки init
     RUN_TEST(test_init_enables_stepup_when_no_5v);

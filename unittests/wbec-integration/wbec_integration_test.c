@@ -705,6 +705,34 @@ static void test_suspend_off_second_cycle_sleeps_with_watchdog(void)
         "cycle 2 must still wake on a fresh alarm");
 }
 
+// Контракт входа в окно suspend-to-off (Standby): EC уходит в Standby с
+// интервалом не длиннее heartbeat (инвариант IWDG: сон < 10 с - корень провала
+// ec0bef4) и взводит метку resume с остатком дедлайна (запрошенное время +
+// запас +10 с из suspend_timeout_ms).
+static void test_suspend_off_entry_sleeps_one_heartbeat_with_marker(void)
+{
+    sim.check_invariants = false;
+    sim.soc_feeds = true;
+    sim_boot_to_working();
+
+    sim_announce_off_mode(60);
+    sim_tick();
+    sim.pmic_crashed = true;          // BL31 снял 3.3В -> suspend_started
+    sim_run_ms(500);
+
+    TEST_ASSERT_TRUE_MESSAGE(sim.standby_requested,
+        "Suspend window entry must request Standby");
+    TEST_ASSERT_TRUE_MESSAGE(utest_mcu_get_standby_wakeup_time() > 0,
+        "Standby must be armed with a nonzero RTC WUT interval");
+    TEST_ASSERT_TRUE_MESSAGE(
+        utest_mcu_get_standby_wakeup_time() <= WBEC_SUSPEND_STANDBY_HEARTBEAT_S,
+        "Suspend Standby interval must not exceed the heartbeat (IWDG 10 s envelope)");
+    TEST_ASSERT_TRUE_MESSAGE(utest_mcu_was_suspend_armed(),
+        "Suspend window entry must arm the resume marker");
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(70, utest_mcu_get_suspend_remaining_s(),
+        "Marker must carry the padded deadline remainder (60 s + 10 s slack)");
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -720,6 +748,7 @@ int main(void)
     RUN_TEST(test_suspend_off_fresh_alarm_wakes);
     RUN_TEST(test_suspend_off_exit_disarms_feed_exit);
     RUN_TEST(test_suspend_off_second_cycle_sleeps_with_watchdog);
+    RUN_TEST(test_suspend_off_entry_sleeps_one_heartbeat_with_marker);
 #if defined(WBEC_HAS_WARM_RESET)
     RUN_TEST(test_escalation_alternates_warm_and_hard);
 #endif

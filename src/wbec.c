@@ -213,6 +213,17 @@ static inline enum linux_powerctrl_req get_linux_powerctrl_req(void)
     return ret;
 }
 
+// Длительность следующего сна окна suspend-to-off: не дольше heartbeat
+// (инвариант IWDG: EC не спит дольше 5 с, см. WBEC_SUSPEND_STANDBY_HEARTBEAT_S)
+// и не дольше остатка дедлайна.
+static uint16_t suspend_next_sleep_s(uint32_t remaining_s)
+{
+    if (remaining_s > WBEC_SUSPEND_STANDBY_HEARTBEAT_S) {
+        return WBEC_SUSPEND_STANDBY_HEARTBEAT_S;
+    }
+    return (uint16_t)remaining_s; // mcu_goto_standby клампит минимум в 1 с
+}
+
 void wbec_init(void)
 {
     // Здесь нельзя инициализировать GPIO управления питанием
@@ -224,6 +235,78 @@ void wbec_init(void)
 
     enum mcu_poweron_reason mcu_poweron_reason = mcu_get_poweron_reason();
     wbec_ctx.poweron_reason = REASON_UNKNOWN;
+
+    // Пробуждение из окна suspend-to-off (EC спал в STM32 Standby).
+    // Пробуждение из Standby - это ПОЛНЫЙ СБРОС: SRAM-флаги wbec_ctx потеряны,
+    // поэтому факт "мы спали в suspend-to-off" приходит из backup-домена
+    // (метка взведена перед сном). DRAM жива (5В держало железо, см.
+    // linux_cpu_pwr_seq_suspend_to_standby), PMIC спит - холодная загрузка
+    // недопустима: её побочные эффекты (бип, перезапуск последовательности
+    // питания) разрушат self-refresh. Разбираем причину пробуждения:
+    if (mcu_suspend_take_resume()) {
+        uint32_t remaining_s = mcu_suspend_get_remaining_s();
+        switch (mcu_poweron_reason) {
+        case MCU_POWERON_REASON_RTC_PERIODIC_WAKEUP:
+            // Heartbeat: сам сброс уже перезапустил IWDG (окно сна < 10 с).
+            // Продвигаем остаток дедлайна и, если причин просыпаться нет,
+            // спим дальше.
+            if (remaining_s > WBEC_SUSPEND_STANDBY_HEARTBEAT_S) {
+                remaining_s -= WBEC_SUSPEND_STANDBY_HEARTBEAT_S;
+                // Поздний отказ SoC от suspend: 3.3В вернулось - SoC уже жив.
+                // Тогда не спим дальше, а возобновляемся сразу (максимум через
+                // один heartbeat после возврата 3.3В): последовательность
+                // пробуждения увидит готовое 3.3В и обойдётся без PWRON.
+                if (!vmon_check_ch_once(VMON_CHANNEL_V33)) {
+                    mcu_suspend_arm(remaining_s);
+                    linux_cpu_pwr_seq_suspend_to_standby(suspend_next_sleep_s(remaining_s));
+                    return; // на железе недостижимо (Standby); в тестах - выход
+                }
+            }
+            // Дедлайн истёк (или SoC уже жив): будим SoC сами.
+            wbec_ctx.poweron_reason = REASON_WATCHDOG;
+            break;
+
+        case MCU_POWERON_REASON_POWER_KEY:
+            // Как и в poweroff: подтверждаем нажатие антидребезгом. Случайное
+            // касание не будит систему - спим дальше; остаток дедлайна не
+            // трогаем (дрейф на время бодрствования покрыт запасом +10 с в
+            // suspend_timeout_ms).
+            while (!pwrkey_ready()) {
+                pwrkey_do_periodic_work();
+                watchdog_reload();
+            }
+            if (!pwrkey_pressed()) {
+                mcu_suspend_arm(remaining_s);
+                linux_cpu_pwr_seq_suspend_to_standby(suspend_next_sleep_s(remaining_s));
+                return; // на железе недостижимо (Standby); в тестах - выход
+            }
+            wbec_ctx.poweron_reason = REASON_POWER_KEY;
+            break;
+
+        case MCU_POWERON_REASON_RTC_ALARM:
+            // Будильник Alarm A - запрошенное Linux'ом пробуждение.
+            wbec_ctx.poweron_reason = REASON_RTC_ALARM;
+            break;
+
+        default:
+            // Сброс со взведённой меткой, но неожиданной причиной (например,
+            // IWDG-сброс прямо в Standby - heartbeat такого не допускает).
+            // Безопасное действие одно: разбудить SoC.
+            wbec_ctx.poweron_reason = REASON_WATCHDOG;
+            break;
+        }
+
+        // Resume: будим SoC той же последовательностью, что и
+        // linux_cpu_pwr_seq_wakeup (появление 3.3В -> импульс PWROK).
+        // Heartbeat-WUT больше не нужен. Бип на входе в WORKING обязан
+        // молчать: resume - это ре-инициализация DRAM поверх self-refresh
+        // (проверено: бип на resume -> cold-boot).
+        rtc_disable_periodic_wakeup();
+        wbec_ctx.suspend_resume_no_beep = true;
+        linux_cpu_pwr_seq_resume_init();
+        new_state(WBEC_STATE_POWER_ON_SEQUENCE_WAIT);
+        return;
+    }
 
     bool vcc_5v_ok = vmon_check_ch_once(VMON_CHANNEL_V50);
     enum mcu_vcc_5v_state vcc_5v_last_state = mcu_get_vcc_5v_last_state();
@@ -658,25 +741,35 @@ void wbec_do_periodic_work(void)
             break;
         }
 
-        // Suspend-to-off: питание SoC выключено самим PMIC (кроме
-        // DRAM), Linux заморожен в самообновляющейся памяти. Будим
-        // PMIC по будильнику, дедлайну или кнопке: перезапуск
-        // последовательности включения "нажимает" PWRON, PMIC
-        // восстанавливает записанную конфигурацию питания.
+        // Suspend-to-off: питание SoC выключено самим PMIC (кроме DRAM), Linux
+        // заморожен в самообновляющейся памяти. Как только сон реально начался
+        // (3.3В пропало -> suspend_started), EC уходит в STM32 Standby - тем же
+        // механизмом, что и обычный poweroff, но с двумя отличиями:
+        //  - 5В остаётся включённым (его держит внешняя схема ключа при high-Z
+        //    пине - см. linux_cpu_pwr_seq_suspend_to_standby), PMIC хранит
+        //    DRAM в self-refresh;
+        //  - RTC WUT будит EC каждые WBEC_SUSPEND_STANDBY_HEARTBEAT_S (< 10 с
+        //    IWDG): каждое пробуждение - сброс, загрузка перезапускает IWDG,
+        //    остаток дедлайна ведётся в backup-регистре.
+        // Пробуждение (будильник Linux / кнопка / дедлайн / heartbeat)
+        // разбирает wbec_init() - см. ветку mcu_suspend_take_resume().
         if (wbec_ctx.suspend_mode && wbec_ctx.suspend_off_mode &&
             wbec_ctx.suspend_started) {
+            // Защита: если будильник или кнопка сработали в коротком окне
+            // ПЕРЕД уходом в сон - просыпаемся на месте (уход в Standby
+            // разоружил бы уже считанный будильник). Дедлайн здесь не
+            // проверяем: он живёт в backup-регистре и обслуживается
+            // heartbeat-пробуждениями.
             bool alarm = rtc_alarm_take_fired();
-            bool deadline = systick_get_time_since_timestamp(
-                wbec_ctx.suspend_entry_timestamp) > wbec_ctx.suspend_timeout_ms;
             bool button = pwrkey_handle_short_press();
 
-            if (alarm || deadline || button) {
+            if (alarm || button) {
                 wbec_ctx.suspend_mode = false;
                 wbec_ctx.suspend_off_mode = false;
-                // Разоружаем «сон начался»: пробуждение по будильнику - это
-                // resume того же ядра, ЕС не перезапускается, поэтому без
-                // сброса флаг остаётся взведён и на следующем цикле первое
-                // же кормление watchdog завершит suspend немедленно.
+                // Разоружаем «сон начался»: пробуждение на месте - это resume
+                // того же ядра, ЕС не перезапускается, поэтому без сброса флаг
+                // остаётся взведён и на следующем цикле первое же кормление
+                // watchdog завершит suspend немедленно.
                 wbec_ctx.suspend_started = false;
                 // Это resume того же ядра (DRAM в самообновлении): бип на
                 // входе в WORKING сорвёт ре-инициализацию DRAM и уронит плату
@@ -685,13 +778,11 @@ void wbec_do_periodic_work(void)
                 wbec_ctx.suspend_resume_no_beep = true;
                 if (alarm) {
                     wbec_ctx.poweron_reason = REASON_RTC_ALARM;
-                } else if (button) {
-                    wbec_ctx.poweron_reason = REASON_POWER_KEY;
                 } else {
-                    wbec_ctx.poweron_reason = REASON_WATCHDOG;
+                    wbec_ctx.poweron_reason = REASON_POWER_KEY;
                 }
                 console_print("\r\n\n");
-                console_print_w_prefix("Suspend-to-off: wake up, restart PMIC via PWRON\r\n");
+                console_print_w_prefix("Suspend-to-off: wake before Standby, restart PMIC via PWRON\r\n");
                 linux_cpu_pwr_seq_wakeup();
                 new_state(WBEC_STATE_POWER_ON_SEQUENCE_WAIT);
                 break;
@@ -699,6 +790,17 @@ void wbec_do_periodic_work(void)
             // Кормления watchdog в этом режиме невозможны (Linux
             // выключен) - потребляем возможный таймаут вхолостую
             (void)wdt_handle_timed_out();
+
+            // Причин просыпаться нет: сохраняем остаток дедлайна (в нём уже
+            // есть запас +10 с, см. запись SUSPEND_CTRL) в backup-домен и
+            // уходим в Standby до heartbeat / будильника / кнопки.
+            uint32_t remaining_s = wbec_ctx.suspend_timeout_ms / 1000;
+            console_print("\r\n\n");
+            console_print_w_prefix("Suspend-to-off: EC entering STM32 Standby (heartbeat wakeups)\r\n");
+            mcu_suspend_arm(remaining_s);
+            linux_cpu_pwr_seq_suspend_to_standby(suspend_next_sleep_s(remaining_s));
+            // На железе не возвращается (Standby, пробуждение = сброс).
+            // В юнит-тестах заглушка возвращается - продолжаем цикл.
             break;
         }
 

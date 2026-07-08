@@ -126,6 +126,99 @@ void linux_cpu_pwr_seq_off_and_goto_standby(uint16_t wakeup_after_s)
     mcu_goto_standby(wakeup_after_s);
 }
 
+// Подтяжка пина на время Standby (применяется по PWR_CR3_APC). В Standby
+// драйверы GPIO выключены и уровень пина задаётся только PWR->PUCRx/PDCRx.
+static void standby_pull(const gpio_pin_t * gpio, bool up)
+{
+    volatile uint32_t * reg;
+    if (gpio->port == GPIOA) {
+        reg = up ? &PWR->PUCRA : &PWR->PDCRA;
+    } else if (gpio->port == GPIOB) {
+        reg = up ? &PWR->PUCRB : &PWR->PDCRB;
+    } else if (gpio->port == GPIOD) {
+        reg = up ? &PWR->PUCRD : &PWR->PDCRD;
+    } else {
+        return; // GCOVR_EXCL_LINE
+    }
+    *reg |= (1u << gpio->pin);
+}
+
+/**
+ * @brief suspend-to-off: усыпляет EC в STM32 Standby на heartbeat-интервал.
+ *
+ * Отличие от linux_cpu_pwr_seq_off_and_goto_standby: там пин 5В подтягивают
+ * ВНИЗ (линукс должен остаться выключенным). Здесь 5В ДОЛЖНО остаться
+ * включённым весь сон - PMIC хранит DRAM в self-refresh. Для этого пин 5В
+ * (EC_GPIO_LINUX_POWER) НАРОЧНО оставляется ВООБЩЕ БЕЗ подтяжки (high-Z):
+ * по схеме WB 8.5.3 ключ 5В модуля (U14 SY6280) держится ВКЛЮЧЁННЫМ внешним
+ * резистором R38 470k -> +5V/1; EC выключает его, только активно прижимая EN
+ * через R37 10k. C32 2.2 мкФ на EN (tau ~ 1 с) сглаживает и короткие окна
+ * сброса при heartbeat-пробуждениях. Никакого раннего перехвата пина или
+ * внутренней подтяжки не требуется - 5В держит железо.
+ * ВАЖНО: подтяжку ВНИЗ на пин 5В здесь ставить нельзя - это выключит ключ,
+ * DRAM выпадет из self-refresh и resume станет невозможен.
+ *
+ * PWRON и PWROK/RESET при high-Z и так неактивны (NPN-BRT с внутренним
+ * резистором база-эмиттер держит транзистор закрытым); подтяжки вниз - только
+ * страховка от наводок на длинном окне.
+ *
+ * Кнопка питания (PA0) уже настроена как WKUP с подтяжкой вверх в pwrkey_init,
+ * будильник Alarm A взведён Linux'ом; heartbeat задаёт RTC WUT.
+ *
+ * @param wakeup_after_s Интервал heartbeat-пробуждения (RTC WUT), НЕ полный
+ * дедлайн: обязан быть меньше периода IWDG 10 с (IWDG считает и в Standby,
+ * а "кормит" его только перезапуск при сбросе-пробуждении) - см.
+ * WBEC_SUSPEND_STANDBY_HEARTBEAT_S в config.h.
+ */
+void linux_cpu_pwr_seq_suspend_to_standby(uint16_t wakeup_after_s)
+{
+    standby_pull(&gpio_pmic_pwron, false);
+    standby_pull(&gpio_pmic_reset_pwrok, false);
+
+    // Если система живёт от WBMZ (step-up включён, Vin нет), его enable
+    // (EC_GPIO_WBMZ_STEPUP_ENABLE) в Standby повиснет и step-up выключится -
+    // 5В пропадёт и DRAM умрёт. Держим enable внутренней подтяжкой вверх
+    // (~40 кОм; проверить на стенде, что её хватает входу enable на WBMZ).
+    if (wbmz_is_stepup_enabled()) {
+        static const gpio_pin_t gpio_wbmz_stepup = { EC_GPIO_WBMZ_STEPUP_ENABLE };
+        standby_pull(&gpio_wbmz_stepup, true);
+    }
+
+    // Apply pull-up and pull-down configuration
+    PWR->CR3 |= PWR_CR3_APC;
+
+    mcu_goto_standby(wakeup_after_s);
+    // На железе не возвращается: Standby, пробуждение = сброс, разбор в
+    // wbec_init(). В юнит-тестах mcu_goto_standby - заглушка и возвращается.
+}
+
+/**
+ * @brief Инициализация управления питанием при пробуждении из suspend-to-off
+ * Standby и взведение последовательности пробуждения PMIC.
+ *
+ * Пробуждение из Standby - это сброс: подтяжки PWR и режимы GPIO уже в
+ * значениях по умолчанию, чистить нечего. 5В всё это время держал внешний R38
+ * (пин был high-Z), поэтому берём пин под драйвер без провала уровня: сначала
+ * защёлка ODR=1, затем перевод в OUTPUT. Дальше та же последовательность, что
+ * и в linux_cpu_pwr_seq_wakeup: ждём появления 3.3В, затем импульс PWROK
+ * выводит SoC из сброса (а если 3.3В уже есть - поздний отказ SoC от suspend -
+ * последовательность увидит готовое 3.3В и обойдётся без "нажатия" PWRON).
+ */
+void linux_cpu_pwr_seq_resume_init(void)
+{
+    linux_cpu_pwr_5v_gpio_on();
+    GPIO_S_SET_OUTPUT(gpio_linux_power);
+
+    pmic_pwron_gpio_off();
+    pmic_reset_gpio_off();
+    GPIO_S_SET_OUTPUT(gpio_pmic_reset_pwrok);
+    GPIO_S_SET_OUTPUT(gpio_pmic_pwron);
+
+    pwr_ctx.initialized = true;
+    pwr_ctx.wake_pending = true;
+    new_state(PS_ON_STEP1_WAIT_3V3);
+}
+
 /**
  * @brief Включает питание линукс штатным способом:
  * Включается 5В, затем контролируется появление 3.3В.

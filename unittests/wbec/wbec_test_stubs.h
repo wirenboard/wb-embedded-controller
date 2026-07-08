@@ -19,6 +19,10 @@ bool utest_linux_pwr_get_hard_reset_called(void);
 bool utest_linux_pwr_get_reset_pmic_called(void);
 bool utest_linux_pwr_get_warm_reset_called(void);
 void utest_linux_pwr_clear_warm_reset_called(void);
+// suspend-to-off Standby: вход в сон с сохранённым 5В и resume-инициализация
+bool utest_linux_pwr_get_suspend_standby_called(void);
+uint16_t utest_linux_pwr_get_suspend_standby_wakeup_s(void);
+bool utest_linux_pwr_get_resume_init_called(void);
 void utest_temp_set_ready(bool ready);
 void utest_rtc_alarm_reset(void);
 void utest_rtc_alarm_set_enabled(bool enabled);

@@ -14,6 +14,9 @@ static struct {
     bool is_busy;
     bool standby_called;
     uint16_t standby_wakeup_s;
+    bool suspend_standby_called;
+    uint16_t suspend_standby_wakeup_s;
+    bool resume_init_called;
     jmp_buf *standby_exit_jmp;
 } linux_pwr_state = {0};
 
@@ -85,6 +88,34 @@ void linux_cpu_pwr_seq_off_and_goto_standby(uint16_t wakeup_after_s)
     if (linux_pwr_state.standby_exit_jmp) {
         longjmp(*linux_pwr_state.standby_exit_jmp, 1);
     }
+}
+
+void linux_cpu_pwr_seq_suspend_to_standby(uint16_t wakeup_after_s)
+{
+    linux_pwr_state.suspend_standby_called = true;
+    linux_pwr_state.suspend_standby_wakeup_s = wakeup_after_s;
+    // На железе не возвращается (Standby). В тесте возвращаемся: в wbec.c за
+    // вызовом стоит return/break, поэтому продолжение безопасно.
+}
+
+bool utest_linux_pwr_get_suspend_standby_called(void)
+{
+    return linux_pwr_state.suspend_standby_called;
+}
+
+uint16_t utest_linux_pwr_get_suspend_standby_wakeup_s(void)
+{
+    return linux_pwr_state.suspend_standby_wakeup_s;
+}
+
+void linux_cpu_pwr_seq_resume_init(void)
+{
+    linux_pwr_state.resume_init_called = true;
+}
+
+bool utest_linux_pwr_get_resume_init_called(void)
+{
+    return linux_pwr_state.resume_init_called;
 }
 
 void linux_cpu_pwr_seq_on(void)

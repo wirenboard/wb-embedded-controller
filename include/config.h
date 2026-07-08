@@ -65,6 +65,13 @@
 #define WBEC_PERIODIC_WAKEUP_FIRST_TIMEOUT_S    5
 #define WBEC_PERIODIC_WAKEUP_NEXT_TIMEOUT_S     2
 
+// suspend-to-off: период heartbeat-пробуждений (RTC WUT) во время окна сна в
+// STM32 Standby. Каждое пробуждение - это сброс EC, watchdog_init() при
+// загрузке перезапускает IWDG, поэтому окно сна ОБЯЗАНО быть короче периода
+// IWDG (10 с, см. wdt-stm32.h). Это тот же инвариант "EC спит не дольше 5 с",
+// на котором построен обычный poweroff-standby (WBEC_PERIODIC_WAKEUP_*).
+#define WBEC_SUSPEND_STANDBY_HEARTBEAT_S        5
+
 // Число попыток перезапуска PMIC при пропадании 3.3В
 // Если за указанное время 3.3В пропадёт больше, чем указанное число раз,
 // то EC выключит питание и уйдёт в спящий режим
