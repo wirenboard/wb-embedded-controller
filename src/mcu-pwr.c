@@ -5,10 +5,24 @@
 
 static enum mcu_poweron_reason mcu_poweron_reason = MCU_POWERON_REASON_UNKNOWN;
 
+// Признак того, что текущий сброс - это выход из Standby (флаг SBF был взведён
+// на момент mcu_init_poweron_reason). Нужен, чтобы отличить пробуждение из
+// Standby от холодного старта при разборе метки suspend-to-off: метку хранит
+// VBAT, она переживает и полное обесточивание, когда DRAM уже мертва.
+static bool woke_from_standby = false;
+
+// Backup-регистры TAMP для окна suspend-to-off.
+// Индекс 0 занят состоянием линии 5В (mcu_save_vcc_5v_last_state).
+// Сигнатура - произвольная 32-битная метка ("SSB2"), маловероятная как мусор.
+#define MCU_SUSPEND_MAGIC_BKP_IDX       1
+#define MCU_SUSPEND_REMAINING_BKP_IDX   2
+#define MCU_SUSPEND_MAGIC               0x53534232u
+
 // Вызывать один раз в начале main
 void mcu_init_poweron_reason(void)
 {
     if (PWR->SR1 & PWR_SR1_SBF) {
+        woke_from_standby = true;
         PWR->SCR = PWR_SCR_CSBF;
         if (PWR->SR1 & (1 << (EC_GPIO_PWRKEY_WKUP_NUM - 1 + PWR_SR1_WUF1_Pos))) {
             PWR->SCR = (1 << (EC_GPIO_PWRKEY_WKUP_NUM - 1 + PWR_SCR_CWUF1_Pos));
@@ -59,6 +73,28 @@ void mcu_goto_standby(uint16_t wakeup_after_s)
         __DSB();
         __WFI();
     };
+}
+
+void mcu_suspend_arm(uint32_t remaining_deadline_s)
+{
+    rtc_save_to_tamper_reg(MCU_SUSPEND_REMAINING_BKP_IDX, remaining_deadline_s);
+    rtc_save_to_tamper_reg(MCU_SUSPEND_MAGIC_BKP_IDX, MCU_SUSPEND_MAGIC);
+}
+
+bool mcu_suspend_take_resume(void)
+{
+    uint32_t sig = rtc_get_tamper_reg(MCU_SUSPEND_MAGIC_BKP_IDX);
+    // Потребляем метку безусловно: она должна пережить ровно один переход
+    // Standby -> wake. Если это НЕ пробуждение из Standby (POR после
+    // обесточивания, NRST, перепрошивка), метка стирается и загрузка идёт
+    // холодным путём - DRAM в этих случаях доверять уже нельзя.
+    rtc_save_to_tamper_reg(MCU_SUSPEND_MAGIC_BKP_IDX, 0);
+    return woke_from_standby && (sig == MCU_SUSPEND_MAGIC);
+}
+
+uint32_t mcu_suspend_get_remaining_s(void)
+{
+    return rtc_get_tamper_reg(MCU_SUSPEND_REMAINING_BKP_IDX);
 }
 
 enum mcu_vcc_5v_state mcu_get_vcc_5v_last_state(void)
