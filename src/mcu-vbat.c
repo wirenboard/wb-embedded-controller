@@ -10,61 +10,76 @@
 
 /**
  * Обслуживание батарейки RTC (MS621FE), подключённой к пину VBAT через
- * резистор 3 кОм. Заряд выполняется встроенной в STM32 цепочкой
+ * резистор R11 = 3 кОм. Заряд выполняется встроенной в STM32 цепочкой
  * (PWR_CR4_VBE): пин VBAT подключается к VDD через внутренний резистор
  * 1.5 кОм (PWR_CR4_VBRS=1).
  *
  * Особенность схемы: узел VBAT дополнительно подпитывается от V_EC через
  * два последовательных диода (BAV199), поэтому при поданном питании
- * напряжение узла не опускается ниже ~2.6-2.7 В (зависит от температуры).
- * Из-за этого разряженная батарейка неотличима от подсевшей по абсолютному
- * напряжению: рабочее плато MS621FE (2.5-2.75 В) лежит на уровне диодного
- * пола, а полностью заряженная батарейка релаксирует к ~3.0 В — окно
- * различимых значений меньше суммарной ошибки измерения во всём диапазоне
- * температур.
+ * напряжение узла не опускается ниже ~2.6-2.9 В (зависит от температуры
+ * и допуска V_EC). Рабочее плато разряда MS621FE (2.5-2.75 В) лежит на
+ * уровне этого диодного пола, а полностью заряженная батарейка
+ * релаксирует к ~3.0 В — окно различимых значений OCV меньше суммарной
+ * ошибки измерения во всём диапазоне температур. Порог по абсолютному
+ * напряжению принципиально не работает.
  *
- * Поэтому состояние батарейки определяется не по абсолютному напряжению,
- * а по току принятия заряда (ΔV-тест). Внутренний резистор 1.5 кОм
- * работает как шунт: при включённом VBE пин VBAT показывает
- * VDD - I*1.5к. Разница между напряжением узла под зарядом (V2) и без
- * заряда (V1) пропорциональна току заряда и не зависит ни от диодного
- * пола (под зарядом диоды заперты), ни от допуска V_EC, ни от ошибки
- * усиления канала АЦП (сокращается в разности):
- *   ΔV = V2 - V1 ≈ I_заряда * 3.08 кОм (R11 3к + 80 Ом внутр. батарейки)
+ * Поэтому состояние батарейки определяется по току принятия заряда,
+ * который измеряется через скачок напряжения узла при снятии VBE:
+ *   V2  — узел под зарядом:                V2 = OCV + I*(R11 + Rбат)
+ *   V2' — узел через 60 мс после VBE off:  V2' = OCV
+ *   (химическое состояние ячейки за 60 мс не меняется, омические
+ *   падения исчезают мгновенно)
+ *   I = (V2 - V2') / (R11 + Rбат) = (V2 - V2') / 3.08 кОм
  *
- * Ориентиры (VDD = 3.3 В, суммарное сопротивление тракта 4.58 кОм):
- *   - полная батарейка (OCV ~3.05 В):  I ≈ 55 мкА,  ΔV ≈ 170 мВ
- *   - батарейка на плато (OCV ~2.6 В): I ≈ 150 мкА, ΔV ≈ 400 мВ
- *   - батарейка отсутствует:           I = 0,       ΔV ≈ 600+ мВ
- *     (узел без батарейки поднимается от диодного пола до VDD)
+ * Оба отсчёта берутся одним каналом АЦП с интервалом 60 мс, поэтому
+ * ошибка усиления тракта (мост VBAT/3 имеет допуск ±10% по DS12991)
+ * входит только мультипликативно в малую разность, допуск V_EC и
+ * диодный пол не участвуют вовсе. Единственный номинал в пересчёте
+ * тока — внешний R11 (±1%).
+ *
+ * Ориентиры (VDD = 3.3 В, суммарное сопротивление тракта 4.58 кОм),
+ * подтверждены экспериментально на WB8.5:
+ *   - полная батарейка (OCV ~3.1 В):   I ~ 40-55 мкА
+ *   - батарейка на плато (OCV ~2.6 В): I ~ 150 мкА
+ *   - батарейка отсутствует: узел под зарядом поднимается к VDD
+ *     (тока нет, V2 > 3.15 В), а после снятия VBE проседает током
+ *     моста VBAT/3 до диодного пола: большой кажущийся "скачок"
+ *     при высоком V2
  *
  * Алгоритм:
- *   1. Раз в сутки — ΔV-тест (заряд на время теста включается на ~30 с,
- *      доза ничтожна: ~2.5 мкА*ч).
- *   2. Если ΔV показывает разряженную батарейку — полный цикл заряда:
- *      бёрсты по 55 мин с паузами по 5 мин, в конце паузы измеряется OCV.
- *      Заряд останавливается при OCV >= 3.05 В (стандартный заряд Seiko:
- *      CC/CV 3.1 В) или по суммарному времени 96 ч (страховка, стандарт
- *      Seiko: 0.1 мА / 3.1 В / 96 ч).
+ *   1. Раз в сутки — тест тока принятия заряда (заряд включается
+ *      на 60 с, доза ~2.5 мкА*ч — ничтожна).
+ *   2. I >= VBAT_CHARGE_START_UA — батарейка разряжена, полный цикл
+ *      заряда: бёрсты по 55 мин с паузами по 5 мин, в конце паузы
+ *      измеряется OCV. Стоп при OCV >= 3.05 В (стандартный заряд Seiko:
+ *      CC/CV 3.1 В) или по суммарному времени 96 ч (страховка,
+ *      стандарт Seiko: 0.1 мА / 3.1 В / 96 ч).
  *   3. Заряд разрешён только в допустимом диапазоне температур платы
- *      (рабочий диапазон MS621FE: -20..+60 °C). При выходе температуры
- *      за пределы заряд приостанавливается и продолжается после
- *      возвращения в диапазон (с гистерезисом).
+ *      (рабочий диапазон MS621FE: -20..+60 °C). При выходе за пределы
+ *      заряд приостанавливается, возобновление с гистерезисом.
  */
 
-// Период ΔV-теста
-#define VBAT_DELTAV_TEST_PERIOD_MS      (1*24*3600*1000)
-// Время на стабилизацию делителя VBAT и набор свежего значения в DMA-буфере
-#define VBAT_MEAS_STABILIZE_MS          30
+// Период теста тока принятия заряда
+#define VBAT_TEST_PERIOD_MS             (1*24*3600*1000)
 // Выдержка после включения VBE перед измерением V2:
 // ток принятия заряда стабилизируется за десятки секунд
-#define VBAT_DELTAV_SETTLE_MS           (30*1000)
+#define VBAT_TEST_ON_MS                 (60*1000)
+// Выдержка после снятия VBE перед измерением V2':
+// электрическая релаксация узла ~0.3 мс, lowpass фильтра (RC 10 мс) ~50 мс
+#define VBAT_TEST_JUMP_MS               60
 
-// ΔV выше порога — батарейка разряжена, нужен полный цикл заряда
+// Сопротивление, на котором измеряется скачок: R11 3 кОм + ~80 Ом ячейки
+#define VBAT_JUMP_R_SENSE_OHM           3080
+#define VBAT_JUMP_MV_TO_UA(mv)          ((int32_t)(mv) * 1000 / VBAT_JUMP_R_SENSE_OHM)
+
+// Ток принятия заряда выше порога — батарейка разряжена, нужен заряд
 // (соответствует OCV ниже ~2.85 В)
-#define VBAT_DELTAV_CHARGE_THRESHOLD_MV 300
-// ΔV выше порога — батарейка отсутствует или оборвана
-#define VBAT_DELTAV_NO_BATTERY_MV       550
+#define VBAT_CHARGE_START_UA            100
+// Признак отсутствия батарейки: под зарядом узел у рельсы (тока нет),
+// после снятия VBE узел проседает мостом до диодного пола -
+// большой кажущийся ток при высоком V2
+#define VBAT_NO_BATTERY_UA              160
+#define VBAT_NO_BATTERY_V2_MV           3150
 
 // Полный цикл заряда: бёрсты с паузами
 #define VBAT_CHARGE_BURST_MS            (55*60*1000)
@@ -74,6 +89,9 @@
 // Страховочное ограничение суммарного времени заряда за один цикл
 #define VBAT_CHARGE_TIMEOUT_MS          (96*3600*1000)
 
+// Время на стабилизацию делителя VBAT и набор свежего значения в DMA-буфере
+#define VBAT_MEAS_STABILIZE_MS          30
+
 // Диапазон температур платы, в котором разрешён заряд
 #define VBAT_CHARGE_TEMP_MIN_C_X100     (-1500)
 #define VBAT_CHARGE_TEMP_MAX_C_X100     (5500)
@@ -81,9 +99,9 @@
 #define VBAT_CHARGE_TEMP_HYST_C_X100    (500)
 
 enum vbat_state {
-    VBAT_STATE_IDLE,            // ждём очередного ΔV-теста
-    VBAT_STATE_TEST_V1,         // делитель VBAT включён, ждём стабилизации, меряем V1
-    VBAT_STATE_TEST_V2,         // VBE включён, ждём стабилизации тока, меряем V2
+    VBAT_STATE_IDLE,            // ждём очередного теста
+    VBAT_STATE_TEST_ON,         // VBE включён, ждём стабилизации тока, меряем V2
+    VBAT_STATE_TEST_JUMP,       // VBE выключен, через 60 мс меряем V2'
     VBAT_STATE_CHARGE_BURST,    // идёт бёрст заряда, делитель выключен
     VBAT_STATE_CHARGE_PAUSE,    // пауза заряда, в конце меряем OCV
     VBAT_STATE_TEMP_WAIT,       // заряд приостановлен из-за температуры
@@ -92,9 +110,9 @@ enum vbat_state {
 struct vbat_ctx {
     enum vbat_state state;
     systime_t state_timestamp;
-    int32_t vbat_mv;            // последнее измеренное напряжение без заряда (OCV)
-    int32_t deltav_mv;          // результат последнего ΔV-теста
-    int32_t test_v1_mv;
+    int32_t vbat_mv;            // последнее измеренное напряжение без заряда (~OCV)
+    int32_t test_v2_mv;         // узел под зарядом в последнем тесте
+    int32_t current_ua;         // ток принятия заряда в последнем тесте
     bool battery_absent;
     uint32_t charge_time_total_ms;  // суммарное время заряда в текущем цикле
 };
@@ -144,7 +162,7 @@ static inline void update_regmap(void)
 {
     struct REGMAP_VBAT_STATUS r = {};
     r.voltage_mv = vbat_ctx.vbat_mv;
-    r.delta_mv = vbat_ctx.deltav_mv;
+    r.charge_current_ua = vbat_ctx.current_ua;
     r.is_charging = is_charging() ? 1 : 0;
     r.battery_absent = vbat_ctx.battery_absent ? 1 : 0;
     r.state = vbat_ctx.state;
@@ -157,69 +175,72 @@ void mcu_vbat_init(void)
     stop_charge();
     vbat_ctx.state = VBAT_STATE_IDLE;
     vbat_ctx.battery_absent = false;
-    // Установим timestamp так, чтобы первый ΔV-тест произошёл сразу при включении:
-    // если контроллер долго лежал без питания, батарейка ещё не подтянута
-    // диодами и тест даст наиболее честный результат
-    vbat_ctx.state_timestamp = systick_get_system_time_ms() - VBAT_DELTAV_TEST_PERIOD_MS;
+    // Установим timestamp так, чтобы первый тест произошёл сразу при включении:
+    // если контроллер долго лежал без питания, батарейка разряжена сильнее всего
+    vbat_ctx.state_timestamp = systick_get_system_time_ms() - VBAT_TEST_PERIOD_MS;
 }
 
 void mcu_vbat_check_do_periodic_work(void)
 {
     switch (vbat_ctx.state) {
     case VBAT_STATE_IDLE:
-        if (systick_get_time_since_timestamp(vbat_ctx.state_timestamp) < VBAT_DELTAV_TEST_PERIOD_MS) {
+        if (systick_get_time_since_timestamp(vbat_ctx.state_timestamp) < VBAT_TEST_PERIOD_MS) {
             break;
         }
         if (!adc_get_ready()) {
             break;
         }
-        // ΔV-тест включает заряд на ~30 с, поэтому тоже гейтится температурой
+        // Тест включает заряд на 60 с, поэтому тоже гейтится температурой
         if (!is_temperature_in_charge_range()) {
             break;
         }
         adc_int_vbat_divider_enable(true);
-        set_state(VBAT_STATE_TEST_V1);
-        break;
-
-    case VBAT_STATE_TEST_V1:
-        if (systick_get_time_since_timestamp(vbat_ctx.state_timestamp) < VBAT_MEAS_STABILIZE_MS) {
-            break;
-        }
-        vbat_ctx.test_v1_mv = adc_get_ch_mv(ADC_CHANNEL_ADC_INT_VBAT);
-        vbat_ctx.vbat_mv = vbat_ctx.test_v1_mv;
         start_charge();
-        set_state(VBAT_STATE_TEST_V2);
+        set_state(VBAT_STATE_TEST_ON);
         break;
 
-    case VBAT_STATE_TEST_V2: {
-        if (systick_get_time_since_timestamp(vbat_ctx.state_timestamp) < VBAT_DELTAV_SETTLE_MS) {
+    case VBAT_STATE_TEST_ON:
+        if (systick_get_time_since_timestamp(vbat_ctx.state_timestamp) < VBAT_TEST_ON_MS) {
             break;
         }
-        int32_t v2_mv = adc_get_ch_mv(ADC_CHANNEL_ADC_INT_VBAT);
-        int32_t delta_mv = v2_mv - vbat_ctx.test_v1_mv;
-        if (delta_mv < 0) {
-            delta_mv = 0;
-        }
-        vbat_ctx.deltav_mv = delta_mv;
+        vbat_ctx.test_v2_mv = adc_get_ch_mv(ADC_CHANNEL_ADC_INT_VBAT);
+        stop_charge();
+        // Защёлкиваем lowpass, чтобы быстрее набрать значение после скачка
+        adc_reset_lowpass(ADC_CHANNEL_ADC_INT_VBAT);
+        set_state(VBAT_STATE_TEST_JUMP);
+        break;
 
-        if (delta_mv >= VBAT_DELTAV_NO_BATTERY_MV) {
-            // Ток заряда отсутствует - батарейки нет
+    case VBAT_STATE_TEST_JUMP: {
+        if (systick_get_time_since_timestamp(vbat_ctx.state_timestamp) < VBAT_TEST_JUMP_MS) {
+            break;
+        }
+        int32_t v2p_mv = adc_get_ch_mv(ADC_CHANNEL_ADC_INT_VBAT);
+        int32_t jump_mv = vbat_ctx.test_v2_mv - v2p_mv;
+        if (jump_mv < 0) {
+            jump_mv = 0;
+        }
+        int32_t current_ua = VBAT_JUMP_MV_TO_UA(jump_mv);
+        vbat_ctx.current_ua = current_ua;
+        // V2' - терминал ячейки сразу после снятия заряда, ~OCV
+        vbat_ctx.vbat_mv = v2p_mv;
+        adc_int_vbat_divider_enable(false);
+
+        if ((current_ua >= VBAT_NO_BATTERY_UA) &&
+            (vbat_ctx.test_v2_mv >= VBAT_NO_BATTERY_V2_MV))
+        {
+            // Под зарядом узел у рельсы (тока нет), после снятия заряда
+            // узел провалился до диодного пола - батарейки нет
             vbat_ctx.battery_absent = true;
-            stop_charge();
-            adc_int_vbat_divider_enable(false);
             set_state(VBAT_STATE_IDLE);
-        } else if (delta_mv >= VBAT_DELTAV_CHARGE_THRESHOLD_MV) {
-            // Большой ток принятия заряда - батарейка разряжена.
-            // VBE уже включён, продолжаем зарядку бёрстом
+        } else if (current_ua >= VBAT_CHARGE_START_UA) {
+            // Большой ток принятия заряда - батарейка разряжена
             vbat_ctx.battery_absent = false;
             vbat_ctx.charge_time_total_ms = 0;
-            adc_int_vbat_divider_enable(false);
+            start_charge();
             set_state(VBAT_STATE_CHARGE_BURST);
         } else {
             // Батарейка заряжена
             vbat_ctx.battery_absent = false;
-            stop_charge();
-            adc_int_vbat_divider_enable(false);
             set_state(VBAT_STATE_IDLE);
         }
         break;
@@ -253,7 +274,7 @@ void mcu_vbat_check_do_periodic_work(void)
         if ((ocv_mv >= VBAT_CHARGE_STOP_OCV_MV) ||
             (vbat_ctx.charge_time_total_ms >= VBAT_CHARGE_TIMEOUT_MS))
         {
-            // Заряд завершён, следующий ΔV-тест через сутки
+            // Заряд завершён, следующий тест через сутки
             set_state(VBAT_STATE_IDLE);
         } else {
             start_charge();
@@ -276,18 +297,18 @@ void mcu_vbat_check_do_periodic_work(void)
 void mcu_vbat_trigger_measurement(void)
 {
     // Принудительно прерываем текущее состояние (в т.ч. зарядку) и запускаем
-    // ΔV-тест немедленно: переходим в IDLE с уже истекшим периодом,
+    // тест немедленно: переходим в IDLE с уже истекшим периодом,
     // ближайший do_periodic_work запустит тест.
     // Если батарейка разряжена, тест сам перезапустит зарядку.
     stop_charge();
     adc_int_vbat_divider_enable(false);
-    vbat_ctx.state_timestamp = systick_get_system_time_ms() - VBAT_DELTAV_TEST_PERIOD_MS;
+    vbat_ctx.state_timestamp = systick_get_system_time_ms() - VBAT_TEST_PERIOD_MS;
     vbat_ctx.state = VBAT_STATE_IDLE;
 }
 
 void mcu_vbat_restart_charging(void)
 {
-    // Принудительно запускаем полный цикл заряда без ΔV-теста
+    // Принудительно запускаем полный цикл заряда без теста
     vbat_ctx.charge_time_total_ms = 0;
     adc_int_vbat_divider_enable(false);
     start_charge();

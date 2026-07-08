@@ -146,7 +146,7 @@
         /* 0xE1 */  uint16_t battery_absent : 1; \
         /* 0xE1 */  uint16_t state : 3; \
         /* 0xE1 */  uint16_t : 11; \
-        /* 0xE2 */  uint16_t delta_mv; \
+        /* 0xE2 */  uint16_t charge_current_ua; \
     ) \
     /*     Addr     Name            RO/RW */ \
     m(     0xF0,    TEST,           RW, \
