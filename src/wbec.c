@@ -739,6 +739,19 @@ void wbec_do_periodic_work(void)
                 } else {
                     wbec_ctx.poweron_reason = REASON_WATCHDOG;
                 }
+                // Нажатие кнопки в окне сна потреблено как ПРИЧИНА ПРОБУЖДЕНИЯ
+                // (или случилось, пока Linux был обесточен) - гасим его признаки
+                // для Linux. Блок «linux_booted -> irq_set_flag(IRQ_PWR_OFF_REQ)»
+                // выше по WORKING отработал и для этого нажатия (для EC Linux
+                // «включён» весь suspend), флаг никем не квитируется (Linux
+                // спит) и доехал бы до драйвера wbec-pwrkey после resume вторым
+                // событием: одно нажатие = пробуждение + poweroff от logind +
+                // cold boot (стенд 2026-07-08). Нажатие в обычной работе
+                // по-прежнему доставляется как раньше: этот сброс происходит
+                // только на выходе из окна suspend-to-off. То же скрытое
+                // поведение есть и на базовой a655128 (busy-poll) - см. коммит.
+                wbec_ctx.pwrkey_pressed = false;
+                irq_clear_flags(1u << IRQ_PWR_OFF_REQ);
                 // Возвращаем выходы под штатное управление и снимаем маску
                 // SoC-CS EXTI; резервный WUT-дедлайн больше не нужен.
                 temperature_control_suspend(false);

@@ -741,17 +741,6 @@ static void test_suspend_off_second_cycle_sleeps_with_watchdog(void)
         "cycle 2 must still wake on a fresh alarm");
 }
 
-// Причина включения из regmap (ABI wbec.c LINUX_POWERON_REASON: значение 2 =
-// REASON_RTC_ALARM, "RTC alarm").
-#define UTEST_REASON_RTC_ALARM  2
-static uint16_t get_poweron_reason(void)
-{
-    struct REGMAP_POWERON_REASON pr;
-    TEST_ASSERT_TRUE(utest_regmap_get_region_data(REGMAP_REGION_POWERON_REASON,
-                                                  &pr, sizeof(pr)));
-    return pr.poweron_reason;
-}
-
 // Регрессия (стенд 2026-07-08, подозрение «залипший ALRAF»): два окна подряд,
 // первое завершается СРАБОТАВШИМ будильником. Второе окно НЕ должно мгновенно
 // классифицировать будильник на входе — защёлки прошлого цикла обязаны быть
@@ -781,7 +770,7 @@ static void test_suspend_off_second_window_no_stale_alarm_at_entry(void)
 
     TEST_ASSERT_TRUE_MESSAGE(sim.soc_boot_count > boots_after_c1,
         "Window 2 must wake on the fresh alarm");
-    TEST_ASSERT_EQUAL_UINT16_MESSAGE(UTEST_REASON_RTC_ALARM, get_poweron_reason(),
+    TEST_ASSERT_EQUAL_UINT16_MESSAGE(UTEST_REASON_RTC_ALARM, get_poweron_reason_from_regmap(),
         "Fresh-alarm wake must report REASON_RTC_ALARM");
 }
 
@@ -816,7 +805,7 @@ static void test_suspend_off_alarm_fired_before_sleep_start_wakes_at_entry(void)
 
     TEST_ASSERT_TRUE_MESSAGE(sim.soc_boot_count > boots_before,
         "Entry with an already-fired alarm must wake the board immediately");
-    TEST_ASSERT_EQUAL_UINT16_MESSAGE(UTEST_REASON_RTC_ALARM, get_poweron_reason(),
+    TEST_ASSERT_EQUAL_UINT16_MESSAGE(UTEST_REASON_RTC_ALARM, get_poweron_reason_from_regmap(),
         "Pre-sleep-fired alarm must be reported as REASON_RTC_ALARM");
 }
 
@@ -925,6 +914,59 @@ static void test_stop_wake_by_button_edge_then_debounced_press(void)
         "button wake must report REASON_POWER_KEY");
 }
 
+// Регрессия (стенд 2026-07-08, кнопочный тест): одно нажатие = пробуждение +
+// poweroff + cold boot. Пока кнопку держат в окне сна, обычный обработчик
+// WORKING (linux_booted -> irq_set_flag(IRQ_PWR_OFF_REQ)) выставляет Linux'у
+// «запрос выключения»; Linux спит и флаг не квитирует, и после resume драйвер
+// wbec-pwrkey доставлял то же нажатие второй раз - logind выключал только что
+// разбуженную плату. Нажатие, потреблённое как причина пробуждения, НЕ должно
+// оставлять Linux'у отложенных событий кнопки.
+static void test_stop_button_wake_press_not_redelivered_to_linux(void)
+{
+    utest_pwrkey_enable_debounce_model(true);
+    sim_enter_off_mode_sleep(60);
+    uint32_t boots_before = sim.soc_boot_count;
+
+    // Фронт кнопки будит Stop; кнопка физически удерживается.
+    utest_mcu_stop_set_button_wake(true);
+    utest_set_pwrkey_pressed(true);
+    sim_run_ms(PWRKEY_DEBOUNCE_MS + 50);
+
+    // Предусловие бага реально воспроизведено: пока кнопка удерживалась,
+    // обычный обработчик успел выставить запрос выключения спящему Linux.
+    TEST_ASSERT_TRUE_MESSAGE(utest_irq_is_flag_set(IRQ_PWR_OFF_REQ),
+        "precondition: the running-state handler must latch IRQ_PWR_OFF_REQ while held");
+
+    // Отпускание -> короткое нажатие -> пробуждение.
+    utest_set_pwrkey_pressed(false);
+    sim.pmic_crashed = false;
+    sim_run_ms(PWRKEY_DEBOUNCE_MS + 3000);
+
+    TEST_ASSERT_TRUE_MESSAGE(sim.soc_boot_count > boots_before,
+        "the debounced short press must wake the board");
+    TEST_ASSERT_FALSE_MESSAGE(utest_irq_is_flag_set(IRQ_PWR_OFF_REQ),
+        "the wake press must NOT stay pending for Linux as a power-key event");
+}
+
+// Контроль от перекоррекции: нажатие в ОБЫЧНОЙ работе (Linux загружен, suspend
+// не объявлен) по-прежнему доставляется в Linux как запрос выключения.
+static void test_running_press_still_delivers_pwr_off_req(void)
+{
+    utest_pwrkey_enable_debounce_model(true);
+    sim.soc_feeds = true;
+    sim_boot_to_working();
+    sim_run_ms(WBEC_LINUX_BOOT_TIME_MS + 1000);     // linux_booted = true
+
+    utest_set_pwrkey_pressed(true);
+    sim_run_ms(PWRKEY_DEBOUNCE_MS + 100);
+
+    TEST_ASSERT_TRUE_MESSAGE(utest_irq_is_flag_set(IRQ_PWR_OFF_REQ),
+        "a press during normal running must still be delivered to Linux");
+
+    utest_set_pwrkey_pressed(false);
+    sim_run_ms(PWRKEY_DEBOUNCE_MS + 100);
+}
+
 // Отрицательный случай: касание, которое так и не прошло антидребезг, после
 // окна ожидания должно вернуть EC в Stop (а не разбудить плату).
 static void test_stop_button_brush_reenters_stop(void)
@@ -1026,6 +1068,8 @@ int main(void)
     // Stop 1: окно сна suspend-to-off
     RUN_TEST(test_stop_window_arms_safe_and_wakes_on_fresh_alarm);
     RUN_TEST(test_stop_wake_by_button_edge_then_debounced_press);
+    RUN_TEST(test_stop_button_wake_press_not_redelivered_to_linux);
+    RUN_TEST(test_running_press_still_delivers_pwr_off_req);
     RUN_TEST(test_stop_button_brush_reenters_stop);
     RUN_TEST(test_stop_deadline_fires_via_wut_ticks);
     RUN_TEST(test_stop_frozen_wut_never_fires_on_systick_alone);
