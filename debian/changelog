@@ -1,3 +1,36 @@
+wb-ec-firmware (2.4.0) stable; urgency=medium
+
+  * WB85: warm SoC reset via short PWROK/RESET pulse — PMIC rails and DRAM
+    stay powered, so pstore/ramoops panic logs survive the reboot
+  * WB85: two-stage watchdog — first timeout does a warm reset
+    (new poweron reason 8 "Watchdog (warm reset)"); if Linux does not feed
+    the watchdog before the next timeout, a hard power cycle follows
+    (reason 5 "Watchdog"). Consumers detecting watchdog resets must treat
+    both 5 and 8 as watchdog
+  * WB85: reset_pmic request (POWER_CTRL bit 2) now performs the short warm
+    pulse instead of the 2 s PMIC RESET hold
+  * WB74: behavior unchanged (no warm reset support)
+  * Fix state-machine wedge: a watchdog timeout racing a 3.3V loss or a
+    reset_pmic request in the same main loop pass started a second power
+    sequence on top of the warm reset (or PMIC reset) already in flight,
+    aborting the pulse and leaving the PMIC RESET (PWROK) line latched -
+    the SoC stayed held in reset forever (5V on, no SPL/U-Boot output,
+    watchdog resets no longer able to recover the board). Now only one
+    power action is taken per pass, hard_reset/hard_off/power-on always
+    release the reset line, and a completed warm pulse guarantees 5V is on
+  * Watchdog escalation restarts after each hard power cycle: with no
+    feeds the resets alternate warm/hard instead of latching to hard-only,
+    so the first hang of every fresh boot still gets a DRAM-preserving
+    warm reset (ramoops stays readable)
+  * Poweroff request racing a watchdog timeout no longer resurrects the
+    board: the power-off wins, the deferred timeout is absorbed
+  * Add wbec + linux-power-control + wdt integration test suite with a
+    board model (PMIC/SoC/5V rail simulation): reproduces the wedge,
+    sweeps PMIC failure timing across all reset sequence phases and
+    asserts the watchdog always recovers the SoC in bounded time
+
+ -- Wiren Board Robot <info@wirenboard.com>  Fri, 04 Jul 2026 14:00:00 +0300
+
 wb-ec-firmware (2.3.0) stable; urgency=medium
 
   * Port for Debian 13

@@ -31,9 +31,14 @@ enum pwr_state {
 
     PS_RESET_5V_WAIT,                   // Нужно при перезаргрузке - выключаем 5В и ждём разрядку линий
     PS_RESET_PMIC_WAIT,                 // Сброс PMIC через PMIC_RESET_PWROK. Ждём, пока пропадёт 3.3В
+    PS_WARM_RESET_PULSE,                // Тёплый сброс SoC: короткий импульс на PMIC_RESET_PWROK
 };
 
 struct pwr_ctx {
+    // Пробуждение из suspend-to-off: после появления 3.3В нужен
+    // импульс на PWROK - PMIC при выходе из сна восстанавливает
+    // питание, но не выдаёт сброс, и SoC сам не стартует
+    bool wake_pending;
     enum pwr_state state;
     systime_t timestamp;
     unsigned attempt;
@@ -136,6 +141,28 @@ void linux_cpu_pwr_seq_on(void)
         return;
     }
 
+    // Линия PMIC RESET (PWROK) не должна достаться последовательности
+    // включения взведённой (например, от прерванного тёплого сброса) -
+    // иначе SoC останется заклиненным в сбросе
+    pmic_reset_gpio_off();
+    linux_cpu_pwr_5v_gpio_on();
+    new_state(PS_ON_STEP1_WAIT_3V3);
+}
+
+/**
+ * @brief Пробуждение PMIC из сна (AXP sleep, режим suspend-to-off).
+ * 5В уже включено, 3.3В выключил сам PMIC по команде из BL31.
+ * Перезапускаем последовательность включения с шага ожидания 3.3В:
+ * если оно не появляется само, штатная эскалация "нажимает" PWRON -
+ * для AXP853T в состоянии sleep это источник пробуждения (POK
+ * negedge), по которому PMIC восстанавливает записанную конфигурацию.
+ * Без сброса состояния: PS_ON_COMPLETE блокирует обычный
+ * linux_cpu_pwr_seq_on().
+ */
+void linux_cpu_pwr_seq_wakeup(void)
+{
+    pwr_ctx.wake_pending = true;
+    pmic_reset_gpio_off();
     linux_cpu_pwr_5v_gpio_on();
     new_state(PS_ON_STEP1_WAIT_3V3);
 }
@@ -148,6 +175,9 @@ void linux_cpu_pwr_seq_hard_off(void)
 {
     linux_cpu_pwr_5v_gpio_off();
     pmic_pwron_gpio_off();
+    // Отпускаем линию сброса: никакая последовательность не должна
+    // оставлять её взведённой после своего завершения или прерывания
+    pmic_reset_gpio_off();
     new_state(PS_OFF_COMPLETE);
 }
 
@@ -159,6 +189,10 @@ void linux_cpu_pwr_seq_hard_reset()
 {
     linux_cpu_pwr_5v_gpio_off();
     pmic_pwron_gpio_off();
+    // Отпускаем линию сброса: если жёсткий сброс прервал тёплый сброс
+    // или сброс PMIC, линия не должна остаться взведённой - иначе после
+    // подачи 5В SoC навсегда останется в сбросе
+    pmic_reset_gpio_off();
     new_state(PS_RESET_5V_WAIT);
 }
 
@@ -171,6 +205,22 @@ void linux_cpu_pwr_seq_reset_pmic(void)
 {
     pmic_reset_gpio_on();
     new_state(PS_RESET_PMIC_WAIT);
+}
+
+/**
+ * @brief Тёплый сброс SoC коротким импульсом на линии PMIC_RESET_PWROK.
+ * Линия одновременно заведена на PWROK PMIC и RESET процессора T507.
+ * Если в PMIC отключен рестарт по PWROK (AXP REG32[4]=0, значение по
+ * умолчанию), PMIC игнорирует импульс и все его выходы, включая питание
+ * DRAM, остаются включёнными — сбрасывается только SoC, содержимое DRAM
+ * сохраняется (это позволяет ramoops пережить сброс).
+ * Если же PMIC настроен на рестарт по PWROK, пропадёт 3.3В и штатная
+ * логика включения (PS_ON_STEP1_WAIT_3V3) выполнит полный цикл включения.
+ */
+void linux_cpu_pwr_seq_warm_reset(void)
+{
+    pmic_reset_gpio_on();
+    new_state(PS_WARM_RESET_PULSE);
 }
 
 /**
@@ -239,6 +289,14 @@ void linux_cpu_pwr_seq_do_periodic_work(void)
     // Первый шаг включения питания: проверка, что 3.3В появилось, после того как подали 5В
     case PS_ON_STEP1_WAIT_3V3:
         if (vmon_get_ch_status(VMON_CHANNEL_V33)) {
+            if (pwr_ctx.wake_pending) {
+                // Питание восстановлено после сна PMIC: SoC ещё в
+                // сбросе, толкаем его импульсом на PWROK
+                pwr_ctx.wake_pending = false;
+                pmic_reset_gpio_on();
+                new_state(PS_WARM_RESET_PULSE);
+                break;
+            }
             // Если 3.3В появилось, то считаем что питание включено
             new_state(PS_ON_COMPLETE);
         }
@@ -257,8 +315,13 @@ void linux_cpu_pwr_seq_do_periodic_work(void)
     // PMIC должен включаться сам после подачи 5В
     case PS_ON_STEP2_PMIC_PWRON:
         if (vmon_get_ch_status(VMON_CHANNEL_V33)) {
-            // Если 3.3В
             pmic_pwron_gpio_off();
+            if (pwr_ctx.wake_pending) {
+                pwr_ctx.wake_pending = false;
+                pmic_reset_gpio_on();
+                new_state(PS_WARM_RESET_PULSE);
+                break;
+            }
             new_state(PS_ON_COMPLETE);
         }
         if (in_state_time_ms() > 1500) {
@@ -289,6 +352,21 @@ void linux_cpu_pwr_seq_do_periodic_work(void)
     // Сброс питания 5В
     case PS_RESET_5V_WAIT:
         if (in_state_time_ms() > WBEC_POWER_RESET_TIME_MS) {
+            linux_cpu_pwr_5v_gpio_on();
+            new_state(PS_ON_STEP1_WAIT_3V3);
+        }
+        break;
+
+    // Тёплый сброс SoC: отпускаем линию RESET после короткого импульса.
+    // Если PMIC проигнорировал импульс, 3.3В на месте и включение
+    // завершится сразу; если PMIC перезапустился - штатное включение
+    case PS_WARM_RESET_PULSE:
+        if (in_state_time_ms() > WBEC_WARM_RESET_PULSE_MS) {
+            pmic_reset_gpio_off();
+            pmic_pwron_gpio_off();
+            // Тёплый сброс всегда заканчивается последовательностью включения.
+            // Гарантируем ей 5В: если тёплый сброс был запрошен, когда 5В
+            // оказалось снятым, ожидание 3.3В без 5В бессмысленно
             linux_cpu_pwr_5v_gpio_on();
             new_state(PS_ON_STEP1_WAIT_3V3);
         }

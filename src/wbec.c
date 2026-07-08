@@ -35,6 +35,8 @@
     m(REASON_WATCHDOG,        "Watchdog"                     ) \
     m(REASON_PMIC_OFF,        "PMIC is unexpectedly off"     ) \
     m(REASON_UNKNOWN,         "Unknown"                      ) \
+    /* Новые значения добавлять только в конец: значения - часть ABI regmap */ \
+    m(REASON_WATCHDOG_WARM,   "Watchdog (warm reset)"        ) \
 
 #define __LINUX_POWERON_REASON_NAME(name, string)           name,
 #define __LINUX_POWERON_REASON_STRING(name, string)         string,
@@ -77,6 +79,37 @@ struct wbec_ctx {
     unsigned power_loss_cnt;
     systime_t power_loss_timestamp;
     enum linux_poweron_reason poweron_reason;
+    // Была ли уже попытка тёплого сброса по watchdog.
+    // Сбрасывается, когда Linux сбрасывает watchdog (система жива).
+    // Если после тёплого сброса Linux так и не начал сбрасывать watchdog,
+    // следующий таймаут приведёт к жёсткому сбросу по питанию
+    bool wd_warm_reset_attempted;
+    // Режим suspend: Linux объявил окно сна через SUSPEND_CTRL.
+    // В этом режиме потеря 3.3В ожидаема (BL31 гасит DCDC1), а
+    // watchdog-эскалация заменена на дедлайн запрошенной длительности.
+    bool suspend_mode;
+    systime_t suspend_entry_timestamp;
+    uint32_t suspend_timeout_ms;
+    // Взводится, когда во время suspend реально пропало 3.3В.
+    // До этого момента кормления watchdog НЕ завершают режим:
+    // между записью в SUSPEND_CTRL и заморозкой системы демон
+    // watchdog продолжает кормить ещё ~1-2 секунды.
+    bool suspend_started;
+    // Режим suspend-to-off: BL31 усыпляет PMIC целиком (остаётся
+    // только питание DRAM). Пробуждение делает EC: по будильнику
+    // (или дедлайну/кнопке) перезапускает PMIC импульсом PWRON.
+    bool suspend_off_mode;
+    // Взводится при пробуждении из suspend-to-off, чтобы подавить
+    // звуковой сигнал включения на этом входе в WBEC_STATE_WORKING.
+    // ПОЧЕМУ это критично: resume из suspend-to-off — это ре-инициализация
+    // DRAM поверх самообновления (содержимое памяти сохраняется), процесс
+    // очень чувствителен к возмущениям по питанию/таймингу. Пищалка,
+    // сработавшая в этот момент, срывает resume, и плата уходит в
+    // холодную перезагрузку вместо пробуждения (проверено на железе
+    // 2026-07-07: включённый бип на resume → cold-boot; выключенный → ок).
+    // Обычное включение (холодный старт/перезагрузка) инициализирует DRAM
+    // с нуля и к сигналу не чувствительно — там бип нужен и безопасен.
+    bool suspend_resume_no_beep;
 };
 
 static struct wbec_ctx wbec_ctx;
@@ -98,7 +131,14 @@ static void new_state(enum wbec_state s)
 
     case WBEC_STATE_WORKING:
         system_led_blink(500, 1000);
-        buzzer_beep(EC_BUZZER_BEEP_FREQ, EC_BUZZER_BEEP_POWERON_MS);
+        // Сигнал включения — на РЕАЛЬНОМ включении (холодный старт/перезагрузка),
+        // но НЕ на resume из suspend-to-off: там пищалка возмущает ре-инициализацию
+        // DRAM поверх самообновления и плата уходит в cold-boot вместо пробуждения
+        // (проверено на железе). Флаг взводится на пути пробуждения suspend-to-off.
+        if (!wbec_ctx.suspend_resume_no_beep) {
+            buzzer_beep(EC_BUZZER_BEEP_FREQ, EC_BUZZER_BEEP_POWERON_MS);
+        }
+        wbec_ctx.suspend_resume_no_beep = false;
         linux_poweron_handler();
         break;
     }
@@ -486,6 +526,47 @@ void wbec_do_periodic_work(void)
             }
         }
 
+        // Запрос режима suspend из Linux: запись таймаута (секунды) в
+        // SUSPEND_CTRL включает режим, запись 0 - выключает.
+        {
+            struct REGMAP_SUSPEND_CTRL s;
+            if (regmap_get_data_if_region_changed(REGMAP_REGION_SUSPEND_CTRL, &s, sizeof(s))) {
+                if (s.timeout_s > 0) {
+                    wbec_ctx.suspend_mode = true;
+                    wbec_ctx.suspend_started = false;
+                    wbec_ctx.suspend_off_mode = s.off_mode;
+                    wbec_ctx.suspend_entry_timestamp = systick_get_system_time_ms();
+                    // Запас 10 с поверх запрошенной длительности
+                    wbec_ctx.suspend_timeout_ms = (uint32_t)s.timeout_s * 1000 + 10000;
+                    if (wbec_ctx.suspend_off_mode) {
+                        // Сбрасываем возможное залипшее событие будильника перед
+                        // входом в off-mode. Флаг ALRAF в RTC (домен резервного
+                        // питания) и программная защёлка alarm_fired_latch
+                        // переживают сброс/пропадание питания и не сбрасываются
+                        // нигде, кроме off-mode. Будильник, разбудивший плату в
+                        // прошлый раз, оставляет их взведёнными; без сброса первый
+                        // же опрос off-mode прочитает это как свежее срабатывание и
+                        // разбудит плату немедленно (~220 мс) вместо запрошенного
+                        // времени. Сбрасываем обе защёлки, чтобы разбудил только
+                        // свежий будильник (или дедлайн/кнопка).
+                        rtc_alarm_take_fired();
+                        rtc_clear_alarm_flag();
+                        console_print_w_prefix("Suspend mode: on (power-off, wake by alarm)\r\n");
+                    } else {
+                        console_print_w_prefix("Suspend mode: on\r\n");
+                    }
+                } else if (wbec_ctx.suspend_mode) {
+                    wbec_ctx.suspend_mode = false;
+                    // Разоружаем «сон начался» при выходе из режима, чтобы на
+                    // следующем цикле кормление watchdog не завершило suspend
+                    // немедленно (флаг живёт в ЕС между циклами - тёплый сброс
+                    // и пробуждение по будильнику не перезапускают ЕС).
+                    wbec_ctx.suspend_started = false;
+                    console_print_w_prefix("Suspend mode: off (request)\r\n");
+                }
+            }
+        }
+
         if (linux_powerctrl_req == LINUX_POWERCTRL_OFF) {
             // Если прилетел запрос из линукса на выключение
             // Это была выполнена команда `poweroff` или `rtcwake -m off`
@@ -546,13 +627,176 @@ void wbec_do_periodic_work(void)
             linux_cpu_pwr_seq_hard_reset();
             new_state(WBEC_STATE_POWER_ON_SEQUENCE_WAIT);
         } else if (linux_powerctrl_req == LINUX_POWERCTRL_PMIC_RESET) {
+#if defined(WBEC_HAS_WARM_RESET)
+            // Тёплый сброс SoC по запросу из Linux: короткий импульс на линии
+            // PWROK/RESET. Питание PMIC (и DRAM) не отключается, поэтому
+            // сохранённые в DRAM логи (ramoops) переживают перезагрузку
+            wbec_ctx.poweron_reason = REASON_REBOOT;
+            console_print("\r\n\n");
+            console_print_w_prefix("Warm reset request, pulse PMIC RESET (PWROK) line now\r\n\n");
+            linux_cpu_pwr_seq_warm_reset();
+            new_state(WBEC_STATE_POWER_ON_SEQUENCE_WAIT);
+#else
+            // Историческое поведение: сброс PMIC через линию RESET (до 2 с)
             wbec_ctx.poweron_reason = REASON_REBOOT;
             console_print("\r\n\n");
             console_print_w_prefix("PMIC reset request, activate PMIC RESET line now\r\n\n");
             linux_cpu_pwr_seq_reset_pmic();
             new_state(WBEC_STATE_POWER_ON_SEQUENCE_WAIT);
+#endif
         }
 
+        // За один проход разрешено только одно действие с питанием.
+        // Если запрос из Linux уже начал смену состояния, проверки ниже
+        // (watchdog, контроль 3.3В) выполнять нельзя: их обработчики
+        // запускают свои последовательности поверх уже начатой и могут
+        // прервать её (например, оставить линию PMIC RESET (PWROK)
+        // взведённой навсегда - SoC заклинит в сбросе).
+        // Взведённые флаги watchdog не теряются: они будут обработаны
+        // после завершения начатой последовательности
+        if (wbec_ctx.state != WBEC_STATE_WORKING) {
+            break;
+        }
+
+        // Suspend-to-off: питание SoC выключено самим PMIC (кроме
+        // DRAM), Linux заморожен в самообновляющейся памяти. Будим
+        // PMIC по будильнику, дедлайну или кнопке: перезапуск
+        // последовательности включения "нажимает" PWRON, PMIC
+        // восстанавливает записанную конфигурацию питания.
+        if (wbec_ctx.suspend_mode && wbec_ctx.suspend_off_mode &&
+            wbec_ctx.suspend_started) {
+            bool alarm = rtc_alarm_take_fired();
+            bool deadline = systick_get_time_since_timestamp(
+                wbec_ctx.suspend_entry_timestamp) > wbec_ctx.suspend_timeout_ms;
+            bool button = pwrkey_handle_short_press();
+
+            if (alarm || deadline || button) {
+                wbec_ctx.suspend_mode = false;
+                wbec_ctx.suspend_off_mode = false;
+                // Разоружаем «сон начался»: пробуждение по будильнику - это
+                // resume того же ядра, ЕС не перезапускается, поэтому без
+                // сброса флаг остаётся взведён и на следующем цикле первое
+                // же кормление watchdog завершит suspend немедленно.
+                wbec_ctx.suspend_started = false;
+                // Это resume того же ядра (DRAM в самообновлении): бип на
+                // входе в WORKING сорвёт ре-инициализацию DRAM и уронит плату
+                // в cold-boot. Подавляем сигнал включения именно для этого
+                // пробуждения (см. suspend_resume_no_beep в new_state()).
+                wbec_ctx.suspend_resume_no_beep = true;
+                if (alarm) {
+                    wbec_ctx.poweron_reason = REASON_RTC_ALARM;
+                } else if (button) {
+                    wbec_ctx.poweron_reason = REASON_POWER_KEY;
+                } else {
+                    wbec_ctx.poweron_reason = REASON_WATCHDOG;
+                }
+                console_print("\r\n\n");
+                console_print_w_prefix("Suspend-to-off: wake up, restart PMIC via PWRON\r\n");
+                linux_cpu_pwr_seq_wakeup();
+                new_state(WBEC_STATE_POWER_ON_SEQUENCE_WAIT);
+                break;
+            }
+            // Кормления watchdog в этом режиме невозможны (Linux
+            // выключен) - потребляем возможный таймаут вхолостую
+            (void)wdt_handle_timed_out();
+            break;
+        }
+
+#if defined(WBEC_HAS_WARM_RESET)
+        // Если Linux сбрасывает watchdog - система жива,
+        // разрешаем следующую попытку тёплого сброса.
+        // Это же событие завершает режим suspend: после пробуждения
+        // Linux первым делом снова начинает кормить watchdog.
+        if (wdt_handle_fed()) {
+            wbec_ctx.wd_warm_reset_attempted = false;
+            // Кормление завершает режим suspend только после того, как
+            // сон реально начался (3.3В пропадало): до заморозки системы
+            // демон watchdog продолжает кормить.
+            if (wbec_ctx.suspend_mode && wbec_ctx.suspend_started) {
+                wbec_ctx.suspend_mode = false;
+                wbec_ctx.suspend_started = false;
+                console_print_w_prefix("Suspend mode: off (watchdog fed)\r\n");
+            }
+        }
+
+        if (wbec_ctx.suspend_mode) {
+            // Во время объявленного сна watchdog-таймауты игнорируются
+            // (Linux заморожен и не кормит намеренно), но запрошенная
+            // длительность сна + запас служит дедлайном: если система
+            // не проснулась - обычное восстановление тёплым сбросом.
+            (void)wdt_handle_timed_out();
+            if (systick_get_time_since_timestamp(wbec_ctx.suspend_entry_timestamp) >
+                wbec_ctx.suspend_timeout_ms) {
+                wbec_ctx.suspend_mode = false;
+                if (!wbec_ctx.suspend_started) {
+                    // Сон так и не начался (suspend отменён или не
+                    // дошёл до отключения питания) - система живёт,
+                    // просто тихо выходим из режима
+                    console_print_w_prefix("Suspend mode: off (never started)\r\n");
+                    break;
+                }
+                wbec_ctx.suspend_started = false;
+                wbec_ctx.wd_warm_reset_attempted = true;
+                wbec_ctx.poweron_reason = REASON_WATCHDOG_WARM;
+                console_print("\r\n\n");
+                console_print_w_prefix("Suspend deadline passed, system did not wake up - warm reset.\r\n");
+                linux_cpu_pwr_seq_warm_reset();
+                new_state(WBEC_STATE_POWER_ON_SEQUENCE_WAIT);
+                break;
+            }
+        } else
+        // Если сработал WDT - сначала пробуем тёплый сброс (DRAM сохраняется,
+        // логи ramoops можно будет прочитать после перезагрузки).
+        // Если после тёплого сброса система не ожила (Linux не сбросил
+        // watchdog до следующего таймаута) - жёсткий сброс по питанию
+        if (wdt_handle_timed_out()) {
+            console_print("\r\n\n");
+            if (!wbec_ctx.wd_warm_reset_attempted) {
+                wbec_ctx.wd_warm_reset_attempted = true;
+                wbec_ctx.poweron_reason = REASON_WATCHDOG_WARM;
+                console_print_w_prefix("Watchdog is timed out, try warm reset first (DRAM is preserved).\r\n");
+                linux_cpu_pwr_seq_warm_reset();
+            } else {
+                wbec_ctx.poweron_reason = REASON_WATCHDOG;
+                console_print_w_prefix("Watchdog is timed out again, reset power.\r\n");
+                linux_cpu_pwr_seq_hard_reset();
+                // Жёсткий сброс - последняя ступень эскалации. После него
+                // начинается новый цикл загрузки, и первое зависание в нём
+                // снова заслуживает тёплого сброса (с сохранением DRAM/ramoops),
+                // поэтому эскалация начинается заново
+                wbec_ctx.wd_warm_reset_attempted = false;
+            }
+            new_state(WBEC_STATE_POWER_ON_SEQUENCE_WAIT);
+        }
+#else
+        // Завершение режима suspend по первому кормлению watchdog -
+        // только после реального начала сна (3.3В пропадало)
+        if (wdt_handle_fed() && wbec_ctx.suspend_mode && wbec_ctx.suspend_started) {
+            wbec_ctx.suspend_mode = false;
+            wbec_ctx.suspend_started = false;
+            console_print_w_prefix("Suspend mode: off (watchdog fed)\r\n");
+        }
+
+        if (wbec_ctx.suspend_mode) {
+            // Во время объявленного сна watchdog-таймауты игнорируются;
+            // дедлайн - запрошенная длительность сна + запас.
+            (void)wdt_handle_timed_out();
+            if (systick_get_time_since_timestamp(wbec_ctx.suspend_entry_timestamp) >
+                wbec_ctx.suspend_timeout_ms) {
+                wbec_ctx.suspend_mode = false;
+                if (!wbec_ctx.suspend_started) {
+                    console_print_w_prefix("Suspend mode: off (never started)\r\n");
+                    break;
+                }
+                wbec_ctx.suspend_started = false;
+                wbec_ctx.poweron_reason = REASON_WATCHDOG;
+                console_print("\r\n\n");
+                console_print_w_prefix("Suspend deadline passed, system did not wake up - reset power.\r\n");
+                linux_cpu_pwr_seq_hard_reset();
+                new_state(WBEC_STATE_POWER_ON_SEQUENCE_WAIT);
+                break;
+            }
+        } else
         // Если сработал WDT - перезагружаемся по питанию
         if (wdt_handle_timed_out()) {
             wbec_ctx.poweron_reason = REASON_WATCHDOG;
@@ -561,13 +805,27 @@ void wbec_do_periodic_work(void)
             linux_cpu_pwr_seq_hard_reset();
             new_state(WBEC_STATE_POWER_ON_SEQUENCE_WAIT);
         }
+#endif
+
+        // Сработал watchdog - сброс уже начат. Контроль 3.3В в этом проходе
+        // пропускаем, чтобы не запустить вторую последовательность поверх
+        // начатой (см. комментарий выше)
+        if (wbec_ctx.state != WBEC_STATE_WORKING) {
+            break;
+        }
 
         // Если пропало 3.3В - пробуем перезапустить питание, но не более N раз за M минут
         // Если питание пропадает слишком часто - выключаемся
         // Это происходит, например, при питании через плохой USB кабель.
         // В результате PMIC выключается, но питание на линии 5В остаётся.
         // Ограничение по числу попыток нужно, чтобы избежать циклического перезапуска.
-        if (!vmon_get_ch_status(VMON_CHANNEL_V33)) {
+        // В режиме suspend потеря 3.3В ожидаема: BL31 отключает DCDC1
+        // на время сна - проверку пропускаем, но запоминаем факт
+        // пропадания: с этого момента сон действительно начался.
+        if (wbec_ctx.suspend_mode && !vmon_get_ch_status(VMON_CHANNEL_V33)) {
+            wbec_ctx.suspend_started = true;
+        }
+        if (!wbec_ctx.suspend_mode && !vmon_get_ch_status(VMON_CHANNEL_V33)) {
             console_print_w_prefix("3.3V is lost\r\n");
 
             if (!vmon_get_ch_status(VMON_CHANNEL_V50)) {
@@ -625,5 +883,12 @@ void wbec_do_periodic_work(void)
     void utest_wbec_reset_state(void)
     {
         memset(&wbec_ctx, 0, sizeof(wbec_ctx));
+    }
+
+    // «Сон начался» / разрешение выхода из suspend по кормлению watchdog.
+    // Должен возвращаться в исходное (false) состояние после выхода из режима.
+    bool utest_wbec_get_suspend_started(void)
+    {
+        return wbec_ctx.suspend_started;
     }
 #endif

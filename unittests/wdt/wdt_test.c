@@ -15,8 +15,9 @@ void setUp(void)
     utest_systick_set_time_ms(1000);
     utest_regmap_reset();
 
-    // Сброс флага timed_out
+    // Сброс флагов timed_out и fed
     wdt_handle_timed_out();
+    wdt_handle_fed();
 }
 
 void tearDown(void)
@@ -388,6 +389,50 @@ static void test_wdt_regmap_reset_command(void)
                              "Watchdog should timeout after period from reset");
 }
 
+// Сценарий: Сброс watchdog через regmap выставляет признак fed (система жива)
+// Ожидается: wdt_handle_fed() возвращает true один раз после сброса через regmap
+// и false после чтения; сброс из прошивки (wdt_start_reset) признак не выставляет
+static void test_wdt_regmap_reset_sets_fed_flag(void)
+{
+    LOG_INFO("Testing fed flag after watchdog reset via regmap");
+
+    wdt_set_timeout(5);
+    wdt_start_reset();
+    wdt_do_periodic_work();
+
+    // Сброс из прошивки не считается "кормлением" из Linux
+    TEST_ASSERT_FALSE_MESSAGE(wdt_handle_fed(),
+                              "Fed flag must not be set by firmware-initiated reset");
+
+    // Отправляем команду сброса через regmap
+    struct REGMAP_WDT w = {
+        .timeout = 5,
+        .reset = 1
+    };
+    TEST_ASSERT_TRUE_MESSAGE(regmap_set_region_data(REGMAP_REGION_WDT, &w, sizeof(w)),
+                             "Failed to set WDT regmap data");
+    utest_regmap_mark_region_changed(REGMAP_REGION_WDT);
+    wdt_do_periodic_work();
+
+    TEST_ASSERT_TRUE_MESSAGE(wdt_handle_fed(),
+                             "Fed flag must be set after reset via regmap");
+    TEST_ASSERT_FALSE_MESSAGE(wdt_handle_fed(),
+                              "Fed flag must be cleared after reading");
+
+    // Запись в regmap только нового таймаута (без флага reset) перезапускает
+    // таймер, но НЕ считается "кормлением" из Linux: эскалация тёплого
+    // сброса не должна сбрасываться такой записью
+    w.timeout = 7;
+    w.reset = 0;
+    TEST_ASSERT_TRUE_MESSAGE(regmap_set_region_data(REGMAP_REGION_WDT, &w, sizeof(w)),
+                             "Failed to set WDT regmap data");
+    utest_regmap_mark_region_changed(REGMAP_REGION_WDT);
+    wdt_do_periodic_work();
+
+    TEST_ASSERT_FALSE_MESSAGE(wdt_handle_fed(),
+                              "Fed flag must not be set by a timeout-only regmap write");
+}
+
 // Сценарий: Изменение таймаута с 10с на 3с И установка флага сброса одновременно
 // Ожидается: Обе операции применены, таймаут обновлён до 3с, флаг сброса очищен,
 // watchdog сброшен; применяется новый период таймаута
@@ -585,6 +630,7 @@ int main(void)
     RUN_TEST(test_wdt_regmap_timeout_change);
     RUN_TEST(test_wdt_regmap_timeout_decrease_prevents_false_trigger);
     RUN_TEST(test_wdt_regmap_reset_command);
+    RUN_TEST(test_wdt_regmap_reset_sets_fed_flag);
     RUN_TEST(test_wdt_regmap_timeout_and_reset_simultaneous);
     RUN_TEST(test_wdt_regmap_timeout_bounds_via_regmap);
     RUN_TEST(test_wdt_regmap_no_change);

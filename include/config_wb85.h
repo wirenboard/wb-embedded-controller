@@ -100,6 +100,13 @@
 // Поддержка spi-uart
 #define EC_UART_REGMAP_SUPPORT
 
+// Тёплый сброс SoC импульсом на линии PWROK/RESET (см. linux_cpu_pwr_seq_warm_reset).
+// Проверено на WB 8.5: линия заведена на RESET процессора T507, PMIC (AXP15060)
+// игнорирует импульс при REG32[4]=0 и не отключает питание DRAM.
+// На WB74 не включаем: поведение импульса на этой платформе не проверялось,
+// там watchdog по-прежнему сразу делает жёсткий сброс по питанию
+#define WBEC_HAS_WARM_RESET
+
 //                                                    name     freq    sda        scl
 #define SOFTWARE_I2C_DESC(macro)                macro(WBMZ6,   100000, GPIOF, 1,  GPIOF, 0)
 

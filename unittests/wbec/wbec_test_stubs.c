@@ -10,6 +10,7 @@ static struct {
     bool hard_off_called;
     bool hard_reset_called;
     bool reset_pmic_called;
+    bool warm_reset_called;
     bool is_busy;
     bool standby_called;
     uint16_t standby_wakeup_s;
@@ -106,6 +107,21 @@ void linux_cpu_pwr_seq_reset_pmic(void)
     linux_pwr_state.reset_pmic_called = true;
 }
 
+void linux_cpu_pwr_seq_warm_reset(void)
+{
+    linux_pwr_state.warm_reset_called = true;
+}
+
+bool utest_linux_pwr_get_warm_reset_called(void)
+{
+    return linux_pwr_state.warm_reset_called;
+}
+
+void utest_linux_pwr_clear_warm_reset_called(void)
+{
+    linux_pwr_state.warm_reset_called = false;
+}
+
 bool linux_cpu_pwr_seq_is_busy(void)
 {
     return linux_pwr_state.is_busy;
@@ -145,6 +161,15 @@ void utest_rtc_alarm_reset(void)
 void utest_rtc_alarm_set_enabled(bool enabled)
 {
     alarm_enabled = enabled;
+}
+
+bool rtc_alarm_take_fired(void)
+{
+    return false;
+}
+
+void linux_cpu_pwr_seq_wakeup(void)
+{
 }
 
 bool rtc_alarm_is_alarm_enabled(void)
