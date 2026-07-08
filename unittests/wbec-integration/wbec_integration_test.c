@@ -967,6 +967,27 @@ static void test_running_press_still_delivers_pwr_off_req(void)
     sim_run_ms(PWRKEY_DEBOUNCE_MS + 100);
 }
 
+// Регрессия (стенд 2026-07-08): каждое пробуждение из suspend-to-off платило
+// фиксированную ~1 с - WAIT_3V3 ждал «самопоявления» 3.3В, которого при
+// пробуждении не бывает: 5В не пропадало, PMIC спит и просыпается ТОЛЬКО от
+// PWRON. При wake_pending EC обязан жать PWRON сразу (ретраи STEP2/STEP3
+// остаются как fallback). Модель PMIC здесь как на железе: pmic_crashed
+// остаётся true и оживает только от удержания PWRON (PMIC_REVIVE_PWRON_MS).
+// Бюджет: нажатие ~сразу + оживление 100 мс + подъём 3.3В 100 мс + импульс
+// PWROK 100 мс => плата должна стартовать за ~350 мс; без фикса - ~1.3 с.
+static void test_stop_wake_presses_pwron_immediately_when_pmic_sleeps(void)
+{
+    sim_enter_off_mode_sleep(60);
+    uint32_t boots_before = sim.soc_boot_count;
+
+    // Свежий будильник; PMIC ОСТАЁТСЯ спящим (будится только PWRON)
+    alarm_fired = true;
+    sim_run_ms(600);    // << 1000 мс старого мёртвого ожидания
+
+    TEST_ASSERT_TRUE_MESSAGE(sim.soc_boot_count > boots_before,
+        "wake with a sleeping PMIC must press PWRON immediately, not after a fixed 1 s wait");
+}
+
 // Отрицательный случай: касание, которое так и не прошло антидребезг, после
 // окна ожидания должно вернуть EC в Stop (а не разбудить плату).
 static void test_stop_button_brush_reenters_stop(void)
@@ -1070,6 +1091,7 @@ int main(void)
     RUN_TEST(test_stop_wake_by_button_edge_then_debounced_press);
     RUN_TEST(test_stop_button_wake_press_not_redelivered_to_linux);
     RUN_TEST(test_running_press_still_delivers_pwr_off_req);
+    RUN_TEST(test_stop_wake_presses_pwron_immediately_when_pmic_sleeps);
     RUN_TEST(test_stop_button_brush_reenters_stop);
     RUN_TEST(test_stop_deadline_fires_via_wut_ticks);
     RUN_TEST(test_stop_frozen_wut_never_fires_on_systick_alone);

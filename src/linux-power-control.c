@@ -299,9 +299,27 @@ void linux_cpu_pwr_seq_do_periodic_work(void)
             }
             // Если 3.3В появилось, то считаем что питание включено
             new_state(PS_ON_COMPLETE);
+            break;
+        }
+        if (pwr_ctx.wake_pending) {
+            // Пробуждение из suspend-to-off: 5В не пропадало, PMIC спит и сам
+            // 3.3В никогда не поднимет - секундное ожидание самозапуска здесь
+            // гарантированно мёртвое время (~1 с на КАЖДОМ пробуждении,
+            // стенд 2026-07-08). Жмём PWRON сразу; показание V33 к этому
+            // моменту уже отфильтровано (вход в do_periodic_work закрыт
+            // vmon_ready() - 100 мс устаканивания после Stop), а ретраи
+            // STEP2/STEP3 остаются штатным fallback. Случай «3.3В присутствует»
+            // (поздний отказ SoC от сна) обработан веткой выше: импульс PWROK
+            // без нажатия.
+            console_print_w_prefix("Suspend-to-off: PMIC is sleeping, press PWRON now\r\n");
+            pmic_pwron_gpio_on();
+            pwr_ctx.attempt = 0;
+            new_state(PS_ON_STEP2_PMIC_PWRON);
+            break;
         }
         if (in_state_time_ms() > 1000) {
-            // Если 3.3В не появилось, то попробуем включить PMIC через PWRON
+            // Обычное включение (после подачи 5В PMIC должен стартовать сам).
+            // Если 3.3В не появилось за 1 с - пробуем включить PMIC через PWRON
             console_print_w_prefix("No voltage on 3.3V line, try to switch on PMIC throught PWRON\r\n");
             pmic_pwron_gpio_on();
             pwr_ctx.attempt = 0;
