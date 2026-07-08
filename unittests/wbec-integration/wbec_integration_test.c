@@ -1008,6 +1008,91 @@ static void test_stop_button_brush_reenters_stop(void)
         "after the grace window the EC must go back to sleep (re-enter Stop)");
 }
 
+// ==================== Два окна подряд: перевооружение кнопки ====================
+// Стенд 2026-07-09: «кнопка молчит во втором окне» (после окна, завершённого
+// будильником). Проверяем все порядки: будильник->кнопка (последовательность
+// стенда), кнопка->кнопка, кнопка->будильник. Каждое окно - полный цикл:
+// объявление, пропадание 3.3В, сон, пробуждение, последовательность включения.
+
+// Повторное объявление окна после завершившегося resume (система в WORKING).
+static void sim_reenter_off_mode_sleep(uint16_t timeout_s)
+{
+    sim_run_ms(WBEC_LINUX_BOOT_TIME_MS + 1000);   // linux_booted после resume
+    sim_announce_off_mode(timeout_s);
+    sim_tick();
+    sim.pmic_crashed = true;          // BL31 снял 3.3В
+    sim_run_ms(500);
+}
+
+// Пробуждение кнопкой в текущем окне: фронт EXTI + удержание > антидребезга.
+static void sim_button_wake(void)
+{
+    utest_mcu_stop_set_button_wake(true);
+    utest_set_pwrkey_pressed(true);
+    sim_run_ms(PWRKEY_DEBOUNCE_MS + 50);
+    utest_set_pwrkey_pressed(false);
+    sim.pmic_crashed = false;
+    sim_run_ms(PWRKEY_DEBOUNCE_MS + 3000);
+}
+
+// Последовательность стенда: окно 1 завершается будильником, в окне 2 - кнопка.
+static void test_stop_two_windows_alarm_then_button(void)
+{
+    utest_pwrkey_enable_debounce_model(true);
+    sim_enter_off_mode_sleep(60);
+
+    // Окно 1: будильник
+    alarm_fired = true;
+    sim.pmic_crashed = false;
+    sim_run_ms(3000);
+    uint32_t boots_after_w1 = sim.soc_boot_count;
+
+    // Окно 2: кнопка
+    sim_reenter_off_mode_sleep(60);
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(boots_after_w1, sim.soc_boot_count,
+        "window 2 must be asleep before the button press");
+    sim_button_wake();
+
+    TEST_ASSERT_TRUE_MESSAGE(sim.soc_boot_count > boots_after_w1,
+        "a button press must wake window 2 after an alarm-ended window 1");
+    TEST_ASSERT_EQUAL_UINT16_MESSAGE(UTEST_REASON_POWER_KEY, get_poweron_reason_from_regmap(),
+        "window 2 button wake must report REASON_POWER_KEY");
+}
+
+static void test_stop_two_windows_button_then_button(void)
+{
+    utest_pwrkey_enable_debounce_model(true);
+    sim_enter_off_mode_sleep(60);
+    sim_button_wake();                          // окно 1: кнопка
+    uint32_t boots_after_w1 = sim.soc_boot_count;
+
+    sim_reenter_off_mode_sleep(60);
+    sim_button_wake();                          // окно 2: снова кнопка
+
+    TEST_ASSERT_TRUE_MESSAGE(sim.soc_boot_count > boots_after_w1,
+        "a button press must wake window 2 after a button-ended window 1");
+    TEST_ASSERT_EQUAL_UINT16_MESSAGE(UTEST_REASON_POWER_KEY, get_poweron_reason_from_regmap(),
+        "window 2 button wake must report REASON_POWER_KEY");
+}
+
+static void test_stop_two_windows_button_then_alarm(void)
+{
+    utest_pwrkey_enable_debounce_model(true);
+    sim_enter_off_mode_sleep(60);
+    sim_button_wake();                          // окно 1: кнопка
+    uint32_t boots_after_w1 = sim.soc_boot_count;
+
+    sim_reenter_off_mode_sleep(60);
+    alarm_fired = true;                         // окно 2: будильник
+    sim.pmic_crashed = false;
+    sim_run_ms(3000);
+
+    TEST_ASSERT_TRUE_MESSAGE(sim.soc_boot_count > boots_after_w1,
+        "an alarm must wake window 2 after a button-ended window 1");
+    TEST_ASSERT_EQUAL_UINT16_MESSAGE(UTEST_REASON_RTC_ALARM, get_poweron_reason_from_regmap(),
+        "window 2 alarm wake must report REASON_RTC_ALARM");
+}
+
 // Дедлайн-бэкстоп: считается по накопленным тикам RTC WUT (systick в Stop
 // заморожен). После timeout_ms / (feed_period*1000) тиков WUT плата будится с
 // REASON_WATCHDOG. Регрессия: раньше дедлайн жил на systick, который в Stop
@@ -1093,6 +1178,9 @@ int main(void)
     RUN_TEST(test_running_press_still_delivers_pwr_off_req);
     RUN_TEST(test_stop_wake_presses_pwron_immediately_when_pmic_sleeps);
     RUN_TEST(test_stop_button_brush_reenters_stop);
+    RUN_TEST(test_stop_two_windows_alarm_then_button);
+    RUN_TEST(test_stop_two_windows_button_then_button);
+    RUN_TEST(test_stop_two_windows_button_then_alarm);
     RUN_TEST(test_stop_deadline_fires_via_wut_ticks);
     RUN_TEST(test_stop_frozen_wut_never_fires_on_systick_alone);
     RUN_TEST(test_stop_feeds_iwdg_on_every_feed_tick);

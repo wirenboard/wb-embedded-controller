@@ -213,6 +213,53 @@ static void test_stop_finish_restores_masks(void)
         "finish must actually issue NVIC_DisableIRQ for RTC");
 }
 
+// ---- Два окна подряд: кнопка обязана работать после окна, завершённого
+// будильником (стенд 2026-07-09: «кнопка молчит во втором окне») ----
+// Окно 1: prepare -> будильник срабатывает в Stop (ISR) -> teardown (finish).
+// Окно 2: prepare обязан ПОЛНОСТЬЮ перевооружить кнопочный путь (IMR0, FTSR0,
+// NVIC, обработчик), и фронт кнопки обязан доехать до классификатора.
+static void test_stop_two_windows_button_works_after_alarm_wake(void)
+{
+    // ---- Окно 1 ----
+    EXTI->IMR1 = EXTI_IMR1_IM9;         // как до окна (spi_slave_init)
+    mcu_stop_window_prepare();
+
+    RTC->CR = RTC_CR_ALRAIE;            // будильник вооружён (rtc_set_alarm)
+    RTC->SR = RTC_SR_ALRAF;             // и сработал в Stop
+    utest_irq_handler_t rtc_isr = utest_nvic_get_handler(RTC_TAMP_IRQn);
+    TEST_ASSERT_NOT_NULL(rtc_isr);
+    rtc_isr();                          // пробуждение по будильнику
+
+    mcu_stop_window_finish();           // выход окна по реальному пробуждению
+    TEST_ASSERT_FALSE_MESSAGE(EXTI->IMR1 & EXTI_IMR1_IM0,
+        "window 1 teardown must disarm the button line");
+    TEST_ASSERT_FALSE_MESSAGE(utest_nvic_is_enabled(EXTI0_1_IRQn),
+        "window 1 teardown must disable the button NVIC line");
+
+    // ---- Окно 2 ----
+    mcu_stop_window_prepare();
+
+    TEST_ASSERT_TRUE_MESSAGE(EXTI->IMR1 & EXTI_IMR1_IM0,
+        "window 2 must re-unmask the button line (EXTI0)");
+    TEST_ASSERT_TRUE_MESSAGE(EXTI->FTSR1 & EXTI_FTSR1_FT0,
+        "window 2 must keep the falling-edge trigger on PA0");
+    TEST_ASSERT_TRUE_MESSAGE(utest_nvic_is_enabled(EXTI0_1_IRQn),
+        "window 2 must re-enable the button NVIC line");
+    utest_irq_handler_t exti_isr = utest_nvic_get_handler(EXTI0_1_IRQn);
+    TEST_ASSERT_NOT_NULL_MESSAGE(exti_isr,
+        "window 2 must have the button ISR registered");
+
+    // Фронт кнопки в окне 2 обязан дойти до классификатора.
+    EXTI->FPR1 = EXTI_FPR1_FPIF0;
+    exti_isr();
+    TEST_ASSERT_TRUE_MESSAGE(mcu_stop_take_button_wake(),
+        "a button edge in window 2 must be reported as a button wake");
+
+    // И остатки окна 1 не должны протекать в окно 2.
+    TEST_ASSERT_FALSE_MESSAGE(mcu_stop_take_wut_tick(),
+        "no stale WUT tick may leak into window 2");
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -222,5 +269,6 @@ int main(void)
     RUN_TEST(test_stop_isr_wut_tick_clears_wutf_only);
     RUN_TEST(test_stop_isr_button_edge_sets_pending);
     RUN_TEST(test_stop_finish_restores_masks);
+    RUN_TEST(test_stop_two_windows_button_works_after_alarm_wake);
     return UNITY_END();
 }
