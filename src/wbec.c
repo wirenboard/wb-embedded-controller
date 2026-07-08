@@ -700,6 +700,13 @@ void wbec_do_periodic_work(void)
                 wbec_ctx.suspend_wut_ticks = 0;
                 wbec_ctx.stop_button_wake = false;
                 wbec_ctx.stop_armed = true;
+                // Диагностика: помечаем РЕАЛЬНОЕ начало окна сна. Между
+                // объявлением (0xA4) и пропаданием 3.3В SoC может входить в
+                // suspend десятки секунд; без этой строки по логу стенда не
+                // отличить «EC ещё не спал» от «EC проснулся мгновенно»
+                // (ложный диагноз 2026-07-08).
+                console_print("\r\n\n");
+                console_print_w_prefix("Suspend-to-off: EC sleeping in Stop 1 (wake: alarm/button/deadline)\r\n");
             }
 
             // Классификация пробуждения.

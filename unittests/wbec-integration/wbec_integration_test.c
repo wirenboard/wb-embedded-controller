@@ -741,6 +741,85 @@ static void test_suspend_off_second_cycle_sleeps_with_watchdog(void)
         "cycle 2 must still wake on a fresh alarm");
 }
 
+// Причина включения из regmap (ABI wbec.c LINUX_POWERON_REASON: значение 2 =
+// REASON_RTC_ALARM, "RTC alarm").
+#define UTEST_REASON_RTC_ALARM  2
+static uint16_t get_poweron_reason(void)
+{
+    struct REGMAP_POWERON_REASON pr;
+    TEST_ASSERT_TRUE(utest_regmap_get_region_data(REGMAP_REGION_POWERON_REASON,
+                                                  &pr, sizeof(pr)));
+    return pr.poweron_reason;
+}
+
+// Регрессия (стенд 2026-07-08, подозрение «залипший ALRAF»): два окна подряд,
+// первое завершается СРАБОТАВШИМ будильником. Второе окно НЕ должно мгновенно
+// классифицировать будильник на входе — защёлки прошлого цикла обязаны быть
+// дренированы объявлением; будит только свежий будильник, и причина
+// пробуждения — RTC_ALARM свежего события.
+static void test_suspend_off_second_window_no_stale_alarm_at_entry(void)
+{
+    sim.check_invariants = false;
+    sim.soc_feeds = true;
+    sim_boot_to_working();
+
+    sim_off_mode_cycle();                       // окно 1: будильник будит
+    uint32_t boots_after_c1 = sim.soc_boot_count;
+
+    // Окно 2 (запрос 60 с; дедлайн 60+10 с — далеко за границей проверки)
+    sim_announce_off_mode(60);
+    sim_tick();
+    sim.pmic_crashed = true;                    // BL31 снял 3.3В
+    sim_run_ms(30000);                          // полминуты сна
+
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(boots_after_c1, sim.soc_boot_count,
+        "Window 2 must NOT wake instantly on a stale alarm from window 1");
+
+    alarm_fired = true;                         // свежий будильник
+    sim.pmic_crashed = false;
+    sim_run_ms(3000);
+
+    TEST_ASSERT_TRUE_MESSAGE(sim.soc_boot_count > boots_after_c1,
+        "Window 2 must wake on the fresh alarm");
+    TEST_ASSERT_EQUAL_UINT16_MESSAGE(UTEST_REASON_RTC_ALARM, get_poweron_reason(),
+        "Fresh-alarm wake must report REASON_RTC_ALARM");
+}
+
+// Фиксация поведения (стенд 2026-07-08): будильник, сработавший МЕЖДУ
+// объявлением окна и реальным пропаданием 3.3В, обязан разбудить плату
+// НЕМЕДЛЕННО при входе в окно — запрошенное время пробуждения уже прошло.
+// На стенде это выглядело как «мгновенное пробуждение»: диагностический вход
+// BL31 в suspend занимает ~80 с (подсчёт контрольных сумм DRAM), и запросы
+// 30-60 с истекают ещё ДО начала сна. Это корректное поведение, унаследованное
+// от busy-poll a655128; тест защищает его от «исправления».
+static void test_suspend_off_alarm_fired_before_sleep_start_wakes_at_entry(void)
+{
+    sim.check_invariants = false;
+    sim.soc_feeds = true;
+    sim_boot_to_working();
+    uint32_t boots_before = sim.soc_boot_count;
+
+    sim_announce_off_mode(30);
+    sim_tick();                     // объявление дренирует УСТАРЕВШИЕ защёлки
+
+    // Будильник срабатывает, пока 3.3В ещё присутствует (SoC долго готовится
+    // ко сну) — плата НЕ должна перезапускаться, пока сон не начался
+    sim_run_ms(2000);
+    alarm_fired = true;
+    sim_run_ms(1000);
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(boots_before, sim.soc_boot_count,
+        "Board must not restart while 3.3V is still up");
+
+    // 3.3В наконец пропало: окно открывается с уже сработавшим будильником
+    sim.pmic_crashed = true;
+    sim_run_ms(8000);               // мгновенная классификация + пробуждение
+
+    TEST_ASSERT_TRUE_MESSAGE(sim.soc_boot_count > boots_before,
+        "Entry with an already-fired alarm must wake the board immediately");
+    TEST_ASSERT_EQUAL_UINT16_MESSAGE(UTEST_REASON_RTC_ALARM, get_poweron_reason(),
+        "Pre-sleep-fired alarm must be reported as REASON_RTC_ALARM");
+}
+
 // ==================== Stop 1: окно сна suspend-to-off ====================
 
 // Доводит плату до состояния «спит в окне suspend-to-off»: объявлен off-mode,
@@ -941,6 +1020,8 @@ int main(void)
     RUN_TEST(test_suspend_off_fresh_alarm_wakes);
     RUN_TEST(test_suspend_off_exit_disarms_feed_exit);
     RUN_TEST(test_suspend_off_second_cycle_sleeps_with_watchdog);
+    RUN_TEST(test_suspend_off_second_window_no_stale_alarm_at_entry);
+    RUN_TEST(test_suspend_off_alarm_fired_before_sleep_start_wakes_at_entry);
 
     // Stop 1: окно сна suspend-to-off
     RUN_TEST(test_stop_window_arms_safe_and_wakes_on_fresh_alarm);
