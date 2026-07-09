@@ -1,7 +1,6 @@
 #include "rtc.h"
 #include "regmap-int.h"
 #include "irq-subsystem.h"
-#include "console.h"
 
 /**
  * Модуль занимается:
@@ -57,22 +56,6 @@ void rtc_alarm_do_periodic_work(void)
         regmap_set_region_data(REGMAP_REGION_RTC_CFG, &cfg, sizeof(cfg));
 
         if (rtc_alarm.flag) {
-            // DIAGNOSTIC (будет откачен): что за будильник сработал и когда
-            console_print_w_prefix("DIAG ALRAF now=");
-            console_print_dec(BCD_TO_BIN(rtc_time.hours));
-            console_print(":");
-            console_print_dec(BCD_TO_BIN(rtc_time.minutes));
-            console_print(":");
-            console_print_dec(BCD_TO_BIN(rtc_time.seconds));
-            console_print(" alrm=");
-            console_print_dec(BCD_TO_BIN(rtc_alarm.hours));
-            console_print(":");
-            console_print_dec(BCD_TO_BIN(rtc_alarm.minutes));
-            console_print(":");
-            console_print_dec(BCD_TO_BIN(rtc_alarm.seconds));
-            console_print(" en=");
-            console_print_dec(rtc_alarm.enabled ? 1 : 0);
-            console_print("\r\n");
             alarm_fired_latch = true;
             irq_set_flag(IRQ_ALARM);
             rtc_clear_alarm_flag();
