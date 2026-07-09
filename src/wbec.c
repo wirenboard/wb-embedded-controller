@@ -104,12 +104,6 @@ struct wbec_ctx {
     // выходы переведены в безопасное состояние, WUT арм-нут один раз).
     // Живёт в SRAM через Stop (сброса нет); разоружается на выходе.
     bool stop_armed;
-    // Момент вооружения окна (systick). ≈ момент, когда BL31 снял рельсы PMIC
-    // и взвёл его сон (arm взводится по первому же пропаданию 3.3В). Служит
-    // якорем минимальной паузы «арм -> первый PWRON» на пути пробуждения:
-    // при мгновенном выходе из окна systick с этого момента идёт непрерывно
-    // (Stop реально не спал), поэтому пауза отмеряется точно.
-    systime_t stop_armed_ts;
     // Счётчик истёкших периодов WUT за окно (systick в Stop заморожен, поэтому
     // дедлайн считаем по тикам WUT, а не по systick). Сбрасывается при арме.
     uint32_t suspend_wut_ticks;
@@ -757,8 +751,6 @@ void wbec_do_periodic_work(void)
                 wbec_ctx.suspend_wut_ticks = 0;
                 wbec_ctx.stop_button_wake = false;
                 wbec_ctx.stop_armed = true;
-                // Якорь минимальной паузы «арм -> первый PWRON» (см. пробуждение).
-                wbec_ctx.stop_armed_ts = systick_get_system_time_ms();
                 // Диагностика: помечаем РЕАЛЬНОЕ начало окна сна. Между
                 // объявлением (0xA4) и пропаданием 3.3В SoC может входить в
                 // suspend десятки секунд; без этой строки по логу стенда не
@@ -857,16 +849,6 @@ void wbec_do_periodic_work(void)
                 console_print("\r\n\n");
                 console_print_w_prefix("Suspend-to-off: wake up, restart PMIC via PWRON\r\n");
                 linux_cpu_pwr_seq_wakeup();
-                // Мгновенный выход из окна (дедлайн-тиков WUT не было -> Stop
-                // реально не спал): между тем, как BL31 усыпил PMIC, и этим
-                // моментом прошли лишь ~0.1-0.2 с; PWRON, прилетевший в
-                // переходный процесс PMIC, глотается (стенд 2026-07-09).
-                // Откладываем первый PWRON до stop_armed_ts + MIN_DELAY, чтобы
-                // PMIC успел завершить вход в сон. При реальном сне (ticks > 0)
-                // переход давно завершён - паузу не запрашиваем.
-                if (wbec_ctx.suspend_wut_ticks == 0) {
-                    linux_cpu_pwr_seq_wake_pwron_min_delay(wbec_ctx.stop_armed_ts);
-                }
                 new_state(WBEC_STATE_POWER_ON_SEQUENCE_WAIT);
                 break;
             }

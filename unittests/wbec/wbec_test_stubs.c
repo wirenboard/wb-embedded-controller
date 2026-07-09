@@ -1,5 +1,4 @@
 #include "wbec_test_stubs.h"
-#include "systick.h"
 
 #include <stddef.h>
 #include <string.h>
@@ -178,8 +177,6 @@ bool rtc_alarm_take_fired(void)
 void linux_cpu_pwr_seq_wakeup(void)
 {
 }
-
-void linux_cpu_pwr_seq_wake_pwron_min_delay(systime_t armed_ts) { (void)armed_ts; }
 
 bool rtc_alarm_is_alarm_enabled(void)
 {
