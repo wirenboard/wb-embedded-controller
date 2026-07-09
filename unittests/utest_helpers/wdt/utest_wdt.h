@@ -5,5 +5,6 @@
 
 void utest_wdt_reset(void);
 void utest_wdt_set_timed_out(bool value);
+void utest_wdt_set_fed(bool value);
 uint16_t utest_wdt_get_timeout(void);
 bool utest_wdt_get_started(void);

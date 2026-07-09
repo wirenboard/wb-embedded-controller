@@ -91,10 +91,17 @@
         /* 0x91 */  uint16_t reset : 1; \
     ) \
     /*     Addr     Name            RO/RW */ \
+    /* POWER_CTRL: биты запросов очищаются прошивкой после обработки.
+     * ВАЖНО (контракт с загрузчиками): на прошивках без бита full_cycle
+     * бит reboot выполняет полный цикл питания 5В; загрузчики поэтому
+     * выставляют reboot|full_cycle одним кадром, а прошивка с full_cycle
+     * обязана декодировать его раньше reboot (различие - только в
+     * poweron_reason). Менять семантику reboot нельзя без учёта этого. */ \
     m(     0xA0,    POWER_CTRL,     RW, \
         /* 0xA0 */  uint16_t off : 1; \
         /* -//- */  uint16_t reboot : 1; \
         /* -//- */  uint16_t reset_pmic : 1; \
+        /* -//- */  uint16_t full_cycle : 1; \
     ) \
     /*     Addr     Name            RO/RW */ \
     m(     0xB0,    IRQ_FLAGS,      RO, \

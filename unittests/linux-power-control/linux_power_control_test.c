@@ -699,6 +699,76 @@ static void test_periodic_reset_pmic_completes_when_v33_is_lost(void)
     );
 }
 
+// Сценарий: тёплый сброс - короткий импульс на PMIC RESET (PWROK), 5В не отключается.
+// До действия: питание включено, 3.3В есть.
+// После действия: RESET удерживается WBEC_WARM_RESET_PULSE_MS, затем отпускается,
+// при живом 3.3В последовательность сразу завершается (PMIC проигнорировал импульс).
+static void test_periodic_warm_reset_pulses_reset_line_and_completes(void)
+{
+    linux_cpu_pwr_seq_init(true);
+    prepare_periodic_runtime(true, true);
+    linux_cpu_pwr_seq_do_periodic_work();
+    TEST_ASSERT_FALSE_MESSAGE(linux_cpu_pwr_seq_is_busy(), "Power sequence must be idle before warm reset");
+
+    linux_cpu_pwr_seq_warm_reset();
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(
+        1, utest_gpio_get_output_state(pmic_reset_gpio), "PMIC RESET GPIO must be asserted right after warm reset"
+    );
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(
+        1, utest_gpio_get_output_state(linux_power_gpio), "Linux power (5V) GPIO must stay high during warm reset"
+    );
+    TEST_ASSERT_TRUE_MESSAGE(linux_cpu_pwr_seq_is_busy(), "Power sequence must be busy during warm reset pulse");
+
+    // До истечения импульса линия удерживается
+    utest_systick_advance_time_ms(WBEC_WARM_RESET_PULSE_MS);
+    linux_cpu_pwr_seq_do_periodic_work();
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(
+        1, utest_gpio_get_output_state(pmic_reset_gpio), "PMIC RESET GPIO must stay high at exact pulse length"
+    );
+
+    // После истечения импульса линия отпущена, 5В осталось включено
+    utest_systick_advance_time_ms(1);
+    linux_cpu_pwr_seq_do_periodic_work();
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(
+        0, utest_gpio_get_output_state(pmic_reset_gpio), "PMIC RESET GPIO must be low after pulse"
+    );
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(
+        1, utest_gpio_get_output_state(linux_power_gpio), "Linux power (5V) GPIO must stay high after warm reset"
+    );
+
+    // 3.3В на месте → последовательность завершена
+    linux_cpu_pwr_seq_do_periodic_work();
+    TEST_ASSERT_FALSE_MESSAGE(linux_cpu_pwr_seq_is_busy(), "Power sequence must complete when 3.3V is alive");
+}
+
+// Сценарий: тёплый сброс, но PMIC перезапустился (3.3В пропало после импульса).
+// После действия: штатная логика включения пробует PMIC PWRON после 1с ожидания 3.3В.
+static void test_periodic_warm_reset_falls_back_to_power_on_when_v33_lost(void)
+{
+    linux_cpu_pwr_seq_init(true);
+    prepare_periodic_runtime(true, true);
+    linux_cpu_pwr_seq_do_periodic_work();
+
+    linux_cpu_pwr_seq_warm_reset();
+
+    // PMIC перезапустился: 3.3В пропало
+    utest_vmon_set_ch_status(VMON_CHANNEL_V33, false);
+
+    utest_systick_advance_time_ms(WBEC_WARM_RESET_PULSE_MS + 1);
+    linux_cpu_pwr_seq_do_periodic_work();
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(
+        0, utest_gpio_get_output_state(pmic_reset_gpio), "PMIC RESET GPIO must be low after pulse"
+    );
+    TEST_ASSERT_TRUE_MESSAGE(linux_cpu_pwr_seq_is_busy(), "Power sequence must stay busy waiting for 3.3V");
+
+    // Через 1с без 3.3В - попытка включить PMIC через PWRON (штатная логика)
+    utest_systick_advance_time_ms(1001);
+    linux_cpu_pwr_seq_do_periodic_work();
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(
+        1, utest_gpio_get_output_state(pmic_pwron_gpio), "PMIC PWRON GPIO must be asserted when 3.3V did not return"
+    );
+}
+
 // Сценарий: вызов linux_cpu_pwr_seq_reset_pmic и сохранение 3.3V.
 // До действия: RESET отпущен.
 // После действия: по таймауту >2000мс RESET завершается даже при наличии 3.3V.
@@ -907,6 +977,89 @@ static void test_periodic_long_press_waits_until_button_release(void)
     );
 }
 
+// Сценарий: жёсткий сброс прерывает тёплый сброс (гонка запросов).
+// До действия: тёплый сброс начат, линия PMIC RESET (PWROK) взведена.
+// После действия: hard_reset обязан отпустить линию сброса. Иначе ни одно
+// состояние последовательности включения её не отпустит, и после подачи 5В
+// SoC навсегда останется заклиненным в сбросе.
+static void test_hard_reset_aborting_warm_reset_releases_reset_line(void)
+{
+    linux_cpu_pwr_seq_init(true);
+    prepare_periodic_runtime(true, true);
+    linux_cpu_pwr_seq_do_periodic_work();
+
+    linux_cpu_pwr_seq_warm_reset();
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(
+        1, utest_gpio_get_output_state(pmic_reset_gpio), "PMIC RESET GPIO must be asserted during warm reset pulse"
+    );
+
+    linux_cpu_pwr_seq_hard_reset();
+
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(
+        0, utest_gpio_get_output_state(pmic_reset_gpio), "hard_reset must release the PMIC RESET (PWROK) line"
+    );
+
+    // Последовательность после жёсткого сброса завершается штатно
+    utest_systick_advance_time_ms(WBEC_POWER_RESET_TIME_MS + 1);
+    linux_cpu_pwr_seq_do_periodic_work();
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(
+        1, utest_gpio_get_output_state(linux_power_gpio), "Linux power GPIO must be re-enabled after hard reset"
+    );
+    utest_vmon_set_ch_status(VMON_CHANNEL_V33, true);
+    linux_cpu_pwr_seq_do_periodic_work();
+    TEST_ASSERT_FALSE_MESSAGE(linux_cpu_pwr_seq_is_busy(), "Power sequence must complete after aborted warm reset");
+}
+
+// Сценарий: выключение прерывает тёплый сброс.
+// После действия: hard_off отпускает линию сброса (никакая последовательность
+// не оставляет её взведённой).
+static void test_hard_off_aborting_warm_reset_releases_reset_line(void)
+{
+    linux_cpu_pwr_seq_init(true);
+    prepare_periodic_runtime(true, true);
+    linux_cpu_pwr_seq_do_periodic_work();
+
+    linux_cpu_pwr_seq_warm_reset();
+    linux_cpu_pwr_seq_hard_off();
+
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(
+        0, utest_gpio_get_output_state(pmic_reset_gpio), "hard_off must release the PMIC RESET (PWROK) line"
+    );
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(
+        0, utest_gpio_get_output_state(linux_power_gpio), "Linux power GPIO must be low after hard_off"
+    );
+}
+
+// Сценарий: тёплый сброс запрошен, когда 5В снято (например, поверх
+// паузы жёсткого сброса).
+// После действия: по завершении импульса последовательность включения
+// получает 5В - ожидание 3.3В без 5В бессмысленно.
+static void test_warm_reset_completion_forces_5v_on(void)
+{
+    linux_cpu_pwr_seq_init(true);
+    prepare_periodic_runtime(true, false);
+
+    linux_cpu_pwr_seq_hard_reset();
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(
+        0, utest_gpio_get_output_state(linux_power_gpio), "Linux power GPIO must be low during hard reset wait"
+    );
+
+    linux_cpu_pwr_seq_warm_reset();
+    utest_systick_advance_time_ms(WBEC_WARM_RESET_PULSE_MS + 1);
+    linux_cpu_pwr_seq_do_periodic_work();
+
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(
+        0, utest_gpio_get_output_state(pmic_reset_gpio), "PMIC RESET GPIO must be released after the pulse"
+    );
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(
+        1, utest_gpio_get_output_state(linux_power_gpio), "Warm reset completion must re-enable 5V for power-on"
+    );
+
+    utest_vmon_set_ch_status(VMON_CHANNEL_V33, true);
+    linux_cpu_pwr_seq_do_periodic_work();
+    TEST_ASSERT_FALSE_MESSAGE(linux_cpu_pwr_seq_is_busy(), "Power sequence must complete after warm reset");
+}
+
 // Сценарий: standalone вызов reset_pmic.
 // До действия: RESET-линия опущена.
 // После действия: RESET-линия поднимается сразу.
@@ -978,6 +1131,11 @@ int main(void)
     RUN_TEST(test_periodic_off_complete_disables_stepup_when_enabled);
     RUN_TEST(test_periodic_v50_loss_goes_to_standby_with_saved_off_state);
 
+    RUN_TEST(test_periodic_warm_reset_pulses_reset_line_and_completes);
+    RUN_TEST(test_periodic_warm_reset_falls_back_to_power_on_when_v33_lost);
+    RUN_TEST(test_hard_reset_aborting_warm_reset_releases_reset_line);
+    RUN_TEST(test_hard_off_aborting_warm_reset_releases_reset_line);
+    RUN_TEST(test_warm_reset_completion_forces_5v_on);
     RUN_TEST(test_periodic_reset_pmic_completes_when_v33_is_lost);
     RUN_TEST(test_periodic_reset_pmic_completes_by_timeout);
     RUN_TEST(test_periodic_reset_pmic_timeout_switches_state_only_after_2000ms);

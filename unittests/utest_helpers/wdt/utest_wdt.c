@@ -6,6 +6,7 @@ static struct {
     uint16_t timeout;
     bool started;
     bool timed_out;
+    bool fed;
 } wdt_state = {0};
 
 void utest_wdt_reset(void)
@@ -16,6 +17,11 @@ void utest_wdt_reset(void)
 void utest_wdt_set_timed_out(bool value)
 {
     wdt_state.timed_out = value;
+}
+
+void utest_wdt_set_fed(bool value)
+{
+    wdt_state.fed = value;
 }
 
 uint16_t utest_wdt_get_timeout(void)
@@ -47,6 +53,13 @@ bool wdt_handle_timed_out(void)
 {
     bool ret = wdt_state.timed_out;
     wdt_state.timed_out = false;
+    return ret;
+}
+
+bool wdt_handle_fed(void)
+{
+    bool ret = wdt_state.fed;
+    wdt_state.fed = false;
     return ret;
 }
 

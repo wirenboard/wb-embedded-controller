@@ -32,6 +32,8 @@ enum utest_wbec_poweron_reason {
     UTEST_REASON_WATCHDOG,
     UTEST_REASON_PMIC_OFF,
     UTEST_REASON_UNKNOWN,
+    UTEST_REASON_WATCHDOG_WARM,
+    UTEST_REASON_FULL_CYCLE,
 };
 
 static void reset_all(void)
@@ -421,6 +423,18 @@ static void set_power_ctrl_request(bool off, bool reboot, bool reset_pmic)
         .off = off ? 1 : 0,
         .reboot = reboot ? 1 : 0,
         .reset_pmic = reset_pmic ? 1 : 0,
+    };
+    regmap_set_region_data(REGMAP_REGION_POWER_CTRL, &p, sizeof(p));
+    utest_regmap_mark_region_changed(REGMAP_REGION_POWER_CTRL);
+}
+
+// Вспомогательная: запись POWER_CTRL с битом full_cycle (отдельно, чтобы
+// не менять сигнатуру set_power_ctrl_request во всех существующих тестах)
+static void set_power_ctrl_full_cycle_request(bool with_reboot)
+{
+    struct REGMAP_POWER_CTRL p = {
+        .reboot = with_reboot ? 1 : 0,
+        .full_cycle = 1,
     };
     regmap_set_region_data(REGMAP_REGION_POWER_CTRL, &p, sizeof(p));
     utest_regmap_mark_region_changed(REGMAP_REGION_POWER_CTRL);
@@ -986,7 +1000,46 @@ static void test_periodic_working_reboot_request(void)
                                      "poweron_reason must be REASON_REBOOT");
 }
 
-// Сценарий: запрос pmic_reset из Linux → reset_pmic.
+// Сценарий: запрос full_cycle из Linux → hard_reset с причиной FULL_CYCLE.
+static void test_periodic_working_full_cycle_request(void)
+{
+    drive_to_working_state();
+
+    set_power_ctrl_full_cycle_request(false);
+    wbec_do_periodic_work();
+
+    TEST_ASSERT_TRUE_MESSAGE(utest_linux_pwr_get_hard_reset_called(),
+                             "hard_reset must be called on full_cycle request");
+
+    TEST_ASSERT_EQUAL_UINT16_MESSAGE(UTEST_REASON_FULL_CYCLE, get_poweron_reason_from_regmap(),
+                                     "poweron_reason must be REASON_FULL_CYCLE");
+}
+
+// Сценарий (контракт с загрузчиком): reboot и full_cycle выставлены одним
+// кадром - full_cycle обязан победить, причина FULL_CYCLE, оба бита сброшены.
+static void test_periodic_working_full_cycle_wins_over_reboot(void)
+{
+    struct REGMAP_POWER_CTRL p;
+
+    drive_to_working_state();
+
+    set_power_ctrl_full_cycle_request(true);
+    wbec_do_periodic_work();
+
+    TEST_ASSERT_TRUE_MESSAGE(utest_linux_pwr_get_hard_reset_called(),
+                             "hard_reset must be called on reboot|full_cycle request");
+
+    TEST_ASSERT_EQUAL_UINT16_MESSAGE(UTEST_REASON_FULL_CYCLE, get_poweron_reason_from_regmap(),
+                                     "poweron_reason must be REASON_FULL_CYCLE, not REBOOT");
+
+    TEST_ASSERT_TRUE(utest_regmap_get_region_data(REGMAP_REGION_POWER_CTRL, &p, sizeof(p)));
+    TEST_ASSERT_EQUAL_UINT16_MESSAGE(0, p.full_cycle, "full_cycle bit must be consumed");
+    TEST_ASSERT_EQUAL_UINT16_MESSAGE(0, p.reboot, "companion reboot bit must be consumed too");
+}
+
+// Сценарий: запрос pmic_reset из Linux.
+// На моделях с WBEC_HAS_WARM_RESET → тёплый сброс (warm_reset),
+// на остальных → историческое поведение (reset_pmic, удержание до 2 с).
 static void test_periodic_working_pmic_reset_request(void)
 {
     drive_to_working_state();
@@ -994,14 +1047,30 @@ static void test_periodic_working_pmic_reset_request(void)
     set_power_ctrl_request(false, false, true);
     wbec_do_periodic_work();
 
+#if defined(WBEC_HAS_WARM_RESET)
+    TEST_ASSERT_TRUE_MESSAGE(utest_linux_pwr_get_warm_reset_called(),
+                             "warm_reset must be called on pmic_reset request");
+#else
     TEST_ASSERT_TRUE_MESSAGE(utest_linux_pwr_get_reset_pmic_called(),
                              "reset_pmic must be called on pmic_reset request");
+    TEST_ASSERT_FALSE_MESSAGE(utest_linux_pwr_get_warm_reset_called(),
+                              "warm_reset must NOT be called on models without warm reset support");
+#endif
 
     TEST_ASSERT_EQUAL_UINT16_MESSAGE(UTEST_REASON_REBOOT, get_poweron_reason_from_regmap(),
                                      "poweron_reason must be REASON_REBOOT");
 }
 
-// Сценарий: WDT тайм-аут → hard_reset, reason=WATCHDOG.
+// Вспомогательная: возврат из POWER_ON_SEQUENCE_WAIT в WORKING после сброса
+static void drive_back_to_working_state(void)
+{
+    // POWER_ON_SEQUENCE_WAIT → WORKING (is_busy=false по умолчанию)
+    wbec_do_periodic_work();
+}
+
+// Сценарий: первый WDT тайм-аут.
+// На моделях с WBEC_HAS_WARM_RESET → warm_reset (DRAM сохраняется), reason=WATCHDOG_WARM.
+// На остальных → сразу жёсткий сброс по питанию, reason=WATCHDOG (историческое поведение).
 static void test_periodic_working_wdt_timeout(void)
 {
     drive_to_working_state();
@@ -1009,12 +1078,250 @@ static void test_periodic_working_wdt_timeout(void)
     utest_wdt_set_timed_out(true);
     wbec_do_periodic_work();
 
+#if defined(WBEC_HAS_WARM_RESET)
+    TEST_ASSERT_TRUE_MESSAGE(utest_linux_pwr_get_warm_reset_called(),
+                             "warm_reset must be called on first WDT timeout");
+    TEST_ASSERT_FALSE_MESSAGE(utest_linux_pwr_get_hard_reset_called(),
+                              "hard_reset must NOT be called on first WDT timeout");
+
+    TEST_ASSERT_EQUAL_UINT16_MESSAGE(UTEST_REASON_WATCHDOG_WARM, get_poweron_reason_from_regmap(),
+                                     "poweron_reason must be REASON_WATCHDOG_WARM");
+#else
     TEST_ASSERT_TRUE_MESSAGE(utest_linux_pwr_get_hard_reset_called(),
                              "hard_reset must be called on WDT timeout");
+    TEST_ASSERT_FALSE_MESSAGE(utest_linux_pwr_get_warm_reset_called(),
+                              "warm_reset must NOT be called on models without warm reset support");
 
     TEST_ASSERT_EQUAL_UINT16_MESSAGE(UTEST_REASON_WATCHDOG, get_poweron_reason_from_regmap(),
                                      "poweron_reason must be REASON_WATCHDOG");
+#endif
 }
+
+#if defined(WBEC_HAS_WARM_RESET)
+// Сценарий: повторный WDT тайм-аут без сброса watchdog из Linux → hard_reset, reason=WATCHDOG.
+static void test_periodic_working_wdt_timeout_second_time_hard(void)
+{
+    drive_to_working_state();
+
+    // Первый тайм-аут → warm_reset
+    utest_wdt_set_timed_out(true);
+    wbec_do_periodic_work();
+    TEST_ASSERT_TRUE_MESSAGE(utest_linux_pwr_get_warm_reset_called(),
+                             "warm_reset must be called on first WDT timeout");
+
+    // Linux не ожил: watchdog не сбрасывался, второй тайм-аут
+    drive_back_to_working_state();
+    utest_wdt_set_timed_out(true);
+    wbec_do_periodic_work();
+
+    TEST_ASSERT_TRUE_MESSAGE(utest_linux_pwr_get_hard_reset_called(),
+                             "hard_reset must be called on second WDT timeout without feed");
+    TEST_ASSERT_EQUAL_UINT16_MESSAGE(UTEST_REASON_WATCHDOG, get_poweron_reason_from_regmap(),
+                                     "poweron_reason must be REASON_WATCHDOG");
+}
+
+// Сценарий: после warm_reset Linux ожил (сбросил watchdog) → следующий тайм-аут снова warm_reset.
+static void test_periodic_working_wdt_feed_resets_escalation(void)
+{
+    drive_to_working_state();
+
+    // Первый тайм-аут → warm_reset
+    utest_wdt_set_timed_out(true);
+    wbec_do_periodic_work();
+    TEST_ASSERT_TRUE_MESSAGE(utest_linux_pwr_get_warm_reset_called(),
+                             "warm_reset must be called on first WDT timeout");
+    utest_linux_pwr_clear_warm_reset_called();
+
+    // Linux ожил и сбросил watchdog
+    drive_back_to_working_state();
+    utest_wdt_set_fed(true);
+    wbec_do_periodic_work();
+
+    // Новый тайм-аут → снова warm_reset, эскалация сброшена
+    utest_wdt_set_timed_out(true);
+    wbec_do_periodic_work();
+
+    TEST_ASSERT_TRUE_MESSAGE(utest_linux_pwr_get_warm_reset_called(),
+                             "warm_reset must be called again after watchdog was fed");
+    TEST_ASSERT_FALSE_MESSAGE(utest_linux_pwr_get_hard_reset_called(),
+                              "hard_reset must NOT be called after watchdog was fed");
+    TEST_ASSERT_EQUAL_UINT16_MESSAGE(UTEST_REASON_WATCHDOG_WARM, get_poweron_reason_from_regmap(),
+                                     "poweron_reason must be REASON_WATCHDOG_WARM");
+}
+#endif // WBEC_HAS_WARM_RESET
+
+// Сценарий: таймаут WDT и потеря 3.3В (и 5В) приходят в одном проходе.
+// Ожидание: выполняется ровно ОДНО действие с питанием - сброс по watchdog.
+// Ветка контроля 3.3В не должна запускать вторую последовательность поверх
+// начатой: до исправления она вызывала hard_off/hard_reset, который прерывал
+// начатый тёплый сброс и оставлял линию PMIC RESET (PWROK) взведённой навсегда.
+static void test_periodic_working_wdt_timeout_and_v33_loss_single_action(void)
+{
+    drive_to_working_state();
+
+    utest_wdt_set_timed_out(true);
+    utest_vmon_set_ch_status(VMON_CHANNEL_V33, false);
+    utest_vmon_set_ch_status(VMON_CHANNEL_V50, false);
+    wbec_do_periodic_work();
+
+#if defined(WBEC_HAS_WARM_RESET)
+    TEST_ASSERT_TRUE_MESSAGE(utest_linux_pwr_get_warm_reset_called(),
+                             "warm_reset must be called on WDT timeout");
+    TEST_ASSERT_FALSE_MESSAGE(utest_linux_pwr_get_hard_reset_called(),
+                              "hard_reset must NOT be called in the same pass as warm_reset");
+#else
+    TEST_ASSERT_TRUE_MESSAGE(utest_linux_pwr_get_hard_reset_called(),
+                             "hard_reset must be called on WDT timeout");
+#endif
+    TEST_ASSERT_FALSE_MESSAGE(utest_linux_pwr_get_hard_off_called(),
+                              "V33/V50 loss check must not run in the same pass as a WDT reset");
+}
+
+// Сценарий: запрос reset_pmic из Linux и таймаут WDT приходят в одном проходе.
+// Ожидание: обрабатывается только запрос из Linux, таймаут откладывается
+// (флаг не теряется - он поглощается перезапуском watchdog при выходе
+// из POWER_ON_SEQUENCE_WAIT). До исправления обработчик таймаута вызывал
+// hard_reset поверх начатого тёплого сброса / сброса PMIC и оставлял
+// линию PMIC RESET (PWROK) взведённой навсегда.
+static void test_periodic_working_pmic_reset_request_and_wdt_timeout_single_action(void)
+{
+#if defined(WBEC_HAS_WARM_RESET)
+    drive_to_working_state();
+
+    // Первый таймаут без кормления → эскалация взведена (следующий сброс - жёсткий)
+    utest_wdt_set_timed_out(true);
+    wbec_do_periodic_work();
+    TEST_ASSERT_TRUE_MESSAGE(utest_linux_pwr_get_warm_reset_called(),
+                             "warm_reset must be called on first WDT timeout");
+    utest_linux_pwr_clear_warm_reset_called();
+    drive_back_to_working_state();
+
+    // Запрос reset_pmic и таймаут в одном проходе
+    set_power_ctrl_request(false, false, true);
+    utest_wdt_set_timed_out(true);
+    wbec_do_periodic_work();
+
+    TEST_ASSERT_TRUE_MESSAGE(utest_linux_pwr_get_warm_reset_called(),
+                             "warm_reset must be called on reset_pmic request");
+    TEST_ASSERT_FALSE_MESSAGE(utest_linux_pwr_get_hard_reset_called(),
+                              "hard_reset must NOT be called in the same pass as reset_pmic request");
+#else
+    drive_to_working_state();
+
+    set_power_ctrl_request(false, false, true);
+    utest_wdt_set_timed_out(true);
+    wbec_do_periodic_work();
+
+    TEST_ASSERT_TRUE_MESSAGE(utest_linux_pwr_get_reset_pmic_called(),
+                             "reset_pmic must be called on reset_pmic request");
+    TEST_ASSERT_FALSE_MESSAGE(utest_linux_pwr_get_hard_reset_called(),
+                              "hard_reset must NOT be called in the same pass as reset_pmic request");
+#endif
+}
+
+// Сценарий: запрос poweroff из Linux (будильник взведён) и таймаут WDT
+// приходят в одном проходе.
+// Ожидание: выключение выигрывает, watchdog не "воскрешает" плату.
+static void test_periodic_working_poweroff_request_and_wdt_timeout_powers_off(void)
+{
+    drive_to_working_state();
+
+    utest_rtc_alarm_set_enabled(true);
+    set_power_ctrl_request(true, false, false);
+    utest_wdt_set_timed_out(true);
+    wbec_do_periodic_work();
+
+    TEST_ASSERT_TRUE_MESSAGE(utest_linux_pwr_get_hard_off_called(),
+                             "hard_off must be called on poweroff request");
+    TEST_ASSERT_FALSE_MESSAGE(utest_linux_pwr_get_hard_reset_called(),
+                              "hard_reset must NOT be called after poweroff started");
+#if defined(WBEC_HAS_WARM_RESET)
+    TEST_ASSERT_FALSE_MESSAGE(utest_linux_pwr_get_warm_reset_called(),
+                              "warm_reset must NOT be called after poweroff started");
+#endif
+}
+
+#if defined(WBEC_HAS_WARM_RESET)
+// Сценарий: три таймаута WDT подряд без кормления.
+// Ожидание: тёплый → жёсткий → снова тёплый. Жёсткий сброс - последняя
+// ступень эскалации, после него начинается новый цикл загрузки, и первое
+// зависание в нём снова заслуживает тёплого сброса (сохранение DRAM/ramoops).
+// До исправления эскалация "залипала": после первого жёсткого сброса все
+// последующие таймауты давали только жёсткий сброс.
+static void test_periodic_working_wdt_third_timeout_warm_again(void)
+{
+    drive_to_working_state();
+
+    // Первый таймаут → warm
+    utest_wdt_set_timed_out(true);
+    wbec_do_periodic_work();
+    TEST_ASSERT_TRUE_MESSAGE(utest_linux_pwr_get_warm_reset_called(),
+                             "warm_reset must be called on first WDT timeout");
+    utest_linux_pwr_clear_warm_reset_called();
+
+    // Второй таймаут без кормления → hard
+    drive_back_to_working_state();
+    utest_wdt_set_timed_out(true);
+    wbec_do_periodic_work();
+    TEST_ASSERT_TRUE_MESSAGE(utest_linux_pwr_get_hard_reset_called(),
+                             "hard_reset must be called on second WDT timeout");
+
+    // Третий таймаут → снова warm (эскалация начинается заново)
+    utest_linux_pwr_reset();
+    drive_back_to_working_state();
+    utest_wdt_set_timed_out(true);
+    wbec_do_periodic_work();
+
+    TEST_ASSERT_TRUE_MESSAGE(utest_linux_pwr_get_warm_reset_called(),
+                             "warm_reset must be called again on the timeout after a hard reset");
+    TEST_ASSERT_FALSE_MESSAGE(utest_linux_pwr_get_hard_reset_called(),
+                              "hard_reset must NOT be called on the timeout after a hard reset");
+    TEST_ASSERT_EQUAL_UINT16_MESSAGE(UTEST_REASON_WATCHDOG_WARM, get_poweron_reason_from_regmap(),
+                                     "poweron_reason must be REASON_WATCHDOG_WARM again");
+}
+
+// Сценарий: полный цикл питания (full_cycle) переармирует эскалацию тёплого
+// сброса. Первый таймаут WDT взводит эскалацию (тёплый сброс, следующий был бы
+// жёстким). Затем приходит запрос full_cycle - его ветка обязана снять взвод
+// (wd_warm_reset_attempted = false), как и жёсткий сброс по watchdog: после
+// полного цикла начинается новая загрузка, и её первое зависание снова
+// заслуживает тёплого сброса (сохранение DRAM/ramoops на WB85).
+// Без переармирования в ветке full_cycle следующий таймаут дал бы жёсткий сброс.
+static void test_periodic_working_full_cycle_rearms_warm_reset(void)
+{
+    drive_to_working_state();
+
+    // Первый таймаут → тёплый сброс, эскалация взведена
+    utest_wdt_set_timed_out(true);
+    wbec_do_periodic_work();
+    TEST_ASSERT_TRUE_MESSAGE(utest_linux_pwr_get_warm_reset_called(),
+                             "warm_reset must be called on first WDT timeout");
+
+    // Запрос full_cycle → полный цикл питания (жёсткий сброс, reason FULL_CYCLE).
+    // Именно здесь отрабатывает переармирование эскалации тёплого сброса.
+    drive_back_to_working_state();
+    set_power_ctrl_full_cycle_request(false);
+    wbec_do_periodic_work();
+    TEST_ASSERT_TRUE_MESSAGE(utest_linux_pwr_get_hard_reset_called(),
+                             "hard_reset must be called on full_cycle request");
+    TEST_ASSERT_EQUAL_UINT16_MESSAGE(UTEST_REASON_FULL_CYCLE, get_poweron_reason_from_regmap(),
+                                     "poweron_reason must be REASON_FULL_CYCLE");
+
+    // Новый таймаут после full_cycle → снова тёплый сброс (эскалация начата
+    // заново). Без переармирования в ветке full_cycle здесь был бы жёсткий сброс.
+    utest_linux_pwr_reset();
+    drive_back_to_working_state();
+    utest_wdt_set_timed_out(true);
+    wbec_do_periodic_work();
+
+    TEST_ASSERT_TRUE_MESSAGE(utest_linux_pwr_get_warm_reset_called(),
+                             "warm_reset must be called again on the timeout after full_cycle");
+    TEST_ASSERT_FALSE_MESSAGE(utest_linux_pwr_get_hard_reset_called(),
+                              "hard_reset must NOT be called on the timeout after full_cycle");
+    TEST_ASSERT_EQUAL_UINT16_MESSAGE(UTEST_REASON_WATCHDOG_WARM, get_poweron_reason_from_regmap(),
+                                     "poweron_reason must be REASON_WATCHDOG_WARM again");
+}
+#endif // WBEC_HAS_WARM_RESET
 
 // Сценарий: пропало 3.3В и 5В одновременно → hard_off (питание выдернуто).
 static void test_periodic_working_v33_and_v50_lost(void)
@@ -1233,8 +1540,20 @@ int main(void)
     RUN_TEST(test_periodic_working_poweroff_with_button);
     RUN_TEST(test_periodic_working_poweroff_without_conditions_reboots);
     RUN_TEST(test_periodic_working_reboot_request);
+    RUN_TEST(test_periodic_working_full_cycle_request);
+    RUN_TEST(test_periodic_working_full_cycle_wins_over_reboot);
     RUN_TEST(test_periodic_working_pmic_reset_request);
     RUN_TEST(test_periodic_working_wdt_timeout);
+#if defined(WBEC_HAS_WARM_RESET)
+    RUN_TEST(test_periodic_working_wdt_timeout_second_time_hard);
+    RUN_TEST(test_periodic_working_wdt_feed_resets_escalation);
+    RUN_TEST(test_periodic_working_wdt_third_timeout_warm_again);
+    RUN_TEST(test_periodic_working_full_cycle_rearms_warm_reset);
+#endif
+    // Гонки в одном проходе: только одно действие с питанием за проход
+    RUN_TEST(test_periodic_working_wdt_timeout_and_v33_loss_single_action);
+    RUN_TEST(test_periodic_working_pmic_reset_request_and_wdt_timeout_single_action);
+    RUN_TEST(test_periodic_working_poweroff_request_and_wdt_timeout_powers_off);
     RUN_TEST(test_periodic_working_v33_and_v50_lost);
     RUN_TEST(test_periodic_working_v33_lost_wbmz_vbat_low);
     RUN_TEST(test_periodic_working_v33_lost_wbmz_vbat_ok_uses_generic_path);
