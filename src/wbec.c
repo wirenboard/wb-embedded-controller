@@ -118,6 +118,19 @@ struct wbec_ctx {
     // Глотаем события кнопки до наблюдаемого отпускания.
     bool pwrkey_swallow;
     systime_t pwrkey_swallow_ts;
+    // Пробуждение из окна suspend-to-off: Linux НЕ загружается заново, а
+    // ВОЗОБНОВЛЯЕТСЯ (DRAM жива). Завершение последовательности включения
+    // обязано сохранить linux_booted=true - иначе первые 20 с после resume
+    // короткое нажатие попадает в ветку «линукс не загружен» и жёстко рубит
+    // питание (стенд 2026-07-09 17:33). Холодные включения (standby-poweroff,
+    // подача питания, watchdog-сбросы) этот флаг не взводят.
+    bool suspend_wake_resume;
+    // Предыдущий антидребезженный уровень кнопки: IRQ_PWR_OFF_REQ взводится
+    // по ФРОНТУ нажатия, один раз на одно физическое нажатие. Раньше флаг
+    // взводился каждый проход, пока кнопка удержана: Linux успевал квитировать
+    // IRQ, и следующий проход взводил его снова - одно нажатие доезжало до
+    // драйвера дважды (стенд 2026-07-09 17:34, двойной "PWR_OFF_REQ latched").
+    bool pwrkey_prev_level;
     // Взводится при пробуждении из suspend-to-off, чтобы подавить
     // звуковой сигнал включения на этом входе в WBEC_STATE_WORKING.
     // ПОЧЕМУ это критично: resume из suspend-to-off — это ре-инициализация
@@ -502,10 +515,19 @@ void wbec_do_periodic_work(void)
             wdt_start_reset();
             wdt_handle_timed_out();
             // Флаг linux_initial_powered_on нужен чтобы понять, что линукс уже работал на момент включения ЕС
-            // В этом случае считаем его уже загруженным
-            wbec_ctx.linux_booted = wbec_ctx.linux_initial_powered_on;
+            // В этом случае считаем его уже загруженным.
+            // suspend_wake_resume: пробуждение из suspend-to-off - Linux
+            // ВОЗОБНОВЛЯЕТСЯ, а не загружается, поэтому остаётся «загруженным»
+            // (иначе нажатие в первые 20 с после resume жёстко рубит питание).
+            wbec_ctx.linux_booted = wbec_ctx.linux_initial_powered_on ||
+                                    wbec_ctx.suspend_wake_resume;
             wbec_ctx.linux_initial_powered_on = false;
+            wbec_ctx.suspend_wake_resume = false;
             wbec_ctx.pwrkey_pressed = false;
+            // DIAGNOSTIC
+            console_print_w_prefix("DIAG WORKING entry linux_booted=");
+            console_print_dec(wbec_ctx.linux_booted ? 1 : 0);
+            console_print("\r\n");
             // Как только питание включилось - переходим в рабочий режим
             new_state(WBEC_STATE_WORKING);
         }
@@ -545,16 +567,20 @@ void wbec_do_periodic_work(void)
             // Если выполняется долгое нажатие, то есть шанс что линукс успеет
             // корректно выключиться
             if (pwrkey_pressed()) {
-                // DIAGNOSTIC: печатаем только первое взведение (без флуда)
-                if (!(irq_get_flags() & (1u << IRQ_PWR_OFF_REQ))) {
+                if (!wbec_ctx.pwrkey_prev_level) {
+                    // Только ФРОНТ нажатия: один IRQ на одно физическое
+                    // нажатие. Взводить каждый проход нельзя: Linux квитирует
+                    // IRQ, пока кнопка ещё удержана, и то же нажатие доезжает
+                    // до драйвера вторым событием (стенд 2026-07-09 17:34).
+                    // DIAGNOSTIC
                     console_print_w_prefix("DIAG PWR_OFF_REQ latched (running-state handler) susp=");
                     console_print_dec(wbec_ctx.suspend_mode ? 1 : 0);
                     console_print_dec(wbec_ctx.suspend_started ? 1 : 0);
                     console_print("\r\n");
+                    irq_set_flag(IRQ_PWR_OFF_REQ);
                 }
                 wbec_ctx.pwrkey_pressed = true;
                 wbec_ctx.pwrkey_pressed_timestamp = systick_get_system_time_ms();
-                irq_set_flag(IRQ_PWR_OFF_REQ);
             }
         } else {
             // Если линукс не загружен - выключаемся по питанию сразу же
@@ -565,6 +591,9 @@ void wbec_do_periodic_work(void)
                 new_state(WBEC_STATE_POWER_OFF_SEQUENCE_WAIT);
             }
         }
+        // Трек фронта кнопки для взведения IRQ (обновляется в любом состоянии
+        // ветки выше, включая «глотание», чтобы фронт не был ложным после него)
+        wbec_ctx.pwrkey_prev_level = pwrkey_pressed();
 
         // Если флаг нажатой кнопки висит слишком долго (линукс по каким-то причинам не отреагировал)
         // Нужно его сбросить, т.к. он влияет на решение для выключения по poweroff
@@ -781,6 +810,9 @@ void wbec_do_periodic_work(void)
                 // в WORKING сорвёт ре-инициализацию DRAM и уронит плату в
                 // cold-boot. Подавляем сигнал включения (см. new_state()).
                 wbec_ctx.suspend_resume_no_beep = true;
+                // Linux возобновляется, а не загружается: сохранить
+                // linux_booted через завершение последовательности включения.
+                wbec_ctx.suspend_wake_resume = true;
                 // DIAGNOSTIC (будет откачен): причина выхода + сырые состояния
                 console_print_w_prefix("DIAG exit cause=");
                 console_print(alarm ? "ALARM" : (button ? "BUTTON" : "DEADLINE"));

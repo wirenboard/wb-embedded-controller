@@ -1005,6 +1005,101 @@ static void test_running_press_still_delivers_pwr_off_req(void)
     sim_run_ms(PWRKEY_DEBOUNCE_MS + 100);
 }
 
+// Регрессия (стенд 2026-07-09 17:33): нажатие на ВОЗОБНОВЛЁННОЙ системе жёстко
+// рубило питание вместо штатного выключения. Пробуждение из suspend-to-off шло
+// через завершение последовательности включения, которое сбрасывало
+// linux_booted (правильно для холодного включения, неверно для resume: Linux
+// возобновляется, а не грузится) - и первые 20 с после resume короткое нажатие
+// попадало в ветку «линукс не загружен» -> hard off. Должно быть: IRQ
+// (штатный запрос выключения) без обрубания питания.
+static void test_resumed_system_press_is_graceful_not_hard_off(void)
+{
+    utest_pwrkey_enable_debounce_model(true);
+    sim_enter_off_mode_sleep(60);
+    uint32_t boots_before = sim.soc_boot_count;
+
+    // Кнопочное пробуждение (подтверждение +500 мс), отпускание, resume.
+    utest_mcu_stop_set_button_wake(true);
+    utest_set_pwrkey_pressed(true);
+    sim_run_ms(700);
+    utest_set_pwrkey_pressed(false);
+    sim_run_ms(3000);                   // resume завершён, «глотание» снято
+    TEST_ASSERT_TRUE(sim.soc_boot_count > boots_before);
+    uint32_t boots_after_resume = sim.soc_boot_count;
+
+    // НОВОЕ нажатие на возобновлённой системе (в пределах бывшего 20-с окна).
+    utest_set_pwrkey_pressed(true);
+    sim_run_ms(PWRKEY_DEBOUNCE_MS + 150);
+
+    TEST_ASSERT_TRUE_MESSAGE(utest_irq_is_flag_set(IRQ_PWR_OFF_REQ),
+        "a press on the resumed system must request a graceful poweroff via IRQ");
+    TEST_ASSERT_TRUE_MESSAGE(utest_gpio_get_output_state(gpio_5v) != 0,
+        "a press on the resumed system must NOT hard-cut the power");
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(boots_after_resume, sim.soc_boot_count,
+        "a press on the resumed system must not restart the board");
+
+    utest_set_pwrkey_pressed(false);
+    sim_run_ms(PWRKEY_DEBOUNCE_MS + 300);
+    TEST_ASSERT_TRUE_MESSAGE(utest_gpio_get_output_state(gpio_5v) != 0,
+        "the release must not cut the power either");
+}
+
+// Легитимный hard-off сохранён: СВЕЖАЯ загрузка (холодное включение), Linux
+// ещё не загружен (до 20 с) - короткое нажатие немедленно выключает питание.
+static void test_fresh_boot_press_before_linux_up_hard_offs(void)
+{
+    utest_pwrkey_enable_debounce_model(true);
+    sim.check_invariants = false;
+    sim.allow_standby = true;
+    sim.soc_feeds = true;
+    sim_boot_to_working();              // WORKING только что; linux_booted=false
+    // Даём антидребезгу устаканить базовый уровень «отпущено» (из UNINIT):
+    // нажатие с UNINIT-базы по дизайну не рождает событий («кнопку держали
+    // при включении»). Остаёмся глубоко внутри 20-с окна !linux_booted.
+    sim_run_ms(700);
+
+    utest_set_pwrkey_pressed(true);
+    sim_run_ms(700);                    // подтверждённое нажатие
+    utest_set_pwrkey_pressed(false);
+    sim_run_ms(PWRKEY_DEBOUNCE_MS + 100);   // отпускание -> короткое нажатие
+
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, utest_gpio_get_output_state(gpio_5v),
+        "a press before Linux is up must hard-off immediately (legit path)");
+}
+
+// Дедупликация IRQ (стенд 2026-07-09 17:34, двойной "PWR_OFF_REQ latched"):
+// флаг взводится по ФРОНТУ нажатия. Если Linux квитирует IRQ, пока кнопку ещё
+// держат, ТО ЖЕ нажатие не должно взводить флаг повторно; новое нажатие -
+// взводит.
+static void test_running_press_single_irq_despite_ack_mid_hold(void)
+{
+    utest_pwrkey_enable_debounce_model(true);
+    sim.soc_feeds = true;
+    sim_boot_to_working();
+    sim_run_ms(WBEC_LINUX_BOOT_TIME_MS + 1000);     // linux_booted = true
+
+    utest_set_pwrkey_pressed(true);
+    sim_run_ms(PWRKEY_DEBOUNCE_MS + 100);
+    TEST_ASSERT_TRUE(utest_irq_is_flag_set(IRQ_PWR_OFF_REQ));
+
+    // Linux квитировал IRQ, кнопку всё ещё держат.
+    irq_clear_flags(1u << IRQ_PWR_OFF_REQ);
+    sim_run_ms(400);
+    TEST_ASSERT_FALSE_MESSAGE(utest_irq_is_flag_set(IRQ_PWR_OFF_REQ),
+        "the SAME held press must not re-latch the IRQ after Linux acks it");
+
+    utest_set_pwrkey_pressed(false);
+    sim_run_ms(PWRKEY_DEBOUNCE_MS + 100);
+
+    // Новое нажатие - новый фронт - новый IRQ.
+    utest_set_pwrkey_pressed(true);
+    sim_run_ms(PWRKEY_DEBOUNCE_MS + 100);
+    TEST_ASSERT_TRUE_MESSAGE(utest_irq_is_flag_set(IRQ_PWR_OFF_REQ),
+        "a NEW press must latch a new IRQ");
+    utest_set_pwrkey_pressed(false);
+    sim_run_ms(PWRKEY_DEBOUNCE_MS + 100);
+}
+
 // Регрессия (стенд 2026-07-08): каждое пробуждение из suspend-to-off платило
 // фиксированную ~1 с - WAIT_3V3 ждал «самопоявления» 3.3В, которого при
 // пробуждении не бывает: 5В не пропадало, PMIC спит и просыпается ТОЛЬКО от
@@ -1359,6 +1454,9 @@ int main(void)
     RUN_TEST(test_stop_wake_by_button_edge_then_debounced_press);
     RUN_TEST(test_stop_button_wake_press_not_redelivered_to_linux);
     RUN_TEST(test_running_press_still_delivers_pwr_off_req);
+    RUN_TEST(test_resumed_system_press_is_graceful_not_hard_off);
+    RUN_TEST(test_fresh_boot_press_before_linux_up_hard_offs);
+    RUN_TEST(test_running_press_single_irq_despite_ack_mid_hold);
     RUN_TEST(test_stop_wake_presses_pwron_immediately_when_pmic_sleeps);
     RUN_TEST(test_stop_button_brush_reenters_stop);
     RUN_TEST(test_stop_two_windows_alarm_then_button);
