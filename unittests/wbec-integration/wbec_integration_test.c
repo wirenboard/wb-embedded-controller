@@ -893,16 +893,14 @@ static void test_stop_window_arms_safe_and_wakes_on_fresh_alarm(void)
 #endif
 }
 
-// Кнопка PWRON: фронт EXTI0 будит ядро, но короткое нажатие подтверждается
-// штатным антидребезгом (500 мс) в бодрствующем супер-цикле, а не самим
-// фронтом — так сохраняется фильтр случайных касаний. Подтверждённое нажатие
-// будит плату с REASON_POWER_KEY.
+// Кнопка PWRON, UX-контракт «нажал - услышал бип - отпустил»: фронт EXTI0
+// будит ядро, антидребезг (500 мс) подтверждает НАЖАТИЕ, и пробуждение
+// стартует ПО ПОДТВЕРЖДЕНИЮ - ещё ДО отпускания. Бип звучит на возврате 3.3В
+// (пищалка запитана от 3.3В), пока кнопка ещё в руке. Отпускание приходит
+// после выхода из окна и глотается (не порождает событий для Linux).
 //
-// Нажатие прогоняется END-TO-END через реальный фильтр 500 мс: раз включена
-// модель антидребезга, удержание кнопки (utest_set_pwrkey_pressed) превращается
-// в короткое нажатие только после > PWRKEY_DEBOUNCE_MS удержания и последующего
-// отпускания, по системному времени через pwrkey_do_periodic_work — а не
-// инъекцией готового short-press на границе мока.
+// Нажатие прогоняется END-TO-END через реальный фильтр 500 мс по системному
+// времени через pwrkey_do_periodic_work - не инъекцией готового short-press.
 static void test_stop_wake_by_button_edge_then_debounced_press(void)
 {
     // Модель антидребезга включена с самого начала — как на железе, где pwrkey
@@ -911,36 +909,42 @@ static void test_stop_wake_by_button_edge_then_debounced_press(void)
     sim_enter_off_mode_sleep(60);
     uint32_t boots_before = sim.soc_boot_count;
 
-    // Фронт кнопки будит Stop; одновременно кнопка физически удерживается.
+    // Фронт кнопки будит Stop; кнопка физически удерживается. PMIC остаётся
+    // спящим (как на железе): его оживит только PWRON последовательности
+    // пробуждения (модель: удержание PWRON оживляет PMIC).
     utest_mcu_stop_set_button_wake(true);
     utest_set_pwrkey_pressed(true);
-    // Держим дольше антидребезга: нажатие подтверждается (press begin), но
-    // короткое нажатие ещё НЕ зафиксировано (нужно отпускание). Плата не будится.
-    sim_run_ms(PWRKEY_DEBOUNCE_MS + 50);
+
+    // До подтверждения антидребезгом (< 500 мс) плата НЕ будится - фильтр
+    // случайных касаний сохранён.
+    sim_run_ms(PWRKEY_DEBOUNCE_MS - 100);
     TEST_ASSERT_EQUAL_UINT32_MESSAGE(boots_before, sim.soc_boot_count,
-        "a held-but-not-released press must not wake the board yet");
+        "the board must not wake before the press is debounce-confirmed");
 
-    // Отпускание; PMIC при пробуждении восстановит 3.3В. Через > PWRKEY_DEBOUNCE_MS
-    // антидребезг подтверждает отпускание -> короткое нажатие (всё ещё в пределах
-    // окна ожидания debounce+grace) -> плата будится.
-    utest_set_pwrkey_pressed(false);
-    sim.pmic_crashed = false;
-    sim_run_ms(PWRKEY_DEBOUNCE_MS + 3000);
-
+    // Подтверждение (+500 мс) запускает пробуждение, КНОПКА ЕЩЁ УДЕРЖИВАЕТСЯ.
+    sim_run_ms(3000);
     TEST_ASSERT_TRUE_MESSAGE(sim.soc_boot_count > boots_before,
-        "a debounced short press must wake the board");
+        "a confirmed press must wake the board BEFORE release");
     TEST_ASSERT_EQUAL_UINT16_MESSAGE(UTEST_REASON_POWER_KEY, get_poweron_reason_from_regmap(),
         "button wake must report REASON_POWER_KEY");
 
 #if defined EC_GPIO_BUZZER
-    // Требование UX: кнопочное пробуждение подтверждается бипом в такте
-    // классификации; бип входа в WORKING при resume остаётся подавленным.
+    // Бип-подтверждение прозвучал, пока кнопку ещё держат (на возврате 3.3В).
     // 1 бип загрузки (WORKING холодного старта) + 1 бип кнопочного пробуждения.
     TEST_ASSERT_EQUAL_UINT32_MESSAGE(2, buzzer_beep_count,
-        "button wake must beep exactly once at classification (plus the boot beep)");
+        "the wake-confirm beep must sound while the button is still held");
     TEST_ASSERT_EQUAL_UINT16_MESSAGE(EC_BUZZER_BEEP_SUSPEND_WAKE_MS, buzzer_last_beep_ms,
         "the wake-confirm beep must be the short suspend-wake beep");
 #endif
+
+    // Отпускание после resume: никаких событий кнопки для системы.
+    uint32_t boots_after_wake = sim.soc_boot_count;
+    utest_set_pwrkey_pressed(false);
+    sim_run_ms(PWRKEY_DEBOUNCE_MS + 2000);
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(boots_after_wake, sim.soc_boot_count,
+        "the release must not restart or power off the board");
+    TEST_ASSERT_TRUE_MESSAGE(utest_gpio_get_output_state(gpio_5v) != 0,
+        "the release must not power the board off");
 }
 
 // Регрессия (стенд 2026-07-08, кнопочный тест): одно нажатие = пробуждение +
@@ -956,25 +960,23 @@ static void test_stop_button_wake_press_not_redelivered_to_linux(void)
     sim_enter_off_mode_sleep(60);
     uint32_t boots_before = sim.soc_boot_count;
 
-    // Фронт кнопки будит Stop; кнопка физически удерживается.
+    // Фронт кнопки будит Stop; кнопка удерживается; пробуждение стартует по
+    // подтверждению (+500 мс). Взведённый в том же такте IRQ_PWR_OFF_REQ
+    // (обычный обработчик WORKING) гасится выходом из окна в этом же проходе.
     utest_mcu_stop_set_button_wake(true);
     utest_set_pwrkey_pressed(true);
-    sim_run_ms(PWRKEY_DEBOUNCE_MS + 50);
+    sim_run_ms(3000);
+    TEST_ASSERT_TRUE_MESSAGE(sim.soc_boot_count > boots_before,
+        "the confirmed press must wake the board");
 
-    // Предусловие бага реально воспроизведено: пока кнопка удерживалась,
-    // обычный обработчик успел выставить запрос выключения спящему Linux.
-    TEST_ASSERT_TRUE_MESSAGE(utest_irq_is_flag_set(IRQ_PWR_OFF_REQ),
-        "precondition: the running-state handler must latch IRQ_PWR_OFF_REQ while held");
-
-    // Отпускание -> короткое нажатие -> пробуждение.
+    // Отпускание после resume: событие обязано быть проглочено.
     utest_set_pwrkey_pressed(false);
-    sim.pmic_crashed = false;
     sim_run_ms(PWRKEY_DEBOUNCE_MS + 3000);
 
-    TEST_ASSERT_TRUE_MESSAGE(sim.soc_boot_count > boots_before,
-        "the debounced short press must wake the board");
     TEST_ASSERT_FALSE_MESSAGE(utest_irq_is_flag_set(IRQ_PWR_OFF_REQ),
         "the wake press must NOT stay pending for Linux as a power-key event");
+    TEST_ASSERT_TRUE_MESSAGE(utest_gpio_get_output_state(gpio_5v) != 0,
+        "the release must not power the board off");
 
 #if defined EC_GPIO_BUZZER
     // Пара требований UX (Evgeny, 2026-07-09): бип-подтверждение ЕСТЬ,
@@ -1142,7 +1144,7 @@ static void test_stop_two_windows_button_then_alarm(void)
 // на ОТПУСКАНИИ, и на +1200 мс EC уходил обратно в Stop ПОСРЕДИ УДЕРЖАНИЯ -
 // нажатие пропадало (4 подряд брошенных нажатия в логе). Прежние тесты держали
 // кнопку ровно DEBOUNCE+50 мс - укладывались в старое окно (mock gap).
-static void test_stop_button_long_hold_wakes_on_release(void)
+static void test_stop_button_long_hold_wakes_on_confirm(void)
 {
     utest_pwrkey_enable_debounce_model(true);
     sim_enter_off_mode_sleep(60);
@@ -1152,32 +1154,70 @@ static void test_stop_button_long_hold_wakes_on_release(void)
     utest_set_pwrkey_pressed(true);
     sim_run_ms(50);
     uint32_t enters_at_hold = utest_mcu_stop_get_enter_count();
-    sim_run_ms(2450);                   // удержание много дольше grace (1.2 с)
-    TEST_ASSERT_EQUAL_UINT32_MESSAGE(boots_before, sim.soc_boot_count,
-        "a held press must not wake the board before release");
-    // Ключевое свойство железа: пока кнопку ДЕРЖАТ, EC обязан бодрствовать.
-    // На железе уход в Stop посреди удержания теряет нажатие безвозвратно
-    // (отпускание - растущий фронт, EXTI0 вооружён только на падающий); мок
-    // этого не моделирует (pwrkey тикает и "во сне"), поэтому проверяем сам
-    // факт отсутствия ре-входа в Stop.
-    TEST_ASSERT_EQUAL_UINT32_MESSAGE(enters_at_hold, utest_mcu_stop_get_enter_count(),
-        "the EC must NOT re-enter Stop while the button is held (lost press on hardware)");
+    sim_run_ms(2450);                   // удержание много дольше старого grace (1.2 с)
 
-    utest_set_pwrkey_pressed(false);
-    sim.pmic_crashed = false;
-    sim_run_ms(PWRKEY_DEBOUNCE_MS + 3000);
-
+    // Пробуждение стартует по ПОДТВЕРЖДЕНИЮ (+500 мс), кнопка всё ещё в руке.
     TEST_ASSERT_TRUE_MESSAGE(sim.soc_boot_count > boots_before,
-        "a press held longer than the grace window must still wake on release");
+        "a long-held press must wake the board at confirmation, before release");
     TEST_ASSERT_EQUAL_UINT16_MESSAGE(UTEST_REASON_POWER_KEY, get_poweron_reason_from_regmap(),
         "long-hold button wake must report REASON_POWER_KEY");
+    // Ключевое свойство железа: пока кнопку держали до подтверждения, EC не
+    // уходил обратно в Stop (на железе это теряло нажатие безвозвратно:
+    // отпускание - растущий фронт, EXTI0 вооружён только на падающий).
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(enters_at_hold, utest_mcu_stop_get_enter_count(),
+        "the EC must NOT re-enter Stop while the button is held");
+
+    // Отпускание после resume: проглочено, плата продолжает работать.
+    uint32_t boots_after_wake = sim.soc_boot_count;
+    utest_set_pwrkey_pressed(false);
+    sim_run_ms(PWRKEY_DEBOUNCE_MS + 3000);
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(boots_after_wake, sim.soc_boot_count,
+        "the late release must not restart the board");
+    TEST_ASSERT_TRUE_MESSAGE(utest_gpio_get_output_state(gpio_5v) != 0,
+        "the late release must not power the board off");
 }
 
-// Регрессия (стенд, хвост нажатия): будильник будит ПОСРЕДИ удержания кнопки
-// (в логе pk_lvl=1 при cause=ALARM); отпускание приходит уже после resume и
-// раньше рождало новое «короткое нажатие» - в !linux_booted-ветке это
-// НЕМЕДЛЕННЫЙ hard off + standby («poweroff через 11 с после resume»).
-// Порядок 1: отпускание ПОСЛЕ входа в WORKING.
+// Семантика ОЧЕНЬ долгого удержания (требование 3): после пробуждения-по-
+// подтверждению кнопку продолжают держать до порога длинного нажатия - штатная
+// логика длинного нажатия работающей системы берёт верх (принудительное
+// выключение). Всё, что короче длинного нажатия, в систему НЕ доставляется.
+static void test_stop_button_very_long_hold_reaches_force_off(void)
+{
+    utest_pwrkey_enable_debounce_model(true);
+    sim_enter_off_mode_sleep(60);
+    uint32_t boots_before = sim.soc_boot_count;
+
+    utest_mcu_stop_set_button_wake(true);
+    utest_set_pwrkey_pressed(true);
+    sim_run_ms(3000);                   // пробуждение по подтверждению, держим
+    TEST_ASSERT_TRUE(sim.soc_boot_count > boots_before);
+
+    // Удержание достигло порога длинного нажатия (8 с; модель антидребезга
+    // длинное нажатие не эмулирует - защёлку взводим явно). Кнопку отпускаем
+    // и ДАЁМ АНТИДРЕБЕЗГУ ОТРАБОТАТЬ по сим-времени ДО инъекции: обработчик
+    // длинного нажатия busy-wait'ит отпускание по антидребезженному уровню,
+    // а внутри busy-wait сим-время не идёт (иначе тест зависает).
+    sim.allow_standby = true;
+    utest_set_pwrkey_pressed(false);
+    sim_run_ms(PWRKEY_DEBOUNCE_MS + 100);
+    utest_set_pwrkey_long_press(true);
+    // Проверяем СРАЗУ после срабатывания: на железе EC уходит в Standby и не
+    // возвращается; в тестах заглушка mcu_goto_standby возвращается, и дальше
+    // «загробная жизнь» стаба (V33-loss recovery) расходится с железом.
+    sim_run_ms(20);
+
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, utest_gpio_get_output_state(gpio_5v),
+        "a hold reaching the long-press threshold must force the board off");
+    TEST_ASSERT_TRUE_MESSAGE(sim.standby_requested,
+        "force-off must end in the poweroff standby");
+}
+
+// Регрессия (стенд, хвост нажатия): будильник будит, пока нажатие «в полёте»
+// (фронт видели, антидребезг ещё не подтвердил - при пробуждении-по-
+// подтверждению это единственная форма «будильник посреди нажатия»).
+// Подтверждение и отпускание приходят уже после resume и раньше рождали новое
+// «короткое нажатие» - в !linux_booted-ветке это НЕМЕДЛЕННЫЙ hard off + standby
+// («poweroff через 11 с после resume»). Порядок 1: отпускание ПОСЛЕ WORKING.
 static void test_stop_alarm_wake_mid_hold_release_after_working(void)
 {
     utest_pwrkey_enable_debounce_model(true);
@@ -1186,12 +1226,12 @@ static void test_stop_alarm_wake_mid_hold_release_after_working(void)
 
     utest_mcu_stop_set_button_wake(true);
     utest_set_pwrkey_pressed(true);
-    sim_run_ms(700);                    // нажатие подтверждено, кнопка держится
-    alarm_fired = true;                 // будильник посреди удержания
+    sim_run_ms(200);                    // нажатие ЕЩЁ НЕ подтверждено (< 500 мс)
+    alarm_fired = true;                 // будильник посреди начинающегося нажатия
     sim.pmic_crashed = false;
-    sim_run_ms(3000);                   // resume завершился, WORKING
+    sim_run_ms(3000);                   // resume завершился, WORKING; кнопку держат
     TEST_ASSERT_TRUE_MESSAGE(sim.soc_boot_count > boots_before,
-        "the alarm must wake the board even while the button is held");
+        "the alarm must wake the board even while a press is in flight");
     uint32_t boots_after_wake = sim.soc_boot_count;
 
     utest_set_pwrkey_pressed(false);    // отпускание уже в рабочем состоянии
@@ -1215,7 +1255,7 @@ static void test_stop_alarm_wake_mid_hold_release_before_working(void)
 
     utest_mcu_stop_set_button_wake(true);
     utest_set_pwrkey_pressed(true);
-    sim_run_ms(700);
+    sim_run_ms(200);                    // нажатие ещё не подтверждено
     alarm_fired = true;
     sim.pmic_crashed = false;
     sim_run_ms(150);                    // выход состоялся, включение только идёт
@@ -1324,7 +1364,8 @@ int main(void)
     RUN_TEST(test_stop_two_windows_alarm_then_button);
     RUN_TEST(test_stop_two_windows_button_then_button);
     RUN_TEST(test_stop_two_windows_button_then_alarm);
-    RUN_TEST(test_stop_button_long_hold_wakes_on_release);
+    RUN_TEST(test_stop_button_long_hold_wakes_on_confirm);
+    RUN_TEST(test_stop_button_very_long_hold_reaches_force_off);
     RUN_TEST(test_stop_alarm_wake_mid_hold_release_after_working);
     RUN_TEST(test_stop_alarm_wake_mid_hold_release_before_working);
     RUN_TEST(test_stop_deadline_fires_via_wut_ticks);

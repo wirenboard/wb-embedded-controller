@@ -117,6 +117,7 @@ struct wbec_ctx {
     // (в !linux_booted-ветке это немедленный hard off - стенд 2026-07-09).
     // Глотаем события кнопки до наблюдаемого отпускания.
     bool pwrkey_swallow;
+    systime_t pwrkey_swallow_ts;
     // Взводится при пробуждении из suspend-to-off, чтобы подавить
     // звуковой сигнал включения на этом входе в WBEC_STATE_WORKING.
     // ПОЧЕМУ это критично: resume из suspend-to-off — это ре-инициализация
@@ -521,11 +522,20 @@ void wbec_do_periodic_work(void)
 
         if (wbec_ctx.pwrkey_swallow) {
             // Хвост нажатия, пережившего окно сна: глотаем «короткое нажатие»
-            // от его отпускания и признак удержания, пока кнопку не отпустят.
-            // Долгое нажатие (принудительное выключение) обрабатывается раньше
-            // по циклу в linux_cpu_pwr_seq_do_periodic_work и не глотается.
+            // до наблюдаемого отпускания. Нажатие могло быть ещё НЕ
+            // подтверждённым на выходе из окна (сырой уровень нажат, антидребезг
+            // не истёк) - тогда антидребезженный уровень читается «отпущено» ещё
+            // до PWRKEY_DEBOUNCE_MS после реального начала нажатия. Поэтому
+            // снимаем глотание только после того, как уровень непрерывно
+            // «отпущено» дольше антидребезга с запасом - к этому моменту сырое
+            // нажатие «в полёте» невозможно. Долгое нажатие (принудительное
+            // выключение) обрабатывается раньше по циклу в
+            // linux_cpu_pwr_seq_do_periodic_work и не глотается.
             (void)pwrkey_handle_short_press();
-            if (!pwrkey_pressed()) {
+            if (pwrkey_pressed()) {
+                wbec_ctx.pwrkey_swallow_ts = systick_get_system_time_ms();
+            } else if (systick_get_time_since_timestamp(wbec_ctx.pwrkey_swallow_ts) >
+                       (PWRKEY_DEBOUNCE_MS + 200)) {
                 wbec_ctx.pwrkey_swallow = false;
                 console_print_w_prefix("DIAG pk swallow released\r\n");
             }
@@ -736,7 +746,15 @@ void wbec_do_periodic_work(void)
 
             // Классификация пробуждения.
             bool alarm = rtc_alarm_take_fired();
-            bool button = pwrkey_handle_short_press();
+            // Кнопка: пробуждение по ПОДТВЕРЖДЕНИЮ нажатия - антидребезженный
+            // уровень «нажато» (+500 мс удержания) после фронта, разбудившего
+            // EC, - а НЕ по отпусканию. UX-контракт (Evgeny, 2026-07-09):
+            // «нажал - услышал бип (кнопка ещё в руке) - отпустил». Бип звучит
+            // на возврате 3.3В (~+0.3 с после подтверждения), пока держат.
+            // Резервно потребляем и защёлку короткого нажатия - отпускание,
+            // успевшее пройти целиком (защёлка не должна пережить окно).
+            bool button = (wbec_ctx.stop_button_wake && pwrkey_pressed()) ||
+                          pwrkey_handle_short_press();
             // Дедлайн — по накопленным тикам WUT, НЕ по systick (в Stop мёртв):
             // suspend_timeout_ms уже с запасом +10 с (см. запись SUSPEND_CTRL).
             bool deadline = ((uint64_t)wbec_ctx.suspend_wut_ticks *
@@ -744,6 +762,12 @@ void wbec_do_periodic_work(void)
                             wbec_ctx.suspend_timeout_ms;
 
             if (alarm || button || deadline) {
+                // Нажатие «в полёте» на момент выхода: уровень уже нажат ИЛИ
+                // фронт видели, но антидребезг ещё не подтвердил (пробуждение
+                // по будильнику/дедлайну посреди начинающегося нажатия). Его
+                // подтверждение и отпускание придут ПОСЛЕ выхода и должны быть
+                // проглочены (см. pwrkey_swallow ниже).
+                bool press_in_flight = pwrkey_pressed() || wbec_ctx.stop_button_wake;
                 wbec_ctx.suspend_mode = false;
                 wbec_ctx.suspend_off_mode = false;
                 // Разоружаем «сон начался»: пробуждение - это resume того же
@@ -807,13 +831,15 @@ void wbec_do_periodic_work(void)
                 console_print("\r\n");
                 wbec_ctx.pwrkey_pressed = false;
                 irq_clear_flags(1u << IRQ_PWR_OFF_REQ);
-                // Если кнопка ещё удерживается (пробуждение по будильнику/
-                // дедлайну посреди удержания - на стенде pk_lvl=1 при
-                // cause=ALARM), её отпускание придёт после resume: глотаем
-                // события кнопки до наблюдаемого отпускания (см. WORKING).
-                wbec_ctx.pwrkey_swallow = pwrkey_pressed();
+                // Если нажатие ещё «в полёте» (кнопка удерживается - теперь
+                // это ШТАТНЫЙ случай кнопочного пробуждения-по-подтверждению, -
+                // или фронт видели без подтверждения), его подтверждение/
+                // отпускание придёт после resume: глотаем события кнопки до
+                // наблюдаемого отпускания (см. WORKING).
+                wbec_ctx.pwrkey_swallow = press_in_flight;
+                wbec_ctx.pwrkey_swallow_ts = systick_get_system_time_ms();
                 if (wbec_ctx.pwrkey_swallow) {
-                    console_print_w_prefix("DIAG pk swallow armed (held at exit)\r\n");
+                    console_print_w_prefix("DIAG pk swallow armed (press in flight at exit)\r\n");
                 }
                 // Возвращаем выходы под штатное управление и снимаем маску
                 // SoC-CS EXTI; резервный WUT-дедлайн больше не нужен.
