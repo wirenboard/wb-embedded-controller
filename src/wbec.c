@@ -150,6 +150,9 @@ static void new_state(enum wbec_state s)
         // (проверено на железе). Флаг взводится на пути пробуждения suspend-to-off.
         if (!wbec_ctx.suspend_resume_no_beep) {
             buzzer_beep(EC_BUZZER_BEEP_FREQ, EC_BUZZER_BEEP_POWERON_MS);
+        } else {
+            // DIAGNOSTIC: бип входа в WORKING подавлен (resume)
+            console_print_w_prefix("DIAG WORKING-entry beep suppressed (resume)\r\n");
         }
         wbec_ctx.suspend_resume_no_beep = false;
         linux_poweron_handler();
@@ -517,6 +520,13 @@ void wbec_do_periodic_work(void)
             // Если выполняется долгое нажатие, то есть шанс что линукс успеет
             // корректно выключиться
             if (pwrkey_pressed()) {
+                // DIAGNOSTIC: печатаем только первое взведение (без флуда)
+                if (!(irq_get_flags() & (1u << IRQ_PWR_OFF_REQ))) {
+                    console_print_w_prefix("DIAG PWR_OFF_REQ latched (running-state handler) susp=");
+                    console_print_dec(wbec_ctx.suspend_mode ? 1 : 0);
+                    console_print_dec(wbec_ctx.suspend_started ? 1 : 0);
+                    console_print("\r\n");
+                }
                 wbec_ctx.pwrkey_pressed = true;
                 wbec_ctx.pwrkey_pressed_timestamp = systick_get_system_time_ms();
                 irq_set_flag(IRQ_PWR_OFF_REQ);
@@ -732,6 +742,18 @@ void wbec_do_periodic_work(void)
                 // в WORKING сорвёт ре-инициализацию DRAM и уронит плату в
                 // cold-boot. Подавляем сигнал включения (см. new_state()).
                 wbec_ctx.suspend_resume_no_beep = true;
+                // DIAGNOSTIC (будет откачен): причина выхода + сырые состояния
+                console_print_w_prefix("DIAG exit cause=");
+                console_print(alarm ? "ALARM" : (button ? "BUTTON" : "DEADLINE"));
+                console_print(" ticks=");
+                console_print_dec((int)wbec_ctx.suspend_wut_ticks);
+                console_print(" pk_lvl=");
+                console_print_dec(pwrkey_pressed() ? 1 : 0);
+                console_print(" irqf=");
+                console_print_dec((int)irq_get_flags());
+                console_print(" grace=");
+                console_print_dec(wbec_ctx.stop_button_wake ? 1 : 0);
+                console_print("\r\n");
                 if (alarm) {
                     wbec_ctx.poweron_reason = REASON_RTC_ALARM;
                 } else if (button) {
@@ -761,6 +783,12 @@ void wbec_do_periodic_work(void)
                 // по-прежнему доставляется как раньше: этот сброс происходит
                 // только на выходе из окна suspend-to-off. То же скрытое
                 // поведение есть и на базовой a655128 (busy-poll) - см. коммит.
+                // DIAGNOSTIC: что именно гасим на выходе окна
+                console_print_w_prefix("DIAG exit-clear pk_pressed=");
+                console_print_dec(wbec_ctx.pwrkey_pressed ? 1 : 0);
+                console_print(" irqf_before=");
+                console_print_dec((int)irq_get_flags());
+                console_print("\r\n");
                 wbec_ctx.pwrkey_pressed = false;
                 irq_clear_flags(1u << IRQ_PWR_OFF_REQ);
                 // Возвращаем выходы под штатное управление и снимаем маску
@@ -785,6 +813,8 @@ void wbec_do_periodic_work(void)
             if (mcu_stop_take_button_wake()) {
                 wbec_ctx.stop_button_wake = true;
                 wbec_ctx.stop_button_wake_ts = systick_get_system_time_ms();
+                // DIAGNOSTIC: EC разбужен фронтом кнопки, ждём антидребезг
+                console_print_w_prefix("DIAG btn-edge wake, grace begins\r\n");
             }
             if (wbec_ctx.stop_button_wake) {
                 if (systick_get_time_since_timestamp(wbec_ctx.stop_button_wake_ts) <
@@ -793,6 +823,8 @@ void wbec_do_periodic_work(void)
                 }
                 // Нажатие не подтвердилось за окно ожидания — снова спим.
                 wbec_ctx.stop_button_wake = false;
+                // DIAGNOSTIC: антидребезг не подтвердил нажатие за grace-окно
+                console_print_w_prefix("DIAG grace expired, no press, re-enter Stop\r\n");
             }
 
             // Реальной причины нет: кормим IWDG и уходим в Stop до следующего
@@ -803,6 +835,10 @@ void wbec_do_periodic_work(void)
             mcu_stop_enter();                       // E2-E5 + восстановление
             if (mcu_stop_take_wut_tick()) {
                 wbec_ctx.suspend_wut_ticks++;       // W7: тик дедлайна
+                // DIAGNOSTIC: кормящий тик WUT
+                console_print_w_prefix("DIAG wut-tick ");
+                console_print_dec((int)wbec_ctx.suspend_wut_ticks);
+                console_print("\r\n");
             }
             break;
         }

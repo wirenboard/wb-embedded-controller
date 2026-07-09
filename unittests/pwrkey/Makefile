@@ -14,6 +14,7 @@ UTEST_HELPERS_DIR = ../utest_helpers
 AUX_SRC += $(UTEST_HELPERS_DIR)/gpio/utest_gpio.c
 AUX_SRC += $(UTEST_HELPERS_DIR)/systick/utest_systick.c
 AUX_SRC += $(UTEST_HELPERS_DIR)/wbmcu_system/utest_wbmcu_system.c
+AUX_SRC += $(UTEST_HELPERS_DIR)/console/utest_console.c
 
 # Include directories
 INC += .
@@ -21,6 +22,7 @@ INC += $(UTEST_HELPERS_DIR)
 INC += $(UTEST_HELPERS_DIR)/wbmcu_system
 INC += $(UTEST_HELPERS_DIR)/gpio
 INC += $(UTEST_HELPERS_DIR)/systick
+INC += $(UTEST_HELPERS_DIR)/console
 INC += $(PROJ_DIR)/include
 INC += $(PROJ_DIR)/system/include
 INC += $(PROJ_DIR)

@@ -7,6 +7,7 @@
 #include "systick.h"
 #include "regmap-int.h"
 #include "rcc.h"
+#include "console.h"
 #include <stdbool.h>
 
 static const gpio_pin_t buzzer_gpio = { EC_GPIO_BUZZER };
@@ -54,6 +55,14 @@ void buzzer_init(void)
 
 void buzzer_beep(uint16_t freq, uint16_t duration_ms)
 {
+    // DIAGNOSTIC (будет откачен): фиксируем сам факт и параметры вызова
+    console_print_w_prefix("DIAG beep f=");
+    console_print_dec(freq);
+    console_print(" d=");
+    console_print_dec(duration_ms);
+    console_print(" sysclk=");
+    console_print_dec((int)(SystemCoreClock / 1000000u));
+    console_print("\r\n");
     buzzer_ctx.beep_in_progress = true;
     buzzer_ctx.beep_start_time = systick_get_system_time_ms();
     buzzer_ctx.beep_duration_ms = duration_ms;

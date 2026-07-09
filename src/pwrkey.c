@@ -4,6 +4,7 @@
 #include "systick.h"
 #include "assert.h"
 #include "buzzer.h"
+#include "console.h"
 #include "wbmcu_system.h"
 
 /**
@@ -108,6 +109,8 @@ static inline void handle_presses(enum pwrkey_state gpio_debounced_state)
             // If button pressed - save timestamp
             logic_ctx.timestamp = systick_get_system_time_ms();
             logic_ctx.press_state = PRESS_STATE_PRESS_BEGIN;
+            // DIAGNOSTIC (будет откачен)
+            console_print_w_prefix("DIAG pk press-begin\r\n");
             buzzer_beep(EC_BUZZER_BEEP_FREQ, EC_BUZZER_BEEP_SHORT_PRESS_MS);
         }
 
@@ -119,6 +122,8 @@ static inline void handle_presses(enum pwrkey_state gpio_debounced_state)
         {
             if (logic_ctx.press_state == PRESS_STATE_PRESS_BEGIN) {
                 logic_ctx.short_pressed_flag = 1;
+                // DIAGNOSTIC (будет откачен)
+                console_print_w_prefix("DIAG pk short-press latched\r\n");
             }
             logic_ctx.press_state = PRESS_STATE_NO_PRESS;
         }
