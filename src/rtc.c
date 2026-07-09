@@ -291,6 +291,25 @@ void rtc_clear_alarm_flag(void)
     RTC->SCR = RTC_SCR_CALRAF;
 }
 
+void rtc_mask_alarm_irq(void)
+{
+    // Снимает разрешение прерывания будильника (ALRAIE), НЕ трогая флаг ALRAF.
+    // RTC_CR защищён от записи (WPR держится заблокированным в установившемся
+    // режиме), поэтому снимаем защиту на время записи — голая запись RTC->CR без
+    // разблокировки WPR аппаратно игнорируется.
+    //
+    // Используется ISR режима Stop: прямая линия EXTI19 будильника равна
+    // (ALRAF & ALRAIE); снятие ALRAIE снимает линию, но защёлку ALRAF сохраняет —
+    // её читает опросчик rtc_alarm_do_periodic_work в главном цикле, чтобы
+    // распознать пробуждение по будильнику. ALRAIE снова взводится при
+    // программировании следующего будильника (rtc_set_alarm).
+    //
+    // Смена ALRAIE не требует INIT-режима (в отличие от календаря/PRER/WUT).
+    disable_wpr();
+    RTC->CR &= ~RTC_CR_ALRAIE;
+    enable_wpr();
+}
+
 uint16_t rtc_get_offset(void)
 {
     return RTC->CALR;

@@ -12,6 +12,7 @@
 #include "regmap-int.h"
 #include "wbmz-common.h"
 #include "wdt-stm32.h"
+#include "buzzer.h"
 
 static const gpio_pin_t gpio_linux_power = { EC_GPIO_LINUX_POWER };
 static const gpio_pin_t gpio_pmic_pwron = { EC_GPIO_LINUX_PMIC_PWRON };
@@ -27,6 +28,7 @@ enum pwr_state {
     PS_ON_STEP1_WAIT_3V3,               // Ждём, пока появится 3.3В
     PS_ON_STEP2_PMIC_PWRON,             // Если 3.3В не появляется, пробуем включить PMIC "нажатием" на PWRON
     PS_ON_STEP3_PMIC_PWRON_OFF_WAIT,    // Если и это не помогло, отпускаем PWRON и делаем несколько попыток
+    PS_WAKE_BEEP_WAIT,                  // Бип-подтверждение кнопочного пробуждения (3.3В уже есть, SoC ещё в сбросе)
     PS_ON_COMPLETE,
 
     PS_RESET_5V_WAIT,                   // Нужно при перезаргрузке - выключаем 5В и ждём разрядку линий
@@ -39,6 +41,8 @@ struct pwr_ctx {
     // импульс на PWROK - PMIC при выходе из сна восстанавливает
     // питание, но не выдаёт сброс, и SoC сам не стартует
     bool wake_pending;
+    // Бип-подтверждение кнопочного пробуждения, отложенный до возврата 3.3В
+    bool wake_beep;
     enum pwr_state state;
     systime_t timestamp;
     unsigned attempt;
@@ -124,6 +128,11 @@ void linux_cpu_pwr_seq_off_and_goto_standby(uint16_t wakeup_after_s)
     PWR->CR3 |= PWR_CR3_APC;
 
     mcu_goto_standby(wakeup_after_s);
+}
+
+void linux_cpu_pwr_seq_wake_beep_request(void)
+{
+    pwr_ctx.wake_beep = true;
 }
 
 /**
@@ -293,15 +302,42 @@ void linux_cpu_pwr_seq_do_periodic_work(void)
                 // Питание восстановлено после сна PMIC: SoC ещё в
                 // сбросе, толкаем его импульсом на PWROK
                 pwr_ctx.wake_pending = false;
+                if (pwr_ctx.wake_beep) {
+                    // Кнопочное пробуждение: первый момент, когда пищалка
+                    // (запитана от 3.3В!) может звучать. SoC ещё в сбросе,
+                    // DRAM в автономном самообновлении - безопасно (f3face8).
+                    pwr_ctx.wake_beep = false;
+                    buzzer_beep(EC_BUZZER_BEEP_FREQ, EC_BUZZER_BEEP_SUSPEND_WAKE_MS);
+                    new_state(PS_WAKE_BEEP_WAIT);
+                    break;
+                }
                 pmic_reset_gpio_on();
                 new_state(PS_WARM_RESET_PULSE);
                 break;
             }
             // Если 3.3В появилось, то считаем что питание включено
             new_state(PS_ON_COMPLETE);
+            break;
+        }
+        if (pwr_ctx.wake_pending) {
+            // Пробуждение из suspend-to-off: 5В не пропадало, PMIC спит и сам
+            // 3.3В никогда не поднимет - секундное ожидание самозапуска здесь
+            // гарантированно мёртвое время (~1 с на КАЖДОМ пробуждении,
+            // стенд 2026-07-08). Жмём PWRON сразу; показание V33 к этому
+            // моменту уже отфильтровано (вход в do_periodic_work закрыт
+            // vmon_ready() - 100 мс устаканивания после Stop), а ретраи
+            // STEP2/STEP3 остаются штатным fallback. Случай «3.3В присутствует»
+            // (поздний отказ SoC от сна) обработан веткой выше: импульс PWROK
+            // без нажатия.
+            console_print_w_prefix("Suspend-to-off: PMIC is sleeping, press PWRON now\r\n");
+            pmic_pwron_gpio_on();
+            pwr_ctx.attempt = 0;
+            new_state(PS_ON_STEP2_PMIC_PWRON);
+            break;
         }
         if (in_state_time_ms() > 1000) {
-            // Если 3.3В не появилось, то попробуем включить PMIC через PWRON
+            // Обычное включение (после подачи 5В PMIC должен стартовать сам).
+            // Если 3.3В не появилось за 1 с - пробуем включить PMIC через PWRON
             console_print_w_prefix("No voltage on 3.3V line, try to switch on PMIC throught PWRON\r\n");
             pmic_pwron_gpio_on();
             pwr_ctx.attempt = 0;
@@ -318,6 +354,14 @@ void linux_cpu_pwr_seq_do_periodic_work(void)
             pmic_pwron_gpio_off();
             if (pwr_ctx.wake_pending) {
                 pwr_ctx.wake_pending = false;
+                if (pwr_ctx.wake_beep) {
+                    // См. PS_ON_STEP1_WAIT_3V3: бип при вернувшемся 3.3В,
+                    // SoC ещё в сбросе; PWROK - после бипа.
+                    pwr_ctx.wake_beep = false;
+                    buzzer_beep(EC_BUZZER_BEEP_FREQ, EC_BUZZER_BEEP_SUSPEND_WAKE_MS);
+                    new_state(PS_WAKE_BEEP_WAIT);
+                    break;
+                }
                 pmic_reset_gpio_on();
                 new_state(PS_WARM_RESET_PULSE);
                 break;
@@ -346,6 +390,17 @@ void linux_cpu_pwr_seq_do_periodic_work(void)
             console_print_w_prefix("One more attempt to switch on PMIC throught PWRON\r\n");
             pmic_pwron_gpio_on();
             new_state(PS_ON_STEP2_PMIC_PWRON);
+        }
+        break;
+
+    // Бип-подтверждение кнопочного пробуждения: 3.3В вернулось (пищалка
+    // запитана), SoC удержан в сбросе, DRAM в самообновлении - ре-инициализация
+    // ещё не начата, звук безопасен (урок f3face8). Импульс PWROK откладывается
+    // до конца бипа (+~120 мс к resume).
+    case PS_WAKE_BEEP_WAIT:
+        if (in_state_time_ms() > (EC_BUZZER_BEEP_SUSPEND_WAKE_MS + 20)) {
+            pmic_reset_gpio_on();
+            new_state(PS_WARM_RESET_PULSE);
         }
         break;
 

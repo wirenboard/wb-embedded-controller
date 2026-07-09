@@ -10,6 +10,11 @@ static struct {
     bool alarm_flag_cleared;
     bool periodic_wakeup_disabled;
 
+    // Периодическое пробуждение (RTC WUT): в режиме Stop служит и тиком
+    // дедлайна, и кормлением IWDG. Запоминаем последний запрошенный период.
+    bool periodic_wakeup_set;
+    uint16_t periodic_wakeup_period_s;
+
     // Track what was set
     bool datetime_was_set;
     struct rtc_time datetime_set_value;
@@ -89,6 +94,14 @@ bool utest_rtc_get_periodic_wakeup_disabled(void)
     return rtc_state.periodic_wakeup_disabled;
 }
 
+bool utest_rtc_get_periodic_wakeup_set(uint16_t * period_s)
+{
+    if (period_s != NULL && rtc_state.periodic_wakeup_set) {
+        *period_s = rtc_state.periodic_wakeup_period_s;
+    }
+    return rtc_state.periodic_wakeup_set;
+}
+
 // Мок-реализация RTC API
 void rtc_init(void)
 {
@@ -161,6 +174,10 @@ void rtc_enable_pc13_1hz_clkout(void) {}
 void rtc_disable_pc13_1hz_clkout(void) {}
 void rtc_enable_pa4_1hz_clkout(void) {}
 void rtc_disable_pa4_1hz_clkout(void) {}
-void rtc_set_periodic_wakeup(uint16_t period_s) { (void)period_s; }
+void rtc_set_periodic_wakeup(uint16_t period_s)
+{
+    rtc_state.periodic_wakeup_set = true;
+    rtc_state.periodic_wakeup_period_s = period_s;
+}
 void rtc_save_to_tamper_reg(uint8_t index, uint32_t data) { (void)index; (void)data; }
 uint32_t rtc_get_tamper_reg(uint8_t index) { (void)index; return 0; }

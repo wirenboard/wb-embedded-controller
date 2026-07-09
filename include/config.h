@@ -65,6 +65,15 @@
 #define WBEC_PERIODIC_WAKEUP_FIRST_TIMEOUT_S    5
 #define WBEC_PERIODIC_WAKEUP_NEXT_TIMEOUT_S     2
 
+// suspend-to-off: период периодического пробуждения (RTC WUT) во время окна
+// сна в режиме STM32 Stop 1. Выбран < 10 с (период аппаратного IWDG): каждое
+// пробуждение по WUT кормит IWDG и продвигает дедлайн-бэкстоп (systick в Stop
+// не идёт). 4 с даёт запас к IWDG и пренебрежимо мало по току.
+#define WBEC_SUSPEND_STOP_FEED_PERIOD_S         4
+// Сколько EC остаётся бодрствовать после пробуждения по фронту кнопки, давая
+// антидребезгу (500 мс) подтвердить короткое нажатие, прежде чем снова уснуть.
+#define WBEC_SUSPEND_STOP_BUTTON_GRACE_MS       700
+
 // Число попыток перезапуска PMIC при пропадании 3.3В
 // Если за указанное время 3.3В пропадёт больше, чем указанное число раз,
 // то EC выключит питание и уйдёт в спящий режим
@@ -74,6 +83,11 @@
 // Пищалка
 #define EC_BUZZER_BEEP_FREQ                     1000
 #define EC_BUZZER_BEEP_POWERON_MS               100
+// suspend-to-off: бип-подтверждение пробуждения по кнопке. Звучит в такте
+// классификации (SoC ещё в сбросе, PMIC спит) и обязан закончиться до нажатия
+// PWRON (~105 мс после классификации) - задолго до хрупкой ре-инициализации
+// DRAM в SPL (~0.6 с), которую бип срывает (провал f3face8).
+#define EC_BUZZER_BEEP_SUSPEND_WAKE_MS          100
 #define EC_BUZZER_BEEP_SHORT_PRESS_MS           300
 #define EC_BUZZER_BEEP_LONG_PRESS_MS            1000
 

@@ -14,3 +14,8 @@ int16_t temperature_control_get_temperature_c_x100(void);
 // При force_enable = false нагреватель управляется по температуре
 void temperature_control_heater_force_control(bool force_enable);
 
+// suspend-to-off: при on = true выключает нагреватель и держит его выключенным
+// на всё окно сна (термостат и NTC в Stop не работают); при on = false
+// возвращает управление по температуре.
+void temperature_control_suspend(bool on);
+

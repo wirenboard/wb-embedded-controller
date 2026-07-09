@@ -15,6 +15,14 @@
 
 void utest_linux_power_control_reset_state(void);
 
+// Заглушка пищалки: реальный linux-power-control.c пищит бип-подтверждение
+// кнопочного пробуждения (PS_WAKE_BEEP_WAIT); здесь звук не проверяется.
+void buzzer_beep(uint16_t freq, uint16_t duration_ms)
+{
+    (void)freq;
+    (void)duration_ms;
+}
+
 static const gpio_pin_t linux_power_gpio = {EC_GPIO_LINUX_POWER};
 static const gpio_pin_t pmic_pwron_gpio = {EC_GPIO_LINUX_PMIC_PWRON};
 static const gpio_pin_t pmic_reset_gpio = {EC_GPIO_LINUX_PMIC_RESET_PWROK};

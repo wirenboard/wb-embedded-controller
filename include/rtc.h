@@ -35,6 +35,10 @@ void rtc_set_alarm(const struct rtc_alarm * alarm);
 uint16_t rtc_get_offset(void);
 void rtc_set_offset(uint16_t offeset);
 void rtc_clear_alarm_flag(void);
+// Снимает ALRAIE (разрешение прерывания будильника) под разблокировкой WPR, НЕ
+// трогая флаг ALRAF. Снимает прямую линию EXTI19 будильника в режиме Stop,
+// сохраняя защёлку ALRAF для опросчика rtc_alarm_do_periodic_work.
+void rtc_mask_alarm_irq(void);
 void rtc_enable_pc13_1hz_clkout(void);
 void rtc_disable_pc13_1hz_clkout(void);
 void rtc_enable_pa4_1hz_clkout(void);

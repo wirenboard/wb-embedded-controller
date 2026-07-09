@@ -48,6 +48,12 @@ bool vmon_ready(void)
     return vmon_initialized;
 }
 
+void vmon_suspend_rearm_settle(void)
+{
+    vmon_initialized = 0;
+    start_timestamp = systick_get_system_time_ms();
+}
+
 bool vmon_get_ch_status(enum vmon_channel ch)
 {
     return vmon_ch_status[ch];

@@ -17,3 +17,7 @@ bool utest_rtc_get_was_alarm_set(struct rtc_alarm * alarm);
 bool utest_rtc_get_was_offset_set(uint16_t * offset);
 bool utest_rtc_was_alarm_flag_cleared(void);
 bool utest_rtc_get_periodic_wakeup_disabled(void);
+
+// Возвращает true, если программировался период RTC WUT (rtc_set_periodic_wakeup);
+// в *period_s кладёт последний запрошенный период в секундах.
+bool utest_rtc_get_periodic_wakeup_set(uint16_t * period_s);

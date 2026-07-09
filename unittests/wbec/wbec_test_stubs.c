@@ -87,6 +87,8 @@ void linux_cpu_pwr_seq_off_and_goto_standby(uint16_t wakeup_after_s)
     }
 }
 
+void linux_cpu_pwr_seq_wake_beep_request(void) {}
+
 void linux_cpu_pwr_seq_on(void)
 {
     linux_pwr_state.pwr_on_called = true;
@@ -150,6 +152,10 @@ int16_t temperature_control_get_temperature_c_x100(void)
 {
     return temp_ctrl_state.temperature_c_x100;
 }
+
+// suspend-to-off: перевод управляемых выходов в безопасное состояние на окно сна
+void temperature_control_suspend(bool on) { (void)on; }
+void gpio_suspend(bool on) { (void)on; }
 
 static bool alarm_enabled = false;
 
