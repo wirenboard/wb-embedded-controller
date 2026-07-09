@@ -91,6 +91,15 @@ bool pwrkey_ready(void)
 
 bool pwrkey_pressed(void)
 {
+    // На железе pwrkey_pressed() возвращает АНТИДРЕБЕЗЖЕННЫЙ уровень
+    // (gpio_ctx.logic_state), а не сырой GPIO. С включённой моделью зеркалим
+    // это: уровень меняется через PWRKEY_DEBOUNCE_MS после сырого, и «короткое
+    // нажатие» фиксируется в том же проходе, в котором уровень становится
+    // released - инвариант, на который опирается «глотание» хвоста нажатия
+    // после окна сна. Раньше мок отдавал сырой уровень (mock gap).
+    if (dbnc_model_enabled) {
+        return dbnc_logic == DBNC_PRESSED;
+    }
     return pwrkey_is_pressed;
 }
 

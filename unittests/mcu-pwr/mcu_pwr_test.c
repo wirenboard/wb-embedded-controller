@@ -52,6 +52,15 @@ static void test_stop_prepare_arms_exti_and_nvic(void)
         "RTC ISR must be registered");
     TEST_ASSERT_NOT_NULL_MESSAGE(utest_nvic_get_handler(EXTI0_1_IRQn),
         "button ISR must be registered");
+
+    // SPI2 (regmap-движок) обязан быть заглушен на окно: у обесточенного SoC
+    // линии SPI висят и наводки могут натактировать мусорные regmap-записи
+    // (фантомное перепрограммирование будильника, стенд 2026-07-09).
+    TEST_ASSERT_FALSE_MESSAGE(utest_nvic_is_enabled(SPI2_IRQn),
+        "SPI2 NVIC must be disabled for the sleep window");
+    TEST_ASSERT_GREATER_OR_EQUAL_UINT32_MESSAGE(1,
+        utest_nvic_get_disable_count(SPI2_IRQn),
+        "prepare must actually issue NVIC_DisableIRQ for SPI2");
 }
 
 // ---- Вход в Stop 1: точные записи регистров сна ----
@@ -211,6 +220,8 @@ static void test_stop_finish_restores_masks(void)
     TEST_ASSERT_GREATER_OR_EQUAL_UINT32_MESSAGE(1,
         utest_nvic_get_disable_count(RTC_TAMP_IRQn),
         "finish must actually issue NVIC_DisableIRQ for RTC");
+    TEST_ASSERT_TRUE_MESSAGE(utest_nvic_is_enabled(SPI2_IRQn),
+        "finish must re-enable the SPI2 NVIC line (regmap comms restored)");
 }
 
 // ---- Два окна подряд: кнопка обязана работать после окна, завершённого

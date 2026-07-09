@@ -112,6 +112,11 @@ struct wbec_ctx {
     // не разберёт нажатие или не истечёт окно ожидания.
     bool stop_button_wake;
     systime_t stop_button_wake_ts;
+    // Кнопка физически удерживалась в момент выхода из окна сна: её отпускание
+    // придёт уже после resume и НЕ должно породить новое «короткое нажатие»
+    // (в !linux_booted-ветке это немедленный hard off - стенд 2026-07-09).
+    // Глотаем события кнопки до наблюдаемого отпускания.
+    bool pwrkey_swallow;
     // Взводится при пробуждении из suspend-to-off, чтобы подавить
     // звуковой сигнал включения на этом входе в WBEC_STATE_WORKING.
     // ПОЧЕМУ это критично: resume из suspend-to-off — это ре-инициализация
@@ -514,7 +519,17 @@ void wbec_do_periodic_work(void)
             wbec_ctx.linux_booted = true;
         }
 
-        if (wbec_ctx.linux_booted) {
+        if (wbec_ctx.pwrkey_swallow) {
+            // Хвост нажатия, пережившего окно сна: глотаем «короткое нажатие»
+            // от его отпускания и признак удержания, пока кнопку не отпустят.
+            // Долгое нажатие (принудительное выключение) обрабатывается раньше
+            // по циклу в linux_cpu_pwr_seq_do_periodic_work и не глотается.
+            (void)pwrkey_handle_short_press();
+            if (!pwrkey_pressed()) {
+                wbec_ctx.pwrkey_swallow = false;
+                console_print_w_prefix("DIAG pk swallow released\r\n");
+            }
+        } else if (wbec_ctx.linux_booted) {
             // Если линукс загружен - отправляем запрос на выключение
             // При этом не ждём полноценного нажатия, а отправляем запрос сразу
             // Если выполняется долгое нажатие, то есть шанс что линукс успеет
@@ -759,16 +774,17 @@ void wbec_do_periodic_work(void)
                 } else if (button) {
                     wbec_ctx.poweron_reason = REASON_POWER_KEY;
                     // Требование UX: нажатие в окне сна -> бип + пробуждение.
-                    // Пищим прямо в такте классификации: SoC ещё в сбросе,
-                    // PMIC спит, DRAM в самообновлении; PWRON будет нажат
-                    // через ~105 мс (устаканивание vmon), а хрупкая
-                    // ре-инициализация DRAM в SPL начнётся не раньше ~0.6 с -
-                    // бип в 100 мс заканчивается до обеих. Бип на входе в
-                    // WORKING для этого пробуждения остаётся ПОДАВЛЕННЫМ
-                    // (suspend_resume_no_beep): он звучал бы ровно во время
-                    // ре-инициализации DRAM (провал f3face8). Будильник и
-                    // дедлайн будят МОЛЧА - необслуживаемые пробуждения.
-                    buzzer_beep(EC_BUZZER_BEEP_FREQ, EC_BUZZER_BEEP_SUSPEND_WAKE_MS);
+                    // Пищать ЗДЕСЬ бессмысленно: пищалка (SG1) запитана от
+                    // 3.3В, которое во время окна ВЫКЛЮЧЕНО (стенд 2026-07-09:
+                    // "DIAG beep" с валидными параметрами - и тишина). Бип
+                    // откладывается в последовательность пробуждения: он
+                    // прозвучит в первый момент возврата 3.3В, пока SoC ещё в
+                    // сбросе (DRAM в самообновлении, ре-инициализация не
+                    // начата - безопасно, урок f3face8), а PWROK - после бипа.
+                    // Бип на входе в WORKING остаётся ПОДАВЛЕННЫМ
+                    // (suspend_resume_no_beep). Будильник и дедлайн будят
+                    // МОЛЧА - необслуживаемые пробуждения.
+                    linux_cpu_pwr_seq_wake_beep_request();
                 } else {
                     wbec_ctx.poweron_reason = REASON_WATCHDOG;
                 }
@@ -791,6 +807,14 @@ void wbec_do_periodic_work(void)
                 console_print("\r\n");
                 wbec_ctx.pwrkey_pressed = false;
                 irq_clear_flags(1u << IRQ_PWR_OFF_REQ);
+                // Если кнопка ещё удерживается (пробуждение по будильнику/
+                // дедлайну посреди удержания - на стенде pk_lvl=1 при
+                // cause=ALARM), её отпускание придёт после resume: глотаем
+                // события кнопки до наблюдаемого отпускания (см. WORKING).
+                wbec_ctx.pwrkey_swallow = pwrkey_pressed();
+                if (wbec_ctx.pwrkey_swallow) {
+                    console_print_w_prefix("DIAG pk swallow armed (held at exit)\r\n");
+                }
                 // Возвращаем выходы под штатное управление и снимаем маску
                 // SoC-CS EXTI; резервный WUT-дедлайн больше не нужен.
                 temperature_control_suspend(false);
@@ -817,6 +841,15 @@ void wbec_do_periodic_work(void)
                 console_print_w_prefix("DIAG btn-edge wake, grace begins\r\n");
             }
             if (wbec_ctx.stop_button_wake) {
+                if (pwrkey_pressed()) {
+                    // Кнопка ещё УДЕРЖИВАЕТСЯ (антидребезженный уровень):
+                    // продлеваем окно ожидания - короткое нажатие фиксируется
+                    // только на ОТПУСКАНИИ. Иначе удержание дольше grace-окна
+                    // (~1.2 с) роняло EC обратно в Stop посреди нажатия
+                    // (стенд 2026-07-09 14:46: 4 подряд брошенных нажатия).
+                    wbec_ctx.stop_button_wake_ts = systick_get_system_time_ms();
+                    break;
+                }
                 if (systick_get_time_since_timestamp(wbec_ctx.stop_button_wake_ts) <
                     (PWRKEY_DEBOUNCE_MS + WBEC_SUSPEND_STOP_BUTTON_GRACE_MS)) {
                     break;      // остаёмся бодрствовать, ждём разбор нажатия

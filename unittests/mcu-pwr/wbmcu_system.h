@@ -15,6 +15,7 @@
 typedef enum {
     RTC_TAMP_IRQn = 2,      // RTC через линию EXTI 19
     EXTI0_1_IRQn  = 5,      // EXTI 0 и 1
+    SPI2_IRQn     = 26,     // SPI2 (regmap-движок; глушится на окно сна)
     UTEST_IRQn_COUNT = 32,
 } IRQn_Type;
 

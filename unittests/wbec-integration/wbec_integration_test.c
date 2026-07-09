@@ -1136,6 +1136,100 @@ static void test_stop_two_windows_button_then_alarm(void)
         "window 2 alarm wake must report REASON_RTC_ALARM");
 }
 
+// Регрессия (стенд 2026-07-09 14:46, главный убийца кнопки): удержание кнопки
+// ДОЛЬШЕ grace-окна (>1.2 с). Раньше окно ожидания отсчитывалось от фронта:
+// press-begin подтверждался на +500 мс, но короткое нажатие фиксируется только
+// на ОТПУСКАНИИ, и на +1200 мс EC уходил обратно в Stop ПОСРЕДИ УДЕРЖАНИЯ -
+// нажатие пропадало (4 подряд брошенных нажатия в логе). Прежние тесты держали
+// кнопку ровно DEBOUNCE+50 мс - укладывались в старое окно (mock gap).
+static void test_stop_button_long_hold_wakes_on_release(void)
+{
+    utest_pwrkey_enable_debounce_model(true);
+    sim_enter_off_mode_sleep(60);
+    uint32_t boots_before = sim.soc_boot_count;
+
+    utest_mcu_stop_set_button_wake(true);
+    utest_set_pwrkey_pressed(true);
+    sim_run_ms(50);
+    uint32_t enters_at_hold = utest_mcu_stop_get_enter_count();
+    sim_run_ms(2450);                   // удержание много дольше grace (1.2 с)
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(boots_before, sim.soc_boot_count,
+        "a held press must not wake the board before release");
+    // Ключевое свойство железа: пока кнопку ДЕРЖАТ, EC обязан бодрствовать.
+    // На железе уход в Stop посреди удержания теряет нажатие безвозвратно
+    // (отпускание - растущий фронт, EXTI0 вооружён только на падающий); мок
+    // этого не моделирует (pwrkey тикает и "во сне"), поэтому проверяем сам
+    // факт отсутствия ре-входа в Stop.
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(enters_at_hold, utest_mcu_stop_get_enter_count(),
+        "the EC must NOT re-enter Stop while the button is held (lost press on hardware)");
+
+    utest_set_pwrkey_pressed(false);
+    sim.pmic_crashed = false;
+    sim_run_ms(PWRKEY_DEBOUNCE_MS + 3000);
+
+    TEST_ASSERT_TRUE_MESSAGE(sim.soc_boot_count > boots_before,
+        "a press held longer than the grace window must still wake on release");
+    TEST_ASSERT_EQUAL_UINT16_MESSAGE(UTEST_REASON_POWER_KEY, get_poweron_reason_from_regmap(),
+        "long-hold button wake must report REASON_POWER_KEY");
+}
+
+// Регрессия (стенд, хвост нажатия): будильник будит ПОСРЕДИ удержания кнопки
+// (в логе pk_lvl=1 при cause=ALARM); отпускание приходит уже после resume и
+// раньше рождало новое «короткое нажатие» - в !linux_booted-ветке это
+// НЕМЕДЛЕННЫЙ hard off + standby («poweroff через 11 с после resume»).
+// Порядок 1: отпускание ПОСЛЕ входа в WORKING.
+static void test_stop_alarm_wake_mid_hold_release_after_working(void)
+{
+    utest_pwrkey_enable_debounce_model(true);
+    sim_enter_off_mode_sleep(60);
+    uint32_t boots_before = sim.soc_boot_count;
+
+    utest_mcu_stop_set_button_wake(true);
+    utest_set_pwrkey_pressed(true);
+    sim_run_ms(700);                    // нажатие подтверждено, кнопка держится
+    alarm_fired = true;                 // будильник посреди удержания
+    sim.pmic_crashed = false;
+    sim_run_ms(3000);                   // resume завершился, WORKING
+    TEST_ASSERT_TRUE_MESSAGE(sim.soc_boot_count > boots_before,
+        "the alarm must wake the board even while the button is held");
+    uint32_t boots_after_wake = sim.soc_boot_count;
+
+    utest_set_pwrkey_pressed(false);    // отпускание уже в рабочем состоянии
+    sim_run_ms(PWRKEY_DEBOUNCE_MS + 2000);
+
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(boots_after_wake, sim.soc_boot_count,
+        "the release of the wake-surviving press must not restart the board");
+    TEST_ASSERT_TRUE_MESSAGE(utest_gpio_get_output_state(gpio_5v) != 0,
+        "the release must NOT power the board off (hard off via !linux_booted)");
+    TEST_ASSERT_FALSE_MESSAGE(utest_irq_is_flag_set(IRQ_PWR_OFF_REQ),
+        "the release must not surface as a power-key event for Linux");
+}
+
+// Порядок 2: отпускание ДО входа в WORKING (во время последовательности
+// включения) - хвост дренируется на завершении включения (:489) либо глотается.
+static void test_stop_alarm_wake_mid_hold_release_before_working(void)
+{
+    utest_pwrkey_enable_debounce_model(true);
+    sim_enter_off_mode_sleep(60);
+    uint32_t boots_before = sim.soc_boot_count;
+
+    utest_mcu_stop_set_button_wake(true);
+    utest_set_pwrkey_pressed(true);
+    sim_run_ms(700);
+    alarm_fired = true;
+    sim.pmic_crashed = false;
+    sim_run_ms(150);                    // выход состоялся, включение только идёт
+    utest_set_pwrkey_pressed(false);    // отпускание до входа в WORKING
+    sim_run_ms(PWRKEY_DEBOUNCE_MS + 8000);
+
+    TEST_ASSERT_TRUE_MESSAGE(sim.soc_boot_count > boots_before,
+        "the alarm wake must complete normally");
+    TEST_ASSERT_TRUE_MESSAGE(utest_gpio_get_output_state(gpio_5v) != 0,
+        "the early release must NOT power the board off");
+    TEST_ASSERT_FALSE_MESSAGE(utest_irq_is_flag_set(IRQ_PWR_OFF_REQ),
+        "the early release must not surface as a power-key event for Linux");
+}
+
 // Дедлайн-бэкстоп: считается по накопленным тикам RTC WUT (systick в Stop
 // заморожен). После timeout_ms / (feed_period*1000) тиков WUT плата будится с
 // REASON_WATCHDOG. Регрессия: раньше дедлайн жил на systick, который в Stop
@@ -1230,6 +1324,9 @@ int main(void)
     RUN_TEST(test_stop_two_windows_alarm_then_button);
     RUN_TEST(test_stop_two_windows_button_then_button);
     RUN_TEST(test_stop_two_windows_button_then_alarm);
+    RUN_TEST(test_stop_button_long_hold_wakes_on_release);
+    RUN_TEST(test_stop_alarm_wake_mid_hold_release_after_working);
+    RUN_TEST(test_stop_alarm_wake_mid_hold_release_before_working);
     RUN_TEST(test_stop_deadline_fires_via_wut_ticks);
     RUN_TEST(test_stop_frozen_wut_never_fires_on_systick_alone);
     RUN_TEST(test_stop_feeds_iwdg_on_every_feed_tick);

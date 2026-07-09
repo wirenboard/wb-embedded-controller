@@ -14,12 +14,14 @@ UTEST_HELPERS_DIR = ../utest_helpers
 AUX_SRC += $(UTEST_HELPERS_DIR)/regmap/utest_regmap.c
 AUX_SRC += $(UTEST_HELPERS_DIR)/rtc/utest_rtc.c
 AUX_SRC += $(UTEST_HELPERS_DIR)/irq/utest_irq.c
+AUX_SRC += $(UTEST_HELPERS_DIR)/console/utest_console.c
 
 # Include directories
 INC += $(UTEST_HELPERS_DIR)
 INC += $(UTEST_HELPERS_DIR)/regmap
 INC += $(UTEST_HELPERS_DIR)/rtc
 INC += $(UTEST_HELPERS_DIR)/irq
+INC += $(UTEST_HELPERS_DIR)/console
 INC += $(PROJ_DIR)/include
 INC += $(PROJ_DIR)/system/include
 

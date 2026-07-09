@@ -136,6 +136,14 @@ void mcu_stop_window_prepare(void)
     // SoC во время сна тёмный, ложное пробуждение по CS не нужно. Снимаем маску
     // только на выходе по реальному пробуждению (mcu_stop_window_finish).
     EXTI->IMR1 &= ~EXTI_IMR1_IM9;
+
+    // Глушим и сам SPI2 (NVIC): у обесточенного SoC линии SPI висят, и в
+    // бодрствующие окна (grace кнопки, кормящие тики) наводки на SCK/CS могут
+    // натактировать в regmap-движок МУСОРНЫЕ ЗАПИСИ - главный подозреваемый
+    // фантомного перепрограммирования будильника (стенд 2026-07-09 14:47:
+    // ALRAF за 570 с до срока). Первый CS-фронт после resume выполняет
+    // reset_and_init_spi() - связь с SoC самовосстанавливается.
+    NVIC_DisableIRQ(SPI2_IRQn);
 }
 
 void mcu_stop_window_finish(void)
@@ -147,6 +155,7 @@ void mcu_stop_window_finish(void)
     NVIC_DisableIRQ(EXTI0_1_IRQn);
     NVIC_DisableIRQ(RTC_TAMP_IRQn);
     EXTI->IMR1 |= EXTI_IMR1_IM9;
+    NVIC_EnableIRQ(SPI2_IRQn);
     stop_wut_tick_pending = false;
     stop_button_wake_pending = false;
 }

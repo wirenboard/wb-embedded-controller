@@ -87,6 +87,8 @@ void linux_cpu_pwr_seq_off_and_goto_standby(uint16_t wakeup_after_s)
     }
 }
 
+void linux_cpu_pwr_seq_wake_beep_request(void) {}
+
 void linux_cpu_pwr_seq_on(void)
 {
     linux_pwr_state.pwr_on_called = true;
