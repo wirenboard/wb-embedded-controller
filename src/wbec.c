@@ -736,6 +736,17 @@ void wbec_do_periodic_work(void)
                     wbec_ctx.poweron_reason = REASON_RTC_ALARM;
                 } else if (button) {
                     wbec_ctx.poweron_reason = REASON_POWER_KEY;
+                    // Требование UX: нажатие в окне сна -> бип + пробуждение.
+                    // Пищим прямо в такте классификации: SoC ещё в сбросе,
+                    // PMIC спит, DRAM в самообновлении; PWRON будет нажат
+                    // через ~105 мс (устаканивание vmon), а хрупкая
+                    // ре-инициализация DRAM в SPL начнётся не раньше ~0.6 с -
+                    // бип в 100 мс заканчивается до обеих. Бип на входе в
+                    // WORKING для этого пробуждения остаётся ПОДАВЛЕННЫМ
+                    // (suspend_resume_no_beep): он звучал бы ровно во время
+                    // ре-инициализации DRAM (провал f3face8). Будильник и
+                    // дедлайн будят МОЛЧА - необслуживаемые пробуждения.
+                    buzzer_beep(EC_BUZZER_BEEP_FREQ, EC_BUZZER_BEEP_SUSPEND_WAKE_MS);
                 } else {
                     wbec_ctx.poweron_reason = REASON_WATCHDOG;
                 }

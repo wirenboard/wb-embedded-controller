@@ -83,6 +83,11 @@
 // Пищалка
 #define EC_BUZZER_BEEP_FREQ                     1000
 #define EC_BUZZER_BEEP_POWERON_MS               100
+// suspend-to-off: бип-подтверждение пробуждения по кнопке. Звучит в такте
+// классификации (SoC ещё в сбросе, PMIC спит) и обязан закончиться до нажатия
+// PWRON (~105 мс после классификации) - задолго до хрупкой ре-инициализации
+// DRAM в SPL (~0.6 с), которую бип срывает (провал f3face8).
+#define EC_BUZZER_BEEP_SUSPEND_WAKE_MS          100
 #define EC_BUZZER_BEEP_SHORT_PRESS_MS           300
 #define EC_BUZZER_BEEP_LONG_PRESS_MS            1000
 

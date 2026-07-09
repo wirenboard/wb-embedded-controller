@@ -148,7 +148,17 @@ void temperature_control_suspend(bool on) { heater_suspend_off = on; }
 void gpio_suspend(bool on) { v_out_suspend_off = on; }
 
 void usart_tx_buf_blocking(const void * buf, size_t size) { (void)buf; (void)size; }
-void buzzer_beep(uint16_t freq, uint16_t duration_ms) { (void)freq; (void)duration_ms; }
+// Пищалка: считаем бипы (бип подтверждения кнопочного пробуждения, бип
+// включения на входе в WORKING). На WB74 пищалки нет (заглушка в buzzer.h
+// съедает вызовы), поэтому проверки счётчика гейтятся на EC_GPIO_BUZZER.
+static uint32_t buzzer_beep_count;
+static uint16_t buzzer_last_beep_ms;
+void buzzer_beep(uint16_t freq, uint16_t duration_ms)
+{
+    (void)freq;
+    buzzer_beep_count++;
+    buzzer_last_beep_ms = duration_ms;
+}
 
 // ==================== Модель платы ====================
 
@@ -331,6 +341,8 @@ void utest_wdt_module_reset_state(void);
 void setUp(void)
 {
     memset(&sim, 0, sizeof(sim));
+    buzzer_beep_count = 0;
+    buzzer_last_beep_ms = 0;
     sim.check_invariants = true;
     working_entry_count = 0;
     last_working_entry_time = 0;
@@ -872,6 +884,13 @@ static void test_stop_window_arms_safe_and_wakes_on_fresh_alarm(void)
     TEST_ASSERT_FALSE_MESSAGE(v_out_suspend_off, "V_OUT control must be restored on wake");
     TEST_ASSERT_EQUAL_UINT16_MESSAGE(0, utest_mcu_get_standby_wakeup_time(),
         "no Standby must be requested across the whole window");
+
+#if defined EC_GPIO_BUZZER
+    // Необслуживаемое пробуждение (будильник) обязано быть БЕЗЗВУЧНЫМ: единственный
+    // бип за тест - вход в WORKING на холодной загрузке.
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(1, buzzer_beep_count,
+        "an alarm wake must be silent (no wake-confirm beep, WORKING re-entry suppressed)");
+#endif
 }
 
 // Кнопка PWRON: фронт EXTI0 будит ядро, но короткое нажатие подтверждается
@@ -912,6 +931,16 @@ static void test_stop_wake_by_button_edge_then_debounced_press(void)
         "a debounced short press must wake the board");
     TEST_ASSERT_EQUAL_UINT16_MESSAGE(UTEST_REASON_POWER_KEY, get_poweron_reason_from_regmap(),
         "button wake must report REASON_POWER_KEY");
+
+#if defined EC_GPIO_BUZZER
+    // Требование UX: кнопочное пробуждение подтверждается бипом в такте
+    // классификации; бип входа в WORKING при resume остаётся подавленным.
+    // 1 бип загрузки (WORKING холодного старта) + 1 бип кнопочного пробуждения.
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(2, buzzer_beep_count,
+        "button wake must beep exactly once at classification (plus the boot beep)");
+    TEST_ASSERT_EQUAL_UINT16_MESSAGE(EC_BUZZER_BEEP_SUSPEND_WAKE_MS, buzzer_last_beep_ms,
+        "the wake-confirm beep must be the short suspend-wake beep");
+#endif
 }
 
 // Регрессия (стенд 2026-07-08, кнопочный тест): одно нажатие = пробуждение +
@@ -946,6 +975,13 @@ static void test_stop_button_wake_press_not_redelivered_to_linux(void)
         "the debounced short press must wake the board");
     TEST_ASSERT_FALSE_MESSAGE(utest_irq_is_flag_set(IRQ_PWR_OFF_REQ),
         "the wake press must NOT stay pending for Linux as a power-key event");
+
+#if defined EC_GPIO_BUZZER
+    // Пара требований UX (Evgeny, 2026-07-09): бип-подтверждение ЕСТЬ,
+    // poweroff-событие для Linux - НЕТ.
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(2, buzzer_beep_count,
+        "the button wake must beep (boot beep + wake-confirm beep)");
+#endif
 }
 
 // Контроль от перекоррекции: нажатие в ОБЫЧНОЙ работе (Linux загружен, suspend
@@ -1006,6 +1042,13 @@ static void test_stop_button_brush_reenters_stop(void)
         "a button brush that never debounces must not wake the board");
     TEST_ASSERT_TRUE_MESSAGE(utest_mcu_stop_get_enter_count() > enters_awake,
         "after the grace window the EC must go back to sleep (re-enter Stop)");
+
+#if defined EC_GPIO_BUZZER
+    // Касание без подтверждённого нажатия не даёт обратной связи: бип только
+    // от загрузки (вход в WORKING холодного старта).
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(1, buzzer_beep_count,
+        "a brush must not beep (no wake - no feedback)");
+#endif
 }
 
 // ==================== Два окна подряд: перевооружение кнопки ====================
@@ -1113,6 +1156,12 @@ static void test_stop_deadline_fires_via_wut_ticks(void)
         "deadline wake must finish the Stop window");
     TEST_ASSERT_TRUE_MESSAGE(utest_rtc_get_periodic_wakeup_disabled(),
         "deadline wake must disable the WUT");
+
+#if defined EC_GPIO_BUZZER
+    // Необслуживаемое пробуждение (дедлайн) обязано быть БЕЗЗВУЧНЫМ.
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(1, buzzer_beep_count,
+        "a deadline wake must be silent (only the cold-boot beep is expected)");
+#endif
 }
 
 // Зеркальная регрессия: сам по себе идущий systick (без тиков WUT) НЕ должен
