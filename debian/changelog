@@ -1,15 +1,20 @@
 wb-ec-firmware (2.4.0) stable; urgency=medium
 
-  * WB85: warm SoC reset via short PWROK/RESET pulse — PMIC rails and DRAM
+  * WB74, WB85: warm SoC reset via short PWROK/RESET pulse — PMIC rails and DRAM
     stay powered, so pstore/ramoops panic logs survive the reboot
-  * WB85: two-stage watchdog — first timeout does a warm reset
+  * WB74, WB85: two-stage watchdog — first timeout does a warm reset
     (new poweron reason 8 "Watchdog (warm reset)"); if Linux does not feed
     the watchdog before the next timeout, a hard power cycle follows
     (reason 5 "Watchdog"). Consumers detecting watchdog resets must treat
     both 5 and 8 as watchdog
-  * WB85: reset_pmic request (POWER_CTRL bit 2) now performs the short warm
-    pulse instead of the 2 s PMIC RESET hold
-  * WB74: behavior unchanged (no warm reset support)
+  * WB74, WB85: reset_pmic request (POWER_CTRL bit 2) now performs the short
+    warm pulse instead of the 2 s PMIC RESET hold
+  * WB74: warm reset enabled after hardware verification — the AXP221
+    (AXP20x/22x family) has no "restart PMU on PWROK low" function to suppress,
+    so the pulse resets only the SoC while all rails stay up. Confirmed on a
+    WB 7.4: after a watchdog warm reset (reason 8) the RTC GP registers and the
+    ramoops region survive (systemd-pstore harvested the pre-reset console log),
+    while the second escalation stage (hard power cycle) zeroes them
   * POWER_CTRL bit 3 "full_cycle": explicit full 5V power cycle request
     with distinct poweron reason 9 "Full power cycle request" (used by
     the U-Boot pstore shuttle; decoded before reboot so a combined
