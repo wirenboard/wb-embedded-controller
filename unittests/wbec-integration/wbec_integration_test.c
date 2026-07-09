@@ -99,6 +99,12 @@ struct sim {
     bool prev_nrst;
     uint32_t rail_off_edges;            // 5В: переходы 1 -> 0
     uint32_t warm_pulses;               // завершённые импульсы на линии сброса при включённом 5В
+    uint32_t v33_drop_at;               // когда 3.3В впервые пропало (≈ вооружение окна); 0 = ещё нет
+    uint32_t first_pwron_at;            // когда PWRON впервые поднят; 0 = ещё нет
+
+    // Модель PMIC: игнорировать PWRON (проверка verify-and-retry -> бэкстоп 5В).
+    // По умолчанию false: удержание PWRON оживляет зависший PMIC как на железе.
+    bool pmic_ignores_pwron;
 
     // Инварианты
     bool check_invariants;
@@ -221,7 +227,8 @@ static void sim_tick(void)
     // Перезапуск зависшего PMIC
     if (sim.pmic_crashed) {
         sim.revive_5v_off_cnt = p5v ? 0 : (sim.revive_5v_off_cnt + 1);
-        sim.revive_pwron_cnt = pwron ? (sim.revive_pwron_cnt + 1) : 0;
+        sim.revive_pwron_cnt = (pwron && !sim.pmic_ignores_pwron) ?
+                               (sim.revive_pwron_cnt + 1) : 0;
         if ((sim.revive_5v_off_cnt >= PMIC_REVIVE_5V_OFF_MS) ||
             (sim.revive_pwron_cnt >= PMIC_REVIVE_PWRON_MS))
         {
@@ -292,6 +299,15 @@ static void sim_tick(void)
     }
     sim.prev_p5v = p5v_after;
     sim.prev_nrst = nrst_after;
+
+    // Наблюдение min-delay пробуждения: первый момент пропадания 3.3В (≈ момент
+    // вооружения окна) и первый импульс PWRON после сброса наблюдений тестом.
+    if (!sim.v33 && (sim.v33_drop_at == 0)) {
+        sim.v33_drop_at = sim.now;
+    }
+    if ((utest_gpio_get_output_state(gpio_pwron) != 0) && (sim.first_pwron_at == 0)) {
+        sim.first_pwron_at = sim.now;
+    }
 
     if (utest_mcu_get_standby_wakeup_time() != 0) {
         sim.standby_requested = true;
@@ -1431,6 +1447,75 @@ static void test_stop_feeds_iwdg_on_every_feed_tick(void)
         "the IWDG must be fed at least once per Stop feed-tick");
 }
 
+// Fix 1 END-TO-END (стенд 2026-07-09, 3 отказа): будильник уже ждёт на входе в
+// окно (диагностический вход BL31 в suspend ~80 с - запрос 30 с истекает ещё ДО
+// начала сна). Мгновенный выход (ticks WUT = 0) раньше жал PWRON через ~0.1-0.2 с
+// после того, как BL31 усыпил PMIC: PMIC глотал импульс, плата оставалась тёмной
+// до дедлайн-ладдера (~4.5 мин). Теперь первый PWRON откладывается на
+// WBEC_SUSPEND_WAKE_PWRON_MIN_DELAY_MS от вооружения окна (≈ пропадания 3.3В),
+// давая PMIC завершить вход в сон. Плата всё равно просыпается.
+static void test_stop_instant_exit_delays_pwron_by_min_delay(void)
+{
+    sim.check_invariants = false;
+    sim.soc_feeds = true;
+    sim_boot_to_working();
+    sim_run_ms(WBEC_LINUX_BOOT_TIME_MS + 1000);
+    uint32_t boots_before = sim.soc_boot_count;
+
+    sim_announce_off_mode(30);
+    sim_tick();                         // объявление дренирует устаревшие защёлки
+
+    // Будильник срабатывает, пока 3.3В ещё есть (SoC долго готовится ко сну):
+    // запрошенное время пробуждения истекает ещё до начала сна.
+    sim_run_ms(1000);
+    alarm_fired = true;
+    sim_run_ms(500);
+
+    // BL31 снимает 3.3В: окно открывается с уже сработавшим будильником ->
+    // мгновенный выход. С этого момента считаем наблюдения.
+    sim.v33_drop_at = 0;
+    sim.first_pwron_at = 0;
+    sim.pmic_crashed = true;            // PMIC спит; оживит только PWRON
+    sim_run_ms(4000);
+
+    TEST_ASSERT_TRUE_MESSAGE(sim.soc_boot_count > boots_before,
+        "an instant-exit wake must still boot the board");
+    TEST_ASSERT_TRUE_MESSAGE(sim.v33_drop_at != 0,
+        "3.3V must have dropped (the Stop window is armed)");
+    TEST_ASSERT_TRUE_MESSAGE(sim.first_pwron_at != 0,
+        "PWRON must have been pressed to wake the sleeping PMIC");
+    // Ключевое свойство фикса: первый PWRON НЕ раньше, чем через min-delay после
+    // вооружения окна (пропадания 3.3В). Без фикса он прилетал через единицы мс.
+    TEST_ASSERT_TRUE_MESSAGE(
+        (sim.first_pwron_at - sim.v33_drop_at) >= WBEC_SUSPEND_WAKE_PWRON_MIN_DELAY_MS,
+        "the first wake PWRON must be held off until the arming-to-pulse min delay elapses");
+    TEST_ASSERT_EQUAL_UINT16_MESSAGE(UTEST_REASON_RTC_ALARM, get_poweron_reason_from_regmap(),
+        "the instant-exit alarm wake must report REASON_RTC_ALARM");
+}
+
+// Fix 2 END-TO-END: PMIC глотает КАЖДЫЙ импульс PWRON (модель pmic_ignores_pwron).
+// Путь пробуждения обязан повторить PWRON до исчерпания попыток, а затем
+// провалиться в штатный бэкстоп (снятие 5В), который на железе и в модели
+// перезапускает PMIC снятием рельс. Плата в итоге поднимается.
+static void test_stop_wake_pwron_swallowed_falls_back_to_5v_reset(void)
+{
+    sim_enter_off_mode_sleep(60);
+    uint32_t boots_before = sim.soc_boot_count;
+    uint32_t rail_off_before = sim.rail_off_edges;
+
+    // PMIC не реагирует на PWRON: все попытки будут проглочены.
+    sim.pmic_ignores_pwron = true;
+
+    // Свежий будильник будит; PMIC остаётся спящим для PWRON.
+    alarm_fired = true;
+    sim_run_ms(12000);                  // 3 попытки PWRON + бэкстоп 5В + включение
+
+    TEST_ASSERT_TRUE_MESSAGE(sim.rail_off_edges > rail_off_before,
+        "exhausted PWRON retries must fall back to the 5V reset backstop");
+    TEST_ASSERT_TRUE_MESSAGE(sim.soc_boot_count > boots_before,
+        "the 5V reset backstop must recover the board after every PWRON is swallowed");
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -1469,6 +1554,8 @@ int main(void)
     RUN_TEST(test_stop_deadline_fires_via_wut_ticks);
     RUN_TEST(test_stop_frozen_wut_never_fires_on_systick_alone);
     RUN_TEST(test_stop_feeds_iwdg_on_every_feed_tick);
+    RUN_TEST(test_stop_instant_exit_delays_pwron_by_min_delay);
+    RUN_TEST(test_stop_wake_pwron_swallowed_falls_back_to_5v_reset);
 #if defined(WBEC_HAS_WARM_RESET)
     RUN_TEST(test_escalation_alternates_warm_and_hard);
 #endif

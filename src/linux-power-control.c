@@ -43,6 +43,12 @@ struct pwr_ctx {
     bool wake_pending;
     // Бип-подтверждение кнопочного пробуждения, отложенный до возврата 3.3В
     bool wake_beep;
+    // suspend-to-off: отложить ПЕРВЫЙ импульс PWRON пробуждения до
+    // wake_armed_ts + WBEC_SUSPEND_WAKE_PWRON_MIN_DELAY_MS - дать PMIC
+    // завершить вход в сон (иначе он глотает импульс). Взводится только для
+    // «мгновенного» выхода из окна (см. linux_cpu_pwr_seq_wake_pwron_min_delay).
+    bool wake_min_delay;
+    systime_t wake_armed_ts;
     enum pwr_state state;
     systime_t timestamp;
     unsigned attempt;
@@ -135,6 +141,12 @@ void linux_cpu_pwr_seq_wake_beep_request(void)
     pwr_ctx.wake_beep = true;
 }
 
+void linux_cpu_pwr_seq_wake_pwron_min_delay(systime_t armed_ts)
+{
+    pwr_ctx.wake_min_delay = true;
+    pwr_ctx.wake_armed_ts = armed_ts;
+}
+
 /**
  * @brief Включает питание линукс штатным способом:
  * Включается 5В, затем контролируется появление 3.3В.
@@ -171,6 +183,9 @@ void linux_cpu_pwr_seq_on(void)
 void linux_cpu_pwr_seq_wakeup(void)
 {
     pwr_ctx.wake_pending = true;
+    // По умолчанию без паузы; «мгновенный» выход из окна запрашивает её
+    // отдельно вызовом linux_cpu_pwr_seq_wake_pwron_min_delay() ПОСЛЕ wakeup().
+    pwr_ctx.wake_min_delay = false;
     pmic_reset_gpio_off();
     linux_cpu_pwr_5v_gpio_on();
     new_state(PS_ON_STEP1_WAIT_3V3);
@@ -329,9 +344,22 @@ void linux_cpu_pwr_seq_do_periodic_work(void)
             // STEP2/STEP3 остаются штатным fallback. Случай «3.3В присутствует»
             // (поздний отказ SoC от сна) обработан веткой выше: импульс PWROK
             // без нажатия.
+            // Сначала даём PMIC завершить вход в сон: при мгновенном выходе из
+            // окна (будильник уже ждал на входе, дедлайн-тиков не было) BL31 снял
+            // рельсы всего ~0.1 с назад, и PWRON, прилетевший в переходный
+            // процесс, PMIC глотает - SoC не стартует (стенд 2026-07-09). Ждём
+            // stop_armed_ts + MIN_DELAY; IWDG всё это время кормится обычным
+            // супер-циклом (watchdog_reload() в main loop). При реальном сне
+            // паузу не запрашивали - жмём сразу.
+            if (pwr_ctx.wake_min_delay &&
+                (systick_get_time_since_timestamp(pwr_ctx.wake_armed_ts) <
+                 WBEC_SUSPEND_WAKE_PWRON_MIN_DELAY_MS)) {
+                break;
+            }
+            pwr_ctx.wake_min_delay = false;
             console_print_w_prefix("Suspend-to-off: PMIC is sleeping, press PWRON now\r\n");
             pmic_pwron_gpio_on();
-            pwr_ctx.attempt = 0;
+            pwr_ctx.attempt = 1;
             new_state(PS_ON_STEP2_PMIC_PWRON);
             break;
         }
@@ -368,9 +396,33 @@ void linux_cpu_pwr_seq_do_periodic_work(void)
             }
             new_state(PS_ON_COMPLETE);
         }
-        if (in_state_time_ms() > 1500) {
-            pwr_ctx.attempt++;
+        // Пробуждение из suspend-to-off проверяем чаще (~1 с): PMIC либо
+        // проснулся от PWRON и поднял 3.3В, либо проглотил импульс - тогда
+        // повторяем сразу, не тратя штатные 1.5 с холодного старта.
+        if (in_state_time_ms() >
+            (pwr_ctx.wake_pending ? WBEC_SUSPEND_WAKE_PWRON_RETRY_MS : 1500)) {
             pmic_pwron_gpio_off();
+            if (pwr_ctx.wake_pending) {
+                // 3.3В не вернулось за отведённое время: PMIC проглотил PWRON
+                // (ещё досыпал / переходный процесс). Повторяем импульс, всего
+                // до WBEC_SUSPEND_WAKE_PWRON_ATTEMPTS попыток; когда они
+                // исчерпаны - штатный бэкстоп (снятие 5В -> полный цикл
+                // включения, дальше дедлайн-эскалация wbec).
+                if (pwr_ctx.attempt >= WBEC_SUSPEND_WAKE_PWRON_ATTEMPTS) {
+                    console_print_w_prefix(
+                        "Suspend-to-off: PWRON swallowed, no 3.3V after retries, reset 5V line\r\n");
+                    linux_cpu_pwr_5v_gpio_off();
+                    new_state(PS_RESET_5V_WAIT);
+                } else {
+                    pwr_ctx.attempt++;
+                    console_print_w_prefix("Suspend-to-off: PWRON swallowed, retry ");
+                    console_print_dec(pwr_ctx.attempt);
+                    console_print("\r\n");
+                    new_state(PS_ON_STEP3_PMIC_PWRON_OFF_WAIT);
+                }
+                break;
+            }
+            pwr_ctx.attempt++;
             if (pwr_ctx.attempt <= 3) {
                 // Если попытки не исчерпаны - отключаем PWRON и пробуем ещё
                 new_state(PS_ON_STEP3_PMIC_PWRON_OFF_WAIT);
@@ -387,7 +439,11 @@ void linux_cpu_pwr_seq_do_periodic_work(void)
     // Третий шаг включения - отпускаем PWRON, ждём, пробуем ещё раз
     case PS_ON_STEP3_PMIC_PWRON_OFF_WAIT:
         if (in_state_time_ms() > 500) {
-            console_print_w_prefix("One more attempt to switch on PMIC throught PWRON\r\n");
+            // Пробуждение из suspend-to-off уже залогировало «PWRON swallowed,
+            // retry N» в STEP2 - не дублируем родовым сообщением холодного старта.
+            if (!pwr_ctx.wake_pending) {
+                console_print_w_prefix("One more attempt to switch on PMIC throught PWRON\r\n");
+            }
             pmic_pwron_gpio_on();
             new_state(PS_ON_STEP2_PMIC_PWRON);
         }
