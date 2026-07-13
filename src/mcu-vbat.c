@@ -99,11 +99,11 @@ void mcu_vbat_check_do_periodic_work(void)
         if (systick_get_time_since_timestamp(vbat_meas_timestamp) < VBAT_ADC_MEAS_PERIOD_MS) {
             break;
         }
-        // Якорь суточной сетки ставим на момент начала измерения: следующее
-        // измерение произойдёт ровно через сутки независимо от того, была ли зарядка.
-        vbat_meas_timestamp = systick_get_system_time_ms();
         vbat_meas_after_charge = false;
-        start_measurement();    // если АЦП не готов, останемся в IDLE и попробуем на след. вызове
+        // Якорь суточной сетки сдвигаем ТОЛЬКО если измерение реально стартовало
+        if (start_measurement()) {
+            vbat_meas_timestamp = systick_get_system_time_ms();
+        }
         break;
 
     case VBAT_STATE_MEASURING:
