@@ -91,9 +91,6 @@
 // Страховочное ограничение суммарного времени заряда за один цикл
 #define VBAT_CHARGE_TIMEOUT_MS          (96*3600*1000)
 
-// Время на стабилизацию делителя VBAT и набор свежего значения в DMA-буфере
-#define VBAT_MEAS_STABILIZE_MS          30
-
 // Диапазон температур платы, в котором разрешён заряд
 #define VBAT_CHARGE_TEMP_MIN_C_X100     (-1500)
 #define VBAT_CHARGE_TEMP_MAX_C_X100     (5500)
