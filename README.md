@@ -1,5 +1,7 @@
 # Wiren Board Embedded Controller
 
+[![Coverage Status](https://coveralls.io/repos/github/wirenboard/wb-embedded-controller/badge.svg?branch=main)](https://coveralls.io/github/wirenboard/wb-embedded-controller?branch=main)
+
 ## Описание
 
 Wiren Board Embedded Controller (EC) — это микроконтроллер STM32G030C8, который управляет питанием и другими системными функциями контроллера Wiren Board начиная с ревизии 7.4.

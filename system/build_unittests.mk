@@ -28,6 +28,7 @@
 # - GCC_FLAGS           - list of gcc compiler flags
 # - NO_USE_UNITY        - set to 1 to disable Unity library usage
 # - COVERAGE_ROOT_DIR   - root directory for generated coverage report (used for submodules coverage metering)
+# - COVERAGE_NO_HTML    - set to 1 to skip .html coverage reports generation (only JSON data is generated)
 
 # Default values for variables if they are not defined in the test's Makefile
 TEST_NAME ?= Unknown_test
@@ -158,10 +159,12 @@ coverage: run remove_report_dir $(COVERAGE_TEST_LIST)
 	$(eval OUT_FILES_BASE_NAME := $(REPORT_DIR)/$(TEST_NAME)_report)
 #	Generate summary coverage report for unit-test
 #	Usage: coverage_helper.sh --gen-ut-coverage PROJ_DIR SEARCH_DIR OUT_FILES_BASE_NAME FUNC_MERGE_MODE GCOV_EXECUTABLE [FILTERS_STR]
-	$(COVERAGE_HELPER) --gen-ut-coverage $(COVERAGE_ROOT_DIR) $(BUILD_DIR) $(OUT_FILES_BASE_NAME) 'separate' '$(GCOV_BIN)' "$(GCOVR_FILTERS_STR)"
+	COVERAGE_NO_HTML='$(COVERAGE_NO_HTML)' $(COVERAGE_HELPER) --gen-ut-coverage $(COVERAGE_ROOT_DIR) $(BUILD_DIR) $(OUT_FILES_BASE_NAME) 'separate' '$(GCOV_BIN)' "$(GCOVR_FILTERS_STR)"
 #	Print information about generated files
 	@echo "\nSummary coverage data for $(TEST_NAME) test saved: $(OUT_FILES_BASE_NAME).json"
+ifneq ($(COVERAGE_NO_HTML),1)
 	@echo "\nSummary coverage report for $(TEST_NAME) test saved: file://$(CURDIR)/$(OUT_FILES_BASE_NAME).html\n"
+endif
 
 # Coverage data and report generation for each test
 $(COVERAGE_TEST_LIST): $(TEST_REPORT_DIRS)
@@ -174,10 +177,12 @@ $(COVERAGE_TEST_LIST): $(TEST_REPORT_DIRS)
 	$(eval OUT_FILES_BASE_NAME := $(REPORT_DIR)/$(COV_TEST_NAME)/$(COV_TEST_NAME)_covr)
 #	Generate JSON data file and .html report and also print report for unit test coverage
 #	Usage: coverage_helper.sh --gen-ut-coverage PROJ_DIR SEARCH_DIR OUT_FILES_BASE_NAME FUNC_MERGE_MODE GCOV_EXECUTABLE [FILTERS_STR]
-	$(COVERAGE_HELPER) --gen-ut-coverage $(COVERAGE_ROOT_DIR) $(BUILD_DIR)/$(COV_TEST_NAME) $(OUT_FILES_BASE_NAME) 'separate' '$(GCOV_BIN)' "$(GCOVR_FILTERS_STR)"
+	COVERAGE_NO_HTML='$(COVERAGE_NO_HTML)' $(COVERAGE_HELPER) --gen-ut-coverage $(COVERAGE_ROOT_DIR) $(BUILD_DIR)/$(COV_TEST_NAME) $(OUT_FILES_BASE_NAME) 'separate' '$(GCOV_BIN)' "$(GCOVR_FILTERS_STR)"
 #	Print information about generated files
 	@echo "\nCoverage data for $(TEST_NAME): $(COV_TEST_NAME) test saved: $(OUT_FILES_BASE_NAME).json"
+ifneq ($(COVERAGE_NO_HTML),1)
 	@echo "\nCoverage report for $(TEST_NAME): $(COV_TEST_NAME) test saved: file://$(CURDIR)/$(OUT_FILES_BASE_NAME).html\n"
+endif
 
 # Create test build directories for targets
 $(TARGET_BUILD_DIRS):

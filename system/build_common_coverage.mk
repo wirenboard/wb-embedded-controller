@@ -11,6 +11,10 @@
 # Optional variables that can be assigned in a project Makefile or build_common.mk
 # - COVERAGE_NO_ADD_UNCOVERED_FILES     Set to 1 if you want to exclude uncovered files from the report
 # - COVERAGE_FAIL_UNDER                 Set to <theshold> value [%] if you want to gcovr fails when <project coverage> < <theshold>
+# - COVERAGE_NO_HTML                    Set to 1 to skip .html reports generation. It is always set in Debian package build (CI),
+#                                       see debian/rules: .html reports contain source code and must not leave the build
+# - COV_REPORT                          Base path (without extension) for Cobertura .xml report (e.g. for coveralls.io),
+#                                       default: covr_report/coverage. In CI Jenkins passes it via DEB_BUILD_OPTIONS="cov-report=<path>"
 
 
 #######################################
@@ -43,6 +47,10 @@ COVERAGE_ALL_SOURCES = $(COVERAGE_C_SOURCES) $(COVERAGE_H_SOURCES)
 # Output coverage report directory and report file
 COVERAGE_REPORT_DIR = covr_report
 COVERAGE_REPORT_FILE = $(COVERAGE_REPORT_DIR)/coverage_report.html
+
+# Base path for Cobertura .xml report, always generated
+COV_REPORT ?= $(COVERAGE_REPORT_DIR)/coverage
+COVERAGE_EXTRA_FLAGS += --cobertura-pretty -o $(COV_REPORT).xml
 
 # Auxiliary files used for coverage report generation
 COVERAGE_DATA_LIST_FILE = $(COVERAGE_REPORT_DIR)/covr_data_list.txt
@@ -123,12 +131,18 @@ coverage: $(COVERAGE_DEPS)
 	$(eval JSON_LIST := $(shell cat $(COVERAGE_DATA_LIST_FILE)))
 	@echo "\nCoverage data files found: $(JSON_LIST)\n"
 
+ifneq ($(COVERAGE_NO_HTML),1)
 #	Generate .html coverage report
 	@gcovr $(COVERAGE_ADD_TRACE_FILES) $(COVERAGE_FUNC_MERGE_MODE) $(COVERAGE_FILTERS_STR) --html-details $(COVERAGE_REPORT_FILE)
-#	Print project coverage report with optional check minimum coverage level
+endif
+#	Print project coverage report with optional check minimum coverage level and optional .xml report generation
 	@gcovr -s $(COVERAGE_ADD_TRACE_FILES) $(COVERAGE_FUNC_MERGE_MODE) $(COVERAGE_FILTERS_STR) $(COVERAGE_EXTRA_FLAGS)
+ifneq ($(COVERAGE_NO_HTML),1)
 #	Print information about generated .html report
 	@echo "\nSummary project coverage report saved: file://$(CURDIR)/$(COVERAGE_REPORT_FILE)\n"
+endif
+#	Print information about generated .xml report
+	@echo "\nSummary project coverage .xml report saved: $(COV_REPORT).xml\n"
 
 # Generate coverage data files for each unittest which have "coverage" target
 $(COVERAGE_TARGETS): $(COVERAGE_DATA_LIST_FILE)

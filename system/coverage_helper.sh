@@ -273,6 +273,7 @@ function gen_uncovered_json_handler()
 ############################
 
 # In this mode script will generate coverage JSON data file and .html report for unit test
+# Generation of .html report is skipped if COVERAGE_NO_HTML=1 is set in the environment
 # In report there will be only tested source files
 
 # Usage: ./coverage_helper.sh --gen-ut-coverage PROJ_DIR SEARCH_DIR OUT_FILES_BASE_NAME FUNC_MERGE_MODE GCOV_EXECUTABLE [FILTERS_STR]
@@ -327,8 +328,8 @@ function gen_ut_coverage_handler()
     # Remove temporary data file
     rm -f $OUT_FILES_BASE_NAME.json.tmp &&
 
-    # Generate .html report and print coverage information
-    gcovr -r $PROJ_DIR $GCOV_EXEC_OPT -a $OUT_FILES_BASE_NAME.json $FUNC_MERGE_MODE_STR --html-details $OUT_FILES_BASE_NAME.html &&
+    # Generate .html report, skipped if COVERAGE_NO_HTML=1 (e.g. in CI to speed up the build)
+    { [ "$COVERAGE_NO_HTML" = "1" ] || gcovr -r $PROJ_DIR $GCOV_EXEC_OPT -a $OUT_FILES_BASE_NAME.json $FUNC_MERGE_MODE_STR --html-details $OUT_FILES_BASE_NAME.html; } &&
     # Generate XML report (Cobertura format)
     gcovr -r $PROJ_DIR $GCOV_EXEC_OPT -a $OUT_FILES_BASE_NAME.json $FUNC_MERGE_MODE_STR --cobertura-pretty -o $COV_DATA_FOLDER/coverage.cobertura.xml &&
     # Generate lcov.info file
