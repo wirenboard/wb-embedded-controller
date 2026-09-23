@@ -5,8 +5,27 @@
 #export DEB_CFLAGS_MAINT_APPEND  = -Wall -pedantic
 #export DEB_LDFLAGS_MAINT_APPEND = -Wl,--as-needed
 
+# Base path for the coverage report (without extension), set by Jenkins:
+# DEB_BUILD_OPTIONS="... cov-report=<path>" (see Jenkinsfile). If the option is given
+# more than once (buildDebSbuild Coverage stage appends its own), the last one wins
+COV_REPORT := $(lastword $(patsubst cov-report=%,%,$(filter cov-report=%,$(DEB_BUILD_OPTIONS))))
+
+# Never generate .html coverage reports in package build (CI): they contain source code
+# and also slow down the build, only .xml report is generated
+export COVERAGE_NO_HTML = 1
+
 %:
 	dh $@
+
+# Unit tests already run during the build (MODEL_% depends on unittests),
+# here we only collect coverage when the report is requested
+ifneq ($(COV_REPORT),)
+ifeq ($(filter nocheck,$(DEB_BUILD_OPTIONS)),)
+override_dh_auto_test:
+	dh_auto_test
+	$(MAKE) coverage COV_REPORT=$(COV_REPORT)
+endif
+endif
 
 #override_dh_auto_install:
 #	dh_auto_install -- prefix=/usr

@@ -1,3 +1,9 @@
+wb-ec-firmware (2.3.2) stable; urgency=medium
+
+  * add coverage .xml report for coveralls.io in CI, no functional changes
+
+ -- Ilia Skochilov <ilia.skochilov@wirenboard.com>  Wed, 23 Sep 2026 14:27:59 +0300
+
 wb-ec-firmware (2.3.1) stable; urgency=medium
 
   * revert internal VBAT charging: the charging algorithm doesn't work as needed
