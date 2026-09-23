@@ -67,7 +67,7 @@ make unittests
 Для запуска тестов конкретного модуля (например, regmap):
 
 ```bash
-cd unittests
+cd unittests/regmap
 make
 ```
 
