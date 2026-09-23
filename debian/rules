@@ -5,9 +5,10 @@
 #export DEB_CFLAGS_MAINT_APPEND  = -Wall -pedantic
 #export DEB_LDFLAGS_MAINT_APPEND = -Wl,--as-needed
 
-# Base path for the coverage report (without extension), set by the Jenkins
-# Coverage stage: DEB_BUILD_OPTIONS="... cov-report=<path>"
-COV_REPORT := $(patsubst cov-report=%,%,$(filter cov-report=%,$(DEB_BUILD_OPTIONS)))
+# Base path for the coverage report (without extension), set by Jenkins:
+# DEB_BUILD_OPTIONS="... cov-report=<path>" (see Jenkinsfile). If the option is given
+# more than once (buildDebSbuild Coverage stage appends its own), the last one wins
+COV_REPORT := $(lastword $(patsubst cov-report=%,%,$(filter cov-report=%,$(DEB_BUILD_OPTIONS))))
 
 # Never generate .html coverage reports in package build (CI): they contain source code
 # and also slow down the build, only .xml report is generated
