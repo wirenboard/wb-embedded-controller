@@ -77,8 +77,13 @@ C_SOURCES += system/startup.c
 C_SOURCES += $(wildcard $(SRC_DIR)/*.c)
 
 # add submodules
-SUBMODULE_C_SOURCES = $(wildcard $(addsuffix /*.c, $(SUBMODULES_DIR)))
-C_SOURCES += $(SUBMODULE_C_SOURCES)
+C_SOURCES += $(wildcard $(addsuffix /*.c, $(SUBMODULES_DIR)))
+
+# Список исходников сабмодулей - только для разделения покрытия
+# (PROJECT_C_SOURCES в build_common_coverage.mk). Порядок C_SOURCES этой переменной
+# НЕ задаётся: от него зависит порядок объектов на строке линковки, а значит и
+# выравнивания в .text. startup.c должен стоять там же, где стоял всегда
+SUBMODULE_C_SOURCES = $(wildcard $(addsuffix /*.c, $(SUBMODULES_DIR))) system/startup.c
 
 C_INCLUDES = $(INCLUDE_DIR) $(SUBMODULES_DIR)
 
@@ -122,11 +127,20 @@ LDFLAGS += -Wl,--print-memory-usage
 # Не запускаем тесты libfixmath, т.к. мы не меняем этот репозиторий
 DISABLE_UNITTESTS += libfixmath
 
-UNITTESTS_DIRS += $(shell \
-    $(FIND_CMD) . -type d | $(GREP_CMD) unittests | \
-    $(GREP_CMD) -v $(foreach pattern,$(DISABLE_UNITTESTS),-e $(pattern)) \
+UNITTEST_MAKEFILES := $(shell \
+	$(FIND_CMD) . -type f -name Makefile \( -path '*/unittests/Makefile' -o -path '*/unittests/*/Makefile' \) \
+	$(foreach pattern,$(DISABLE_UNITTESTS),! -path './$(pattern)/*') \
 )
-UNITTESTS_TARGETS = $(addprefix UNITTEST_, $(UNITTESTS_DIRS))
+UNITTESTS_DIRS += $(sort $(patsubst %/,%,$(dir $(UNITTEST_MAKEFILES))))
+UNITTESTS_TARGETS := $(addprefix UNITTEST_,$(UNITTESTS_DIRS))
+
+# Project-only unittests (excluding submodules)
+PROJECT_UNITTEST_MAKEFILES := $(shell \
+	[ -d ./unittests ] && \
+	$(FIND_CMD) ./unittests -type f -name Makefile \( -path './unittests/Makefile' -o -path './unittests/*/Makefile' \) || true \
+)
+PROJECT_UNITTESTS_DIRS := $(sort $(patsubst %/,%,$(dir $(PROJECT_UNITTEST_MAKEFILES))))
+PROJECT_UNITTESTS_TARGETS := $(addprefix UNITTEST_,$(PROJECT_UNITTESTS_DIRS))
 
 #######################################
 # targets
@@ -138,13 +152,15 @@ MODEL_%: unittests
 	MODEL_DEFINE=$@ "$(MAKE)" --no-print-directory build_model
 	@echo
 
-$(UNITTESTS_TARGETS):
-	$(eval UT_DIR := $(subst UNITTEST_,,$@))
+$(sort $(UNITTESTS_TARGETS) $(PROJECT_UNITTESTS_TARGETS)):
+	$(eval UT_DIR := $(patsubst UNITTEST_%,%,$@))
 	@if [ -f $(UT_DIR)/Makefile ]; then \
 		cd $(UT_DIR) && $(MAKE) && cd -; \
 	fi
 
 unittests: $(UNITTESTS_TARGETS)
+
+unittests-project: $(PROJECT_UNITTESTS_TARGETS)
 
 build_model: $(RELEASE_DIR) $(TARGET_DIR)/$(TARGET).elf $(TARGET_DIR)/$(TARGET).hex $(TARGET_DIR)/$(TARGET).bin
 	cp $(TARGET_DIR)/$(TARGET).bin $(RELEASE_DIR)/$(TARGET_GIT_INFO).bin
@@ -176,7 +192,7 @@ $(BUILD_DIR): $(TARGET_DIR)
 $(RELEASE_DIR):
 	mkdir -p $@
 
-clean: remove_report_dir
+clean: remove_report_dir remove_project_report_dir
 	rm -rf build
 	rm -rf $(RELEASE_DIR)
 	@for dir in $(UNITTESTS_DIRS); do \
