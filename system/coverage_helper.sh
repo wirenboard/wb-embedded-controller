@@ -23,6 +23,7 @@ function error_exit()
 # TEST_DIR              - Directory with unittest
 # OUT_COVR_DATA_FILE    - Output file with list of JSON files found
 # GCC_BIN               - Optional GCC compiler binary name (e.g., gcc, gcc-15)
+# MAKE (environment)    - Optional make to run in TEST_DIR, "make" by default
 
 # Coverage data file filter for find command
 COV_JSON_FIND_FILTER="*_covr.json"
@@ -47,8 +48,18 @@ function make_coverage_read_args()
         error_exit "Directory $TEST_DIR doesn't exist"
     fi
 
+    # `make -n` runs this script too, as the recipe line calls it with $(MAKE):
+    # the make of the unittest then only prints its commands, and nothing is
+    # written. The first word of MAKEFLAGS holds the single-letter options,
+    # it is empty when there are none.
+    DRY_RUN=0
+    case "${MAKEFLAGS%% *}" in
+        -*) ;;
+        *n*) DRY_RUN=1 ;;
+    esac
+
     # Check for output file is writable or try to create it
-    if [ ! -w  "$OUT_COVR_DATA_FILE" ]; then
+    if [ $DRY_RUN -eq 0 ] && [ ! -w  "$OUT_COVR_DATA_FILE" ]; then
         touch $OUT_COVR_DATA_FILE
         result=$?
         if [ $result -ne 0 ]; then
@@ -62,8 +73,15 @@ function make_coverage_handler()
 {
     cd $TEST_DIR
 
+    # The recipes call this script with MAKE="$(MAKE)": make treats such a line
+    # as a recursive make and hands its job slots over in MAKEFLAGS, so under
+    # `make -jN` the tests of this unittest are built and run in parallel with
+    # the rest of the build. Called from a line without $(MAKE), the make of
+    # the unittest may warn "jobserver unavailable: using -j1".
+    MAKE=${MAKE:-make}
+
     # Check for "coverage" target exist in Makefile
-    make -qp | $GREP_CMD '^coverage:' > /dev/null
+    "$MAKE" -qp | $GREP_CMD '^coverage:' > /dev/null
     covr_exist=$?
     if [ $covr_exist -ne 0 ]; then
         echo "Skip test without coverage: $TEST_DIR"
@@ -71,12 +89,15 @@ function make_coverage_handler()
         exit 0
     fi
 
-    # Run "make coverage" command for test, passing GCC_BIN if set
+    # Run "make coverage" command for test, passing GCC_BIN if set.
+    # COVERAGE_DATA_ONLY=1: the report of the project or submodule is built from
+    # the JSON data files of the tests only, so the unittest doesn't generate its
+    # own reports (see build_unittests.mk)
     echo "Found test with coverage: $TEST_DIR"
     if [ -n "$MAKE_GCC_BIN" ]; then
-        make GCC_BIN=$MAKE_GCC_BIN coverage
+        "$MAKE" GCC_BIN=$MAKE_GCC_BIN coverage COVERAGE_DATA_ONLY=1
     else
-        make coverage
+        "$MAKE" coverage COVERAGE_DATA_ONLY=1
     fi
     covr_result=$?
     if [ $covr_result -ne 0 ]; then
@@ -85,6 +106,10 @@ function make_coverage_handler()
     fi
 
     cd -
+
+    if [ $DRY_RUN -eq 1 ]; then
+        exit 0
+    fi
 
     # Find JSON files with coverage data which created afrer make coverage command
     json_files=$($FIND_CMD "$TEST_DIR" -type f -name "$COV_JSON_FIND_FILTER")
@@ -283,6 +308,8 @@ function gen_uncovered_json_handler()
 # GCOV_EXECUTABLE       - Path to gcov executable (e.g., gcov, gcov-15)
 # FILTERS_STR           - Optional filters string for gcovr to filter only tested source files
 
+# The --gen-ut-coverage-data mode takes the same arguments and generates only the JSON data file
+
 # Read arguments provided with --gen-ut-coverage command
 function gen_ut_coverage_read_args()
 {
@@ -310,30 +337,55 @@ function gen_ut_coverage_read_args()
     fi
 }
 
+function get_gcovr_parse_errors_opt()
+{
+    gcovr_help=$(gcovr --help 2>/dev/null)
+
+    if echo "$gcovr_help" | $GREP_CMD -q "suspicious_hits.warn_once_per_file"; then
+        echo "--gcov-ignore-parse-errors=suspicious_hits.warn_once_per_file"
+    elif echo "$gcovr_help" | $GREP_CMD -q -- "--gcov-ignore-parse-errors"; then
+        # Older gcovr versions accept this option without an explicit value.
+        echo "--gcov-ignore-parse-errors"
+    fi
+}
+
 # Handler for --gen-ut-coverage command
 function gen_ut_coverage_handler()
 {
     # Set gcov executable option
     GCOV_EXEC_OPT="--gcov-executable $GCOV_EXECUTABLE"
+    GCOVR_PARSE_ERRORS_OPT=$(get_gcovr_parse_errors_opt)
 
     # Generate temporary JSON data file related to project directory
-    gcovr -r $PROJ_DIR $GCOV_EXEC_OPT $FUNC_MERGE_MODE_STR --json-pretty -o $OUT_FILES_BASE_NAME.json.tmp $SEARCH_DIR &&
+    # gcov runs in the test directory, where the compiler ran: gcovr would try the project root first, and the parallel
+    # unit tests race there on the .gcov files of the same sources. The physical path (pwd -P): gcovr builds the paths
+    # it gives gcov from the physical cwd, and a logical path through a symlink (/tmp on macOS) leads gcov astray
+    gcovr -r $PROJ_DIR --gcov-object-directory "$(pwd -P)" $GCOV_EXEC_OPT $GCOVR_PARSE_ERRORS_OPT $FUNC_MERGE_MODE_STR --json-pretty -o $OUT_FILES_BASE_NAME.json.tmp $SEARCH_DIR &&
 
     # Generate filtered JSON data without reference to the project directory
     # Temporary data file and filters already have this reference
-    cmd="gcovr $GCOV_EXEC_OPT -a $OUT_FILES_BASE_NAME.json.tmp $FILTERS_STR $FUNC_MERGE_MODE_STR --json-pretty -o $OUT_FILES_BASE_NAME.json" &&
+    cmd="gcovr $GCOV_EXEC_OPT $GCOVR_PARSE_ERRORS_OPT -a $OUT_FILES_BASE_NAME.json.tmp $FILTERS_STR $FUNC_MERGE_MODE_STR --json-pretty -o $OUT_FILES_BASE_NAME.json" &&
     eval "$cmd" &&
 
     # Remove temporary data file
-    rm -f $OUT_FILES_BASE_NAME.json.tmp &&
+    rm -f $OUT_FILES_BASE_NAME.json.tmp
+
+    if [ $? -ne 0 ]; then
+        error_exit "Error while generating unit test coverage data"
+    fi
+
+    # --gen-ut-coverage-data: the JSON data file is all the report of the project needs
+    if [ "$GEN_UT_COVERAGE_DATA_ONLY" = 1 ]; then
+        exit 0
+    fi
 
     # Generate .html report and print coverage information
-    gcovr -r $PROJ_DIR $GCOV_EXEC_OPT -a $OUT_FILES_BASE_NAME.json $FUNC_MERGE_MODE_STR --html-details $OUT_FILES_BASE_NAME.html &&
+    gcovr -r $PROJ_DIR $GCOV_EXEC_OPT $GCOVR_PARSE_ERRORS_OPT -a $OUT_FILES_BASE_NAME.json $FUNC_MERGE_MODE_STR --html-details $OUT_FILES_BASE_NAME.html &&
     # Generate XML report (Cobertura format)
-    gcovr -r $PROJ_DIR $GCOV_EXEC_OPT -a $OUT_FILES_BASE_NAME.json $FUNC_MERGE_MODE_STR --cobertura-pretty -o $COV_DATA_FOLDER/coverage.cobertura.xml &&
+    gcovr -r $PROJ_DIR $GCOV_EXEC_OPT $GCOVR_PARSE_ERRORS_OPT -a $OUT_FILES_BASE_NAME.json $FUNC_MERGE_MODE_STR --cobertura-pretty -o $COV_DATA_FOLDER/coverage.cobertura.xml &&
     # Generate lcov.info file
-    gcovr -r $PROJ_DIR $GCOV_EXEC_OPT -a $OUT_FILES_BASE_NAME.json $FUNC_MERGE_MODE_STR --lcov -o $COV_DATA_FOLDER/lcov.info &&
-    gcovr -s -r $PROJ_DIR $GCOV_EXEC_OPT -a $OUT_FILES_BASE_NAME.json $FUNC_MERGE_MODE_STR
+    gcovr -r $PROJ_DIR $GCOV_EXEC_OPT $GCOVR_PARSE_ERRORS_OPT -a $OUT_FILES_BASE_NAME.json $FUNC_MERGE_MODE_STR --lcov -o $COV_DATA_FOLDER/lcov.info &&
+    gcovr -s -r $PROJ_DIR $GCOV_EXEC_OPT $GCOVR_PARSE_ERRORS_OPT -a $OUT_FILES_BASE_NAME.json $FUNC_MERGE_MODE_STR
 
     # Check for all went fine while generating coverage data and report
     if [ $? -ne 0 ]; then
@@ -380,6 +432,9 @@ case "$COMMAND" in
     --gen-uncovered-json)   gen_uncovered_json_read_args $@
                             gen_uncovered_json_handler;;
     --gen-ut-coverage)      gen_ut_coverage_read_args $@
+                            gen_ut_coverage_handler;;
+    --gen-ut-coverage-data) gen_ut_coverage_read_args $@
+                            GEN_UT_COVERAGE_DATA_ONLY=1
                             gen_ut_coverage_handler;;
     *)                      error_exit "Unknown command $COMMAND";;
 esac

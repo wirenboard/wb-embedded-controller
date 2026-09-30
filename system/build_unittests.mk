@@ -55,8 +55,13 @@ DEFS += __unittest_env__
 # Set filters string for gcovr, use relative to COVERAGE_ROOT_DIR paths
 GCOVR_FILTERS_STR = $(foreach file,$(TESTED_SRC),-f '$(shell python3 -c "import os; print(os.path.relpath('$(file)', '$(COVERAGE_ROOT_DIR)'))")')
 
-# Set source files list for compiler
-SRC = $(TESTED_SRC) $(AUX_SRC)
+# Set source files list for compiler.
+# TESTED_SRC may list headers - a header-only module is tested that way, and the
+# gcovr filter above is built from the same list. The compiler must not get them:
+# gcc takes a .h on the command line for a main file, warns "#pragma once in main
+# file" and builds a precompiled header nobody uses. Coverage is unaffected, it
+# comes from the translation unit that includes the header.
+SRC = $(filter-out %.h,$(TESTED_SRC)) $(AUX_SRC)
 
 # If Unity library usage not disabled add it to sources and includes for compiler
 ifneq ($(NO_USE_UNITY),1)
@@ -85,43 +90,52 @@ TARGET_BUILD_DIRS = $(TEST_BUILD_DIRS)
 endif
 
 # These targets are not files
-.PHONY: all coverage clean remove_build_dir remove_report_dir
+.PHONY: all coverage clean remove_build_dir remove_report_dir check_coverage_data
+
+# Build the prerequisites of `all` and `coverage` in order, and everything below them in parallel under `make -jN`.
+# These targets mix destructive steps with build steps as ordered prerequisites: `all: clean run`
+# (clean = `rm -rf build` vs run = compile into build/) and `coverage: run remove_report_dir ...`. In parallel the
+# `rm -rf` races with the compile (e.g. "cannot open build/<test>/<test>.gcno"). The tests of `run` and the targets
+# of a test are independent: every test binary gets its own build directory with its .gcno and .gcda files.
+# The coverage reports of the tests stay serial, as before: parallel gcovr runs over the same sources may overwrite
+# each other's .gcov files.
+# With targets as prerequisites .NOTPARALLEL needs GNU make 4.4. An older make ignores them and runs the whole
+# Makefile serially, as before.
+.NOTPARALLEL: all coverage
 
 # Default target for make
-all: info clean run
-
-info:
-	$(GCC_BIN) --version
+all: clean run
 
 run: $(addprefix RUN_, $(TEST_LIST))
 
 ifeq ($(MULTIPLE_TARGETS),1)
 
-# Multiple targets mode, each test will be built and run for each target
-$(TEST_LIST): $(TARGET_BUILD_DIRS)
-	@echo "\nBuilding $(TEST_NAME) test targets..."
-	@for target in $(TARGETS_LIST); do \
-		echo "Building target $$target" && \
-		test_dir=$(BUILD_DIR)/$@/$$target && \
-		test_bin=$$test_dir/$@"_"$$target && \
-		$(GCC_BIN) $(addprefix -D, $$target $(DEFS)) $(addprefix -I, $(INC)) $@.c $(SRC) $(GCC_FLAGS) -o $$test_bin; \
-		if [ $$? -ne 0 ]; then exit 1; fi; \
-	done
+# Multiple targets mode, each test will be built and run for each target.
+# Every test and target pair has its own build and run targets, BUILD_<test>__<target> and RUN_<test>__<target>,
+# so under -j the pairs are built and run in parallel. <test> and RUN_<test> build and run all targets of the test.
+TEST_TARGET_PAIRS = $(foreach test,$(TEST_LIST),$(addprefix $(test)__,$(TARGETS_LIST)))
 
-RUN_%: %
-	@{ \
-		test_name=$(subst RUN_,,$@) && \
-		echo "\n\n================= Running test $(TEST_NAME): $$test_name =================\n" && \
-		for target in $(TARGETS_LIST); do \
-			test_dir=$(BUILD_DIR)/$$test_name/$$target && \
-			test_bin=$$test_dir/$$test_name"_"$$target && \
-			echo "\n---------- Running tests for $$target target ----------\n" && \
-			rm -f $$test_dir/*.gcda && \
-			$$test_bin; \
-			if [ $$? -ne 0 ]; then exit 1; fi; \
-		done; \
-		echo "\n================ Test $(TEST_NAME): $$test_name finished =================\n"; \
-	}
+# Phony: with no recipe of their own, <test> would otherwise get the built-in rule "%: %.c"
+.PHONY: $(TEST_LIST) $(addprefix RUN_, $(TEST_LIST)) $(addprefix BUILD_, $(TEST_TARGET_PAIRS)) $(addprefix RUN_, $(TEST_TARGET_PAIRS))
+
+$(TEST_LIST): %: $(addprefix BUILD_%__, $(TARGETS_LIST))
+
+$(addprefix RUN_, $(TEST_LIST)): RUN_%: $(addprefix RUN_%__, $(TARGETS_LIST))
+	@echo "\n================ Test $(TEST_NAME): $* finished =================\n"
+
+# Build and run rules of one test and target pair: $(1) - test, $(2) - target
+define TEST_TARGET_RULES
+BUILD_$(1)__$(2): $(BUILD_DIR)/$(1)/$(2)
+	@echo "\nBuilding $$(TEST_NAME) test $(1) for target $(2)..."
+	@$$(GCC_BIN) $$(addprefix -D, $(2) $$(DEFS)) $$(addprefix -I, $$(INC)) $(1).c $$(SRC) $$(GCC_FLAGS) -o $(BUILD_DIR)/$(1)/$(2)/$(1)_$(2)
+
+RUN_$(1)__$(2): BUILD_$(1)__$(2)
+	@echo "\n\n================= Running test $$(TEST_NAME): $(1) for $(2) target =================\n"
+	@rm -f $(BUILD_DIR)/$(1)/$(2)/*.gcda
+	@$(BUILD_DIR)/$(1)/$(2)/$(1)_$(2)
+endef
+
+$(foreach test,$(TEST_LIST),$(foreach target,$(TARGETS_LIST),$(eval $(call TEST_TARGET_RULES,$(test),$(target)))))
 
 else #ifeq ($(MULTIPLE_TARGETS),1)
 
@@ -147,9 +161,28 @@ RUN_%: %
 
 endif #ifeq ($(MULTIPLE_TARGETS),1)
 
+# COVERAGE_SKIP_RUN=1 (command line or environment): don't rebuild and run the tests again, take the coverage data
+# left by their last run. The firmware build already runs all unit tests (MODEL_% depends on unittests), so CI
+# collects coverage after it this way instead of running the tests twice
+ifeq ($(COVERAGE_SKIP_RUN),1)
+COVERAGE_RUN = check_coverage_data
+else
+COVERAGE_RUN = run
+endif
+
+# COVERAGE_DATA_ONLY=1: generate only the JSON coverage data of the tests, without the reports of the tests (.html,
+# Cobertura .xml, lcov.info) and the summary report of this Makefile. The report of the project or submodule is built
+# from the data of the tests only, so coverage_helper.sh --make-coverage passes it
+ifeq ($(COVERAGE_DATA_ONLY),1)
+COVERAGE_GEN_MODE = --gen-ut-coverage-data
+else
+COVERAGE_GEN_MODE = --gen-ut-coverage
+endif
+
 # Coverage metering target: run all unit tests and generate coverage data and report for each test
-# After that generate summary coverage report for unit-test (for all tests in TEST_LIST)
-coverage: run remove_report_dir $(COVERAGE_TEST_LIST)
+# After that generate summary coverage report for unit-test (for all tests in TEST_LIST), not with COVERAGE_DATA_ONLY=1
+coverage: $(COVERAGE_RUN) remove_report_dir $(COVERAGE_TEST_LIST)
+ifneq ($(COVERAGE_DATA_ONLY),1)
 	@echo "\n\n================= Generating summary coverage report for $(TEST_NAME) test =================\n"
 #	Print filters string for debug information
 	@echo "\nGCOVR_FILTERS_STR = $(GCOVR_FILTERS_STR)"
@@ -162,8 +195,9 @@ coverage: run remove_report_dir $(COVERAGE_TEST_LIST)
 #	Print information about generated files
 	@echo "\nSummary coverage data for $(TEST_NAME) test saved: $(OUT_FILES_BASE_NAME).json"
 	@echo "\nSummary coverage report for $(TEST_NAME) test saved: file://$(CURDIR)/$(OUT_FILES_BASE_NAME).html\n"
+endif
 
-# Coverage data and report generation for each test
+# Coverage data and report generation for each test (only the data with COVERAGE_DATA_ONLY=1)
 $(COVERAGE_TEST_LIST): $(TEST_REPORT_DIRS)
 	$(eval COV_TEST_NAME := $(subst COVERAGE_,,$@))
 	@echo "\n\n================= Generating coverage data and report for test $(TEST_NAME): $(COV_TEST_NAME) =================\n"
@@ -174,10 +208,17 @@ $(COVERAGE_TEST_LIST): $(TEST_REPORT_DIRS)
 	$(eval OUT_FILES_BASE_NAME := $(REPORT_DIR)/$(COV_TEST_NAME)/$(COV_TEST_NAME)_covr)
 #	Generate JSON data file and .html report and also print report for unit test coverage
 #	Usage: coverage_helper.sh --gen-ut-coverage PROJ_DIR SEARCH_DIR OUT_FILES_BASE_NAME FUNC_MERGE_MODE GCOV_EXECUTABLE [FILTERS_STR]
-	$(COVERAGE_HELPER) --gen-ut-coverage $(COVERAGE_ROOT_DIR) $(BUILD_DIR)/$(COV_TEST_NAME) $(OUT_FILES_BASE_NAME) 'separate' '$(GCOV_BIN)' "$(GCOVR_FILTERS_STR)"
+	$(COVERAGE_HELPER) $(COVERAGE_GEN_MODE) $(COVERAGE_ROOT_DIR) $(BUILD_DIR)/$(COV_TEST_NAME) $(OUT_FILES_BASE_NAME) 'separate' '$(GCOV_BIN)' "$(GCOVR_FILTERS_STR)"
 #	Print information about generated files
 	@echo "\nCoverage data for $(TEST_NAME): $(COV_TEST_NAME) test saved: $(OUT_FILES_BASE_NAME).json"
+ifneq ($(COVERAGE_DATA_ONLY),1)
 	@echo "\nCoverage report for $(TEST_NAME): $(COV_TEST_NAME) test saved: file://$(CURDIR)/$(OUT_FILES_BASE_NAME).html\n"
+endif
+
+# Fail instead of reporting zero coverage when COVERAGE_SKIP_RUN=1 is given, but the tests have not been run
+check_coverage_data:
+	@find $(BUILD_DIR) -name '*.gcda' 2>/dev/null | grep -q . || \
+		{ echo "No coverage data in $(CURDIR)/$(BUILD_DIR): run the tests first or drop COVERAGE_SKIP_RUN=1"; exit 1; }
 
 # Create test build directories for targets
 $(TARGET_BUILD_DIRS):
