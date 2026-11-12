@@ -159,10 +159,12 @@ for FIRMWARE in $FIRMWARES_ORDER; do
     fi
 
     # Find i2c bus with name i2c_wbec
-    I2C_BUS=/dev/$(i2cdetect -l | grep i2c_wbec | cut -f 1 -d$'\t') || {
+    I2C_BUS=$(i2cdetect -l | grep i2c_wbec | cut -f 1 -d$'\t')
+    if [ -z "$I2C_BUS" ]; then
         echo "I2C bus not found"
         exit -1
-    }
+    fi
+    I2C_BUS=/dev/$I2C_BUS
     echo "I2C bus: $I2C_BUS"
 
     # Reset to bootloader

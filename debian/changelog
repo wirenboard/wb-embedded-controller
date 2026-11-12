@@ -1,6 +1,7 @@
 wb-ec-firmware (2.3.3) stable; urgency=medium
 
   * wb-ec-firmware-update: fail early if EC GPIO lines are not found
+  * wb-ec-firmware-update: fail before resetting EC if I2C bus is not found
   * wb-ec-firmware-update: exit with error if no firmware was verified
     to run after flashing
 
