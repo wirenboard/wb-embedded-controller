@@ -12,6 +12,6 @@ Homepage: https://github.com/wirenboard/wb-embedded-controller
 Package: wb-ec-firmware
 Architecture: all
 Multi-Arch: foreign
-Depends: ${misc:Depends}, ${shlibs:Depends}, stm32flash, gpiod
+Depends: ${misc:Depends}, ${shlibs:Depends}, stm32flash, gpiod (>= 2.0)
 Description: Wiren Board Embedded Controller firmware and installer
  This package contains firmware for Wiren Board Embedded Controller.
