@@ -1,3 +1,11 @@
+wb-ec-firmware (2.3.4) stable; urgency=medium
+
+  * rtc: do not stop the calendar (INIT mode) when programming wakeup
+    timer, alarm, calibration and 1 Hz output. Fixes RTC losing ~3% of
+    the time while EC runs from WBMZ6-SUPERCAP
+
+ -- Andrey Spiryakin <148055113+gh16aik@users.noreply.github.com>  Tue, 17 Nov 2026 11:13:51 +0300
+
 wb-ec-firmware (2.3.3) stable; urgency=medium
 
   * wb-ec-firmware-update: fail early if EC GPIO lines are not found
