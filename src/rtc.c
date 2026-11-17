@@ -253,7 +253,9 @@ void rtc_get_alarm(struct rtc_alarm * alarm)
 
 void rtc_set_alarm(const struct rtc_alarm * alarm)
 {
-    start_init_disable_wpr();
+    // No initialization mode: it stops the calendar and is not required for alarm
+    // registers (RM0454 Rev 5 p.659 "Programming the alarm": ALRAE=0, wait ALRAWF, write)
+    disable_wpr();
 
     // Disable current alarm and interrupt
     RTC->CR &= ~(RTC_CR_ALRAIE | RTC_CR_ALRAE);
@@ -280,7 +282,7 @@ void rtc_set_alarm(const struct rtc_alarm * alarm)
         RTC->CR |= RTC_CR_ALRAIE | RTC_CR_ALRAE;
     }
 
-    end_init_enable_wpr();
+    enable_wpr();
 
     // Clear alarm flag
     RTC->SCR = RTC_SCR_CALRAF;
@@ -298,11 +300,14 @@ uint16_t rtc_get_offset(void)
 
 void rtc_set_offset(uint16_t offeset)
 {
-    start_init_disable_wpr();
+    // Re-calibration on-the-fly (RM0454 Rev 5 "Re-calibration on-the-fly"):
+    // CALR is written while INITF = 0 after RECALPF is cleared, calendar keeps running
+    disable_wpr();
 
+    while (RTC->ICSR & RTC_ICSR_RECALPF) {}
     RTC->CALR = offeset;
 
-    end_init_enable_wpr();
+    enable_wpr();
 }
 
 void rtc_enable_pc13_1hz_clkout(void)
@@ -310,19 +315,19 @@ void rtc_enable_pc13_1hz_clkout(void)
     GPIO_SET_PUSHPULL(GPIOC, 13);
     GPIO_SET_OUTPUT(GPIOC, 13);
 
-    start_init_disable_wpr();
+    disable_wpr();
     RTC->CR &= ~(RTC_CR_COE | RTC_CR_COSEL | RTC_CR_OUT2EN);
     RTC->CR |= RTC_CR_COE | RTC_CR_COSEL;
-    end_init_enable_wpr();
+    enable_wpr();
 }
 
 void rtc_disable_pc13_1hz_clkout(void)
 {
     GPIO_SET_INPUT(GPIOC, 13);
 
-    start_init_disable_wpr();
+    disable_wpr();
     RTC->CR &= ~(RTC_CR_COE | RTC_CR_COSEL | RTC_CR_OUT2EN);
-    end_init_enable_wpr();
+    enable_wpr();
 }
 
 void rtc_enable_pa4_1hz_clkout(void)
@@ -331,19 +336,19 @@ void rtc_enable_pa4_1hz_clkout(void)
     GPIO_SET_OUTPUT(GPIOA, 4);
     GPIO_SET_AF(GPIOA, 4, 7);
 
-    start_init_disable_wpr();
+    disable_wpr();
     RTC->CR &= ~(RTC_CR_COE | RTC_CR_COSEL | RTC_CR_OUT2EN);
     RTC->CR |= RTC_CR_COE | RTC_CR_OUT2EN | RTC_CR_COSEL;
-    end_init_enable_wpr();
+    enable_wpr();
 }
 
 void rtc_disable_pa4_1hz_clkout(void)
 {
     GPIO_SET_INPUT(GPIOA, 4);
 
-    start_init_disable_wpr();
+    disable_wpr();
     RTC->CR &= ~(RTC_CR_COE | RTC_CR_COSEL | RTC_CR_OUT2EN);
-    end_init_enable_wpr();
+    enable_wpr();
 }
 
 void rtc_set_periodic_wakeup(uint16_t period_s)
@@ -352,7 +357,12 @@ void rtc_set_periodic_wakeup(uint16_t period_s)
         return;
     }
 
-    start_init_disable_wpr();
+    // Initialization mode (INIT) is not entered here: it stops the calendar counter
+    // (RM0454 Rev 5 p.670, RTC_ICSR INIT bit) and is not required to program the wakeup
+    // timer (RM0454 Rev 5 p.659 "Programming the wakeup timer": WUTE=0, poll WUTWF, write WUTR).
+    // This function runs on every periodic wakeup while EC is powered from WBMZ,
+    // so entering INIT here made the RTC lose time on every wakeup cycle.
+    disable_wpr();
 
     RTC->CR &= ~RTC_CR_WUTE;
 
@@ -361,7 +371,7 @@ void rtc_set_periodic_wakeup(uint16_t period_s)
     RTC->WUTR = period_s - 1;
     RTC->CR |= RTC_CR_WUTIE | RTC_CR_WUTE;
 
-    end_init_enable_wpr();
+    enable_wpr();
 
     // Clear wakeup flag
     RTC->SCR = RTC_SCR_CWUTF;
@@ -369,11 +379,12 @@ void rtc_set_periodic_wakeup(uint16_t period_s)
 
 void rtc_disable_periodic_wakeup(void)
 {
-    start_init_disable_wpr();
+    // WUTE/WUTIE can be changed without initialization mode (see rtc_set_periodic_wakeup)
+    disable_wpr();
 
     RTC->CR &= ~(RTC_CR_WUTIE | RTC_CR_WUTE);
 
-    end_init_enable_wpr();
+    enable_wpr();
 }
 
 void rtc_save_to_tamper_reg(uint8_t index, uint32_t data)
