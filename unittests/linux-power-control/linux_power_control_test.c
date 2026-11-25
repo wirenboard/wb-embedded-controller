@@ -6,6 +6,7 @@
 #include "voltage-monitor.h"
 #include "utest_gpio.h"
 #include "utest_mcu_pwr.h"
+#include "utest_mcu_vbat.h"
 #include "utest_pwrkey.h"
 #include "utest_systick.h"
 #include "utest_voltage_monitor.h"
@@ -39,6 +40,7 @@ void setUp(void)
 {
     utest_gpio_reset_instances();
     utest_mcu_reset();
+    utest_mcu_vbat_reset();
     utest_systick_set_time_ms(0);
     utest_vmon_reset();
     utest_pwr_reset();
@@ -947,6 +949,10 @@ static void test_off_and_goto_standby_sets_pwr_registers_and_wakeup_timeout(void
         wakeup_timeout_s,
         utest_mcu_get_standby_wakeup_time(),
         "Standby wakeup timeout must be forwarded to mcu_goto_standby"
+    );
+    TEST_ASSERT_TRUE_MESSAGE(
+        utest_mcu_vbat_was_prepare_standby_called(),
+        "VBAT charging must be stopped before standby (mcu_vbat_prepare_standby)"
     );
 }
 

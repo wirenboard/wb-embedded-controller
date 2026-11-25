@@ -45,3 +45,10 @@ void utest_pwr_reset(void)
 {
     memset(&_PWR_instance, 0, sizeof(_PWR_instance));
 }
+
+ADC_Common_TypeDef _ADC_COMMON_instance = {0};
+
+void utest_adc_common_reset(void)
+{
+    memset(&_ADC_COMMON_instance, 0, sizeof(_ADC_COMMON_instance));
+}

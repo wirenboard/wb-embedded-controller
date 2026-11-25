@@ -6,6 +6,7 @@
 #include "usart_tx.h"
 #include "pwrkey.h"
 #include "mcu-pwr.h"
+#include "mcu-vbat.h"
 #include "adc.h"
 #include "system-led.h"
 #include "console.h"
@@ -117,6 +118,9 @@ void linux_cpu_pwr_seq_off_and_goto_standby(uint16_t wakeup_after_s)
 
     // Apply pull-up and pull-down configuration
     PWR->CR3 |= PWR_CR3_APC;
+
+    // Заряд RTC-батарейки в standby не контролируется - выключаем
+    mcu_vbat_prepare_standby();
 
     mcu_goto_standby(wakeup_after_s);
 }

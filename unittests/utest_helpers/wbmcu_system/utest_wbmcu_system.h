@@ -16,3 +16,6 @@ void utest_nvic_set_exit_jmp(jmp_buf *jmp);
 
 // Сбросить состояние мока PWR
 void utest_pwr_reset(void);
+
+// Сбросить состояние мока общих регистров АЦП (ADC->CCR)
+void utest_adc_common_reset(void);

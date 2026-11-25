@@ -79,6 +79,7 @@
         macro(ADC_VBUS_NETWORK,     5,      GPIOA,  5,      10,     2.2 / 1.0       ) \
         macro(ADC_HW_VER,           17,     GPIOA,  13,     50,     1               ) \
         macro(ADC_INT_VREF,         13,     0,      0,      50,     1               ) \
+        macro(ADC_INT_VBAT,         14,     0,      0,      10,     3.0             ) \
 
 // macro(ADC_HW_VER,           17,      GPIOA,  13,     50,     1,              0           )
 
