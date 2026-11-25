@@ -1,3 +1,14 @@
+wb-ec-firmware (2.3.1+wb101) stable; urgency=medium
+
+  * vbat: RTC backup cell (MS621T) charging with auto-calibration
+    - calibration: charge from VDD, plateau = 12 h growth <= 2 mV and node within 60 mV of VDDA; x kept in TAMP_BKP1R
+    - daily check: 15 min portions until y = x*3000/3300, growth checked every 12 h of charge, limit 96 h of charge
+    - errors: CAL_FAIL, CHARGE_FAIL, CELL_FAIL, ADC_FAIL; retry after 24 h
+    - low EC supply (WBMZ, VDDA < 3200 mV): charging and calibration paused
+    - VBAT_STATUS/VBAT_CTRL/VBAT_CAL regmap regions 0xE0-0xEC
+
+ -- Nikolay Oleinik <nikolay.oleinik@wirenboard.com>  Wed, 25 Nov 2026 12:31:31 +0700
+
 wb-ec-firmware (2.3.1+wb100) stable; urgency=medium
 
   * rtc: do not stop the calendar (INIT mode) when programming wakeup
