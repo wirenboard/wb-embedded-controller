@@ -135,6 +135,28 @@
         /* 0xD2 */  uint16_t enabled : 1; \
     ) \
     /*     Addr     Name            RO/RW */ \
+    m(     0xE0,    VBAT_STATUS,    RO, \
+        /* 0xE0 */  uint16_t node_mv; \
+        /* 0xE1 */  uint16_t state; \
+        /* 0xE2 */  uint16_t x_mv; \
+        /* 0xE3 */  uint16_t y_mv; \
+        /* 0xE4 */  uint16_t cell_mv; \
+        /* 0xE5 */  uint16_t flags; \
+        /* 0xE6 */  uint16_t state_min; \
+        /* 0xE7 */  uint16_t cal_hours; \
+    ) \
+    /*     Addr     Name            RO/RW */ \
+    m(     0xE8,    VBAT_CTRL,      RW, \
+        /* 0xE8 */  uint16_t cmd; \
+    ) \
+    /*     Addr     Name            RO/RW */ \
+    m(     0xE9,    VBAT_CAL,       RO, \
+        /* 0xE9 */  uint16_t u_mv; \
+        /* 0xEA */  uint16_t vdda_mv; \
+        /* 0xEB */  int16_t growth_mv; \
+        /* 0xEC */  int16_t gap_mv; \
+    ) \
+    /*     Addr     Name            RO/RW */ \
     m(     0xF0,    TEST,           RW, \
         /* 0xF0 */  uint16_t send_test_message : 1; \
         /* 0xF0 */  uint16_t enable_rtc_out : 1; \
