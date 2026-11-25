@@ -4,6 +4,7 @@
 #include "rtc.h"
 
 // Функции для тестирования RTC
+// Сброс обнуляет и резервные регистры TAMP_BKPxR (rtc_save_to_tamper_reg / rtc_get_tamper_reg)
 void utest_rtc_reset(void);
 void utest_rtc_set_ready_read(bool ready);
 void utest_rtc_set_datetime(const struct rtc_time * tm);
