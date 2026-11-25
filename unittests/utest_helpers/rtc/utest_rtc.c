@@ -19,6 +19,9 @@ static struct {
 
     bool offset_was_set;
     uint16_t offset_set_value;
+
+    // Резервные регистры TAMP_BKP0R..TAMP_BKP4R
+    uint32_t tamper_regs[5];
 } rtc_state;
 
 void utest_rtc_reset(void)
@@ -162,5 +165,20 @@ void rtc_disable_pc13_1hz_clkout(void) {}
 void rtc_enable_pa4_1hz_clkout(void) {}
 void rtc_disable_pa4_1hz_clkout(void) {}
 void rtc_set_periodic_wakeup(uint16_t period_s) { (void)period_s; }
-void rtc_save_to_tamper_reg(uint8_t index, uint32_t data) { (void)index; (void)data; }
-uint32_t rtc_get_tamper_reg(uint8_t index) { (void)index; return 0; }
+
+// Как в rtc.c: регистров 5, запись в несуществующий игнорируется, чтение даёт 0
+void rtc_save_to_tamper_reg(uint8_t index, uint32_t data)
+{
+    if (index > 4) {
+        return;
+    }
+    rtc_state.tamper_regs[index] = data;
+}
+
+uint32_t rtc_get_tamper_reg(uint8_t index)
+{
+    if (index > 4) {
+        return 0;
+    }
+    return rtc_state.tamper_regs[index];
+}

@@ -518,3 +518,10 @@ void mcu_vbat_prepare_standby(void)
     charge_off();
     divider_set(false);
 }
+
+#ifdef __unittest_env__
+    void utest_mcu_vbat_reset_state(void)
+    {
+        memset(&vbat, 0, sizeof(vbat));
+    }
+#endif
