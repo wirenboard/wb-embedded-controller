@@ -12,6 +12,7 @@ UTEST_HELPERS_DIR = ../utest_helpers
 
 # Auxiliary source files used in tests
 AUX_SRC += $(UTEST_HELPERS_DIR)/mcu-pwr/utest_mcu_pwr.c
+AUX_SRC += $(UTEST_HELPERS_DIR)/mcu-vbat/utest_mcu_vbat.c
 AUX_SRC += $(UTEST_HELPERS_DIR)/systick/utest_systick.c
 AUX_SRC += $(UTEST_HELPERS_DIR)/voltage-monitor/utest_voltage_monitor.c
 AUX_SRC += $(UTEST_HELPERS_DIR)/gpio/utest_gpio.c
@@ -25,6 +26,7 @@ AUX_SRC += $(UTEST_HELPERS_DIR)/wbmz-common/utest_wbmz_common.c
 # Include directories
 INC += $(UTEST_HELPERS_DIR)
 INC += $(UTEST_HELPERS_DIR)/mcu-pwr
+INC += $(UTEST_HELPERS_DIR)/mcu-vbat
 INC += $(UTEST_HELPERS_DIR)/systick
 INC += $(UTEST_HELPERS_DIR)/voltage-monitor
 INC += $(UTEST_HELPERS_DIR)/gpio

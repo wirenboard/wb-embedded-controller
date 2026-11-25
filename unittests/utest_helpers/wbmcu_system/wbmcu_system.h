@@ -40,3 +40,19 @@ extern PWR_TypeDef _PWR_instance;
 
 // Бит применения конфигурации pull-up/pull-down.
 #define PWR_CR3_APC (1UL << 10)
+
+// Биты заряда VBAT: включение заряда и выбор резистора 1,5 кОм
+#define PWR_CR4_VBE (1UL << 8)
+#define PWR_CR4_VBRS (1UL << 9)
+
+// Mock для общих регистров АЦП (определяется в stm32g030xx.h)
+typedef struct {
+  volatile uint32_t CCR;        /*!< ADC common configuration register,                Address offset: 0x308 */
+} ADC_Common_TypeDef;
+
+extern ADC_Common_TypeDef _ADC_COMMON_instance;
+
+#define ADC (&_ADC_COMMON_instance)
+
+// Подключение делителя VBAT/3 к АЦП
+#define ADC_CCR_VBATEN (1UL << 24)
