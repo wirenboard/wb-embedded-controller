@@ -117,10 +117,11 @@ static struct {
     systime_t state_ts;
     systime_t last_check_ts;
 
-    // текущее усреднение
-    int64_t acc_mv;             // за час набегает больше 2^31 мВ
-    int64_t acc_vdda_mv;
-    uint32_t acc_n;             // не больше 3600 за час (1 отсчёт в секунду)
+    // текущее усреднение: окно не длиннее часа, 1 отсчёт в секунду - не больше 3600 отсчётов
+    // по 16-битным мВ, сумма меньше 3600 * 65535 = 2,4e8 - uint32_t хватает, 64-битное деление не нужно
+    uint32_t acc_mv;
+    uint32_t acc_vdda_mv;
+    uint32_t acc_n;
     systime_t acc_ts;
     systime_t sample_ts;        // когда взят последний отсчёт в среднее
     systime_t good_ts;          // когда был последний исправный отсчёт VDDA (для ошибки АЦП)
@@ -434,8 +435,8 @@ void mcu_vbat_check_do_periodic_work(void)
             break;
         }
         if ((systick_get_time_since_timestamp(vbat.acc_ts) >= VBAT_CAL_SAMPLE_PERIOD_MS) && (vbat.acc_n > 0)) {
-            uint16_t avg = vbat.acc_mv / (int64_t)vbat.acc_n;
-            uint16_t vdda = vbat.acc_vdda_mv / (int64_t)vbat.acc_n;
+            uint16_t avg = vbat.acc_mv / vbat.acc_n;
+            uint16_t vdda = vbat.acc_vdda_mv / vbat.acc_n;
             vbat.acc_mv = 0;
             vbat.acc_vdda_mv = 0;
             vbat.acc_n = 0;
@@ -462,7 +463,7 @@ void mcu_vbat_check_do_periodic_work(void)
 
     case VBAT_STATE_MEASURE:
         if ((in_state >= VBAT_MEAS_MS) && (vbat.acc_n > 0)) {
-            vbat.cell_mv = vbat.acc_mv / (int64_t)vbat.acc_n;
+            vbat.cell_mv = vbat.acc_mv / vbat.acc_n;
             if (!vbat.ref_valid) {
                 // первый замер проверки - точка отсчёта роста
                 vbat.cell_ref_mv = vbat.cell_mv;
