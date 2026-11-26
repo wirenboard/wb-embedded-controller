@@ -104,14 +104,17 @@ is_wbec_running() {
 }
 
 # Try to find GPIO
-GPIO_RESET_NUM=$(gpioinfo "$GPIO_RESET" | awk '{print $1,$2}') || {
+# Exit status of the pipeline is awk's, so check for empty result instead
+GPIO_RESET_NUM=$(gpioinfo "$GPIO_RESET" | awk '{print $1,$2}')
+if [ -z "$GPIO_RESET_NUM" ]; then
     echo "GPIO $GPIO_RESET not found"
     exit -1
-}
-GPIO_BOOT0_NUM=$(gpioinfo "$GPIO_BOOT0" | awk '{print $1,$2}') || {
+fi
+GPIO_BOOT0_NUM=$(gpioinfo "$GPIO_BOOT0" | awk '{print $1,$2}')
+if [ -z "$GPIO_BOOT0_NUM" ]; then
     echo "GPIO $GPIO_BOOT0 not found"
     exit -1
-}
+fi
 
 # This script may be called from bootlet in chroot
 # where we can't manage services and kernel modules,
@@ -125,6 +128,8 @@ if [[ -x "$(which ischroot)" ]] && ! ischroot; then
 fi
 
 trap remove_overlay_and_start_drivers EXIT
+
+FLASHED_FIRMWARE=""
 
 # WB-EC firmware would not start on incorrect hardware (because of fw's logic)
 # => trying to flash another one
@@ -154,10 +159,12 @@ for FIRMWARE in $FIRMWARES_ORDER; do
     fi
 
     # Find i2c bus with name i2c_wbec
-    I2C_BUS=/dev/$(i2cdetect -l | grep i2c_wbec | cut -f 1 -d$'\t') || {
+    I2C_BUS=$(i2cdetect -l | grep i2c_wbec | cut -f 1 -d$'\t')
+    if [ -z "$I2C_BUS" ]; then
         echo "I2C bus not found"
         exit -1
-    }
+    fi
+    I2C_BUS=/dev/$I2C_BUS
     echo "I2C bus: $I2C_BUS"
 
     # Reset to bootloader
@@ -196,9 +203,15 @@ for FIRMWARE in $FIRMWARES_ORDER; do
     # Firmware is correct
     if is_wbec_running; then
         echo "Flashed correct fw: $FIRMWARE"
+        FLASHED_FIRMWARE=$FIRMWARE
         break
     fi
 done
+
+if [ -z "$FLASHED_FIRMWARE" ]; then
+    echo "EC is not running after flashing any of: $FIRMWARES_ORDER"
+    exit -1
+fi
 
 echo
 echo "Reboot is required after Embedded Controller firmware update"

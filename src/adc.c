@@ -231,6 +231,16 @@ void adc_set_lowpass_rc(enum adc_channel channel, uint16_t rc_ms)
     adc_ctx.lowpass_factors[ch_index_in_dma_buff] = calculate_rc_factor(rc_ms);
 }
 
+// Сбрасывает lowpass фильтр канала, защёлкивая в нём текущее raw значение из DMA-буфера.
+// Используется, когда канал был временно отключён (например, через ADC_CCR_VBATEN)
+// и накопленное значение фильтра уже не актуально.
+void adc_reset_lowpass(enum adc_channel channel)
+{
+    uint8_t ch_index_in_dma_buff = ADC_CHANNEL_INDEX(channel);
+
+    adc_ctx.lowpass_values[ch_index_in_dma_buff] = fix16_from_int(adc_ctx.raw_values[ch_index_in_dma_buff]);
+}
+
 void adc_set_offset_mv(enum adc_channel channel, int16_t offset_mv)
 {
     adc_ctx.offset_mv[channel] = offset_mv;
@@ -263,6 +273,15 @@ int32_t adc_get_ch_mv(enum adc_channel channel)
     // full_scale_mv - коэффициент из расчета, референс АЦП равен ADC_EXT_VREF_MV
     int32_t mv = (raw_value * adc_cfg[channel].full_scale_mv) >> ADC_RESOLUTION_BIT;
     return mv + adc_ctx.offset_mv[channel];
+}
+
+// VDDA по VREFINT: VDDA = 3000 мВ * VREFINT_CAL / VREFINT_raw (= ADC_VREF_EXT_MV * int_vref_coeff)
+int32_t adc_get_vdda_mv(void)
+{
+    if (adc_ctx.vref != ADC_VREF_INT) {
+        return ADC_VREF_EXT_MV;
+    }
+    return fix16_to_int(fix16_mul(fix16_from_int(ADC_VREF_EXT_MV), adc_ctx.int_vref_coeff));
 }
 
 // Возвращает милливольты с учётом делителя (K) и оффсета в формате fix16

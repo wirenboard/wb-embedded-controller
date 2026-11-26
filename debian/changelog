@@ -1,10 +1,38 @@
-wb-ec-firmware (2.3.3) stable; urgency=medium
+wb-ec-firmware (2.3.6) stable; urgency=medium
 
   * Update LICENSE: Wiren Board as the copyright holder,
     2023 as the first publication year, use restricted to Wiren Board equipment
   * Fill debian/copyright in the DEP-5 format
 
- -- Ekaterina Volkova <ekaterina.volkova@wirenboard.com>  Thu, 12 Nov 2026 14:40:07 +0300
+ -- Ekaterina Volkova <ekaterina.volkova@wirenboard.com>  Thu, 26 Nov 2026 18:13:56 +0300
+
+wb-ec-firmware (2.3.5) stable; urgency=medium
+
+  * vbat: RTC backup cell (MS621T) charging with auto-calibration
+    - calibration: charge from VDD, plateau = 12 h growth <= 2 mV and node within 60 mV of VDDA; x kept in TAMP_BKP1R
+    - daily check: 15 min portions until y = x*3000/3300, growth checked every 12 h of charge, limit 96 h of charge
+    - errors: CAL_FAIL, CHARGE_FAIL, CELL_FAIL, ADC_FAIL; retry after 24 h
+    - low EC supply (WBMZ, VDDA < 3200 mV): charging and calibration paused
+    - VBAT_STATUS/VBAT_CTRL/VBAT_CAL regmap regions 0xE0-0xEC
+
+ -- Andrey Spiryakin <andrey.spiryakin@wirenboard.com>  Tue, 24 Nov 2026 19:00:00 +0300
+
+wb-ec-firmware (2.3.4) stable; urgency=medium
+
+  * rtc: do not stop the calendar (INIT mode) when programming wakeup
+    timer, alarm, calibration and 1 Hz output. Fixes RTC losing ~3% of
+    the time while EC runs from WBMZ6-SUPERCAP or WBMZ6-BATTERY
+
+ -- Andrey Spiryakin <andrey.spiryakin@wirenboard.com>  Tue, 17 Nov 2026 11:13:51 +0300
+
+wb-ec-firmware (2.3.3) stable; urgency=medium
+
+  * wb-ec-firmware-update: fail early if EC GPIO lines are not found
+  * wb-ec-firmware-update: fail before resetting EC if I2C bus is not found
+  * wb-ec-firmware-update: exit with error if no firmware was verified
+    to run after flashing
+
+ -- Nikolay Korotkiy <nikolay.korotkiy@wirenboard.com>  Fri, 13 Nov 2026 00:38:46 +0400
 
 wb-ec-firmware (2.3.2) stable; urgency=medium
 
