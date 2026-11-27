@@ -1,3 +1,11 @@
+wb-ec-firmware (2.3.6) stable; urgency=medium
+
+  * Update LICENSE: Wiren Board as the copyright holder,
+    2023 as the first publication year, use restricted to Wiren Board equipment
+  * Fill debian/copyright in the DEP-5 format
+
+ -- Ekaterina Volkova <ekaterina.volkova@wirenboard.com>  Thu, 26 Nov 2026 18:13:56 +0300
+
 wb-ec-firmware (2.3.5) stable; urgency=medium
 
   * vbat: RTC backup cell (MS621T) charging with auto-calibration
